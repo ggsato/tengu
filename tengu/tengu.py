@@ -6,6 +6,7 @@ import sys
 import numpy as np
 import time
 import math
+import Queue
 
 from flow import SceneFlow, FlowBlock
 from weakref import WeakValueDictionary
@@ -55,7 +56,7 @@ class Tengu(object):
         if self._observers.has_key(observer_id):
             del self._observers[observer_id]
 
-    def run(self, tengu_scene_analyzer=None, tengu_detector=None, tengu_tracker=None, tengu_counter=None, tengu_count_reporter=None):
+    def run(self, tengu_scene_analyzer=None, tengu_detector=None, tengu_tracker=None, tengu_counter=None, tengu_count_reporter=None, queue=None, max_queue_wait=10):
         """
         the caller should register by add_observer before calling run if it needs updates during analysis
         this should return quicky for the caller to do its own tasks especially showing progress graphically
@@ -67,10 +68,19 @@ class Tengu(object):
             if not ret:
                 print('no frame is avaiable')
                 break
+
             # TEST
             if self._current_frame > 10000:
                 break
             self._current_frame += 1
+            # block for a client if necessary to synchronize
+            if queue is not None:
+                # wait until queue becomes ready
+                try:
+                    queue.put(frame, max_queue_wait)
+                except Queue.Full:
+                    print('queue is full, quitting...')
+                    break
             # notify
             self._notify_frame_changed(frame)
 
