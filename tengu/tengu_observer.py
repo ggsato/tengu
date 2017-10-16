@@ -5,7 +5,7 @@ class TenguObserver(object):
     """
     This is a base class of all the Tengu observers including Detector, Tracker, Counter, CountReporter, and any other GUI classes.
     """
-    def src_changed(self, **kwargs):
+    def src_changed(self, src):
         pass
 
     def scene_change(self, **kwargs):
@@ -21,4 +21,7 @@ class TenguObserver(object):
         pass
 
     def object_counted(self, **kwargs):
+        pass
+
+    def analysis_finished(self):
         pass

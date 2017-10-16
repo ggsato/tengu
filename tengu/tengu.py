@@ -7,6 +7,7 @@ import numpy as np
 import time
 import math
 import Queue
+import logging
 
 from flow import SceneFlow, FlowBlock
 from weakref import WeakValueDictionary
@@ -16,6 +17,8 @@ from tengu_observer import TenguObserver
 class Tengu(object):
 
     def __init__(self):
+        self.logger= logging.getLogger(__name__)
+
         self._observers = WeakValueDictionary()
         self._src = None
         self._current_frame = -1
@@ -27,15 +30,18 @@ class Tengu(object):
     @src.setter
     def src(self, src):
         if src == None:
-            print('src should not be None')
+            self.logger.debug('src should not be None')
             return
 
         if src == self._src:
-            print('{} is already set')
+            self.logger.debug('{} is already set')
             return
-        # notifiy observers
-        print('src changed from {} to {}'.format(self._src, src))
+        
+        self.logger.debug('src changed from {} to {}'.format(self._src, src))
         self._src = src
+
+        # notifiy observers
+        self._notify_src_changed()
 
     @property
     def frame_no(self):
@@ -56,17 +62,29 @@ class Tengu(object):
         if self._observers.has_key(observer_id):
             del self._observers[observer_id]
 
+    def _notify_frame_changed(self, frame):
+        for observer_id in self._observers:
+            self._observers[observer_id].frame_changed(frame, self._current_frame)
+
+    def _notify_src_changed(self):
+        for observer_id in self._observers:
+            self._observers[observer_id].src_changed(self.src)
+
+    def _notify_analysis_finished(self):
+        for observer_id in self._observers:
+            self._observers[observer_id].analysis_finished()
+
     def run(self, tengu_scene_analyzer=None, tengu_detector=None, tengu_tracker=None, tengu_counter=None, tengu_count_reporter=None, queue=None, max_queue_wait=10):
         """
         the caller should register by add_observer before calling run if it needs updates during analysis
         this should return quicky for the caller to do its own tasks especially showing progress graphically
         """
-        print('running with scene_analyzer:{}, detector:{}, tracker:{}, counter:{}, count_reporter:{}'.format(tengu_scene_analyzer, tengu_detector, tengu_tracker, tengu_counter, tengu_count_reporter))
+        self.logger.debug('running with scene_analyzer:{}, detector:{}, tracker:{}, counter:{}, count_reporter:{}'.format(tengu_scene_analyzer, tengu_detector, tengu_tracker, tengu_counter, tengu_count_reporter))
         cam = cv2.VideoCapture(self._src)
         while True:
             ret, frame = cam.read()
             if not ret:
-                print('no frame is avaiable')
+                self.logger.debug('no frame is avaiable')
                 break
 
             # TEST
@@ -79,20 +97,34 @@ class Tengu(object):
                 try:
                     queue.put(frame, max_queue_wait)
                 except Queue.Full:
-                    print('queue is full, quitting...')
+                    self.logger.error('queue is full, quitting...')
                     break
             # notify
             self._notify_frame_changed(frame)
 
-    def _notify_frame_changed(self, frame):
-        for observer_id in self._observers:
-            self._observers[observer_id].frame_changed(frame, self._current_frame)
+            # detect
+            if tengu_detector is not None:
+                detections = tengu_detector.detect(frame)
+
+                # tracking-by-detection
+                if tengu_tracker is not None:
+                    trackings = tengu_tracker.update_trackings(detections)
+
+                    # count trackings
+                    if tengu_counter is not None:
+                        counts = tengu_counter.count(trackings)
+
+                        # make report
+                        if tengu_count_reporter is not None:
+                            tengu_count_reporter.update_report(counts)
+
+        self._notify_analysis_finished()
 
     def save(self, model_folder):
-        print('saving current models in {}...'.format(model_folder))
+        self.logger.debug('saving current models in {}...'.format(model_folder))
 
     def load(self, model_folder):
-        print('loading models from {}...'.format(model_folder))
+        self.logger.debug('loading models from {}...'.format(model_folder))
 
 class App:
 

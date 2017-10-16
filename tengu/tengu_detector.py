@@ -3,4 +3,6 @@
 from tengu_observer import TenguObserver
 
 class TenguDetector(TenguObserver):
-    pass
+    
+    def detect(self, frame):
+        return []

@@ -3,4 +3,6 @@
 from tengu_observer import TenguObserver
 
 class TenguCountReporter(TenguObserver):
-    pass
+    
+    def update_report(self, counts):
+        pass

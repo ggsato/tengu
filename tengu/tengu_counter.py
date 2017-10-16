@@ -3,4 +3,6 @@
 from tengu_observer import TenguObserver
 
 class TenguCounter(TenguObserver):
-    pass
+    
+    def count(self, trackings):
+        pass

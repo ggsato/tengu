@@ -3,4 +3,6 @@
 from tengu_observer import TenguObserver
 
 class TenguTracker(TenguObserver):
-    pass
+    
+    def update_trackings(self, detections):
+        return []
