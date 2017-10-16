@@ -14,7 +14,7 @@ class TenguObserver(object):
     def frame_changed(self, frame, frame_no):
         pass
 
-    def objects_detected(self, **kwargs):
+    def objects_detected(self, detections):
         pass
 
     def tracking_updated(self, **kwargs):

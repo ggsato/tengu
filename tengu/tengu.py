@@ -23,6 +23,8 @@ class Tengu(object):
         self._src = None
         self._current_frame = -1
 
+        self._stopped = False
+
     @property
     def src(self):
         return self._src
@@ -36,9 +38,14 @@ class Tengu(object):
         if src == self._src:
             self.logger.debug('{} is already set')
             return
+
+        if self._current_frame >= 0:
+            self.logger.warning('stop running before changing src')
+            return
         
         self.logger.debug('src changed from {} to {}'.format(self._src, src))
         self._src = src
+        self._stopped = False
 
         # notifiy observers
         self._notify_src_changed()
@@ -62,13 +69,17 @@ class Tengu(object):
         if self._observers.has_key(observer_id):
             del self._observers[observer_id]
 
+    def _notify_src_changed(self):
+        for observer_id in self._observers:
+            self._observers[observer_id].src_changed(self.src)
+
     def _notify_frame_changed(self, frame):
         for observer_id in self._observers:
             self._observers[observer_id].frame_changed(frame, self._current_frame)
 
-    def _notify_src_changed(self):
+    def _notify_objects_detected(self, detections):
         for observer_id in self._observers:
-            self._observers[observer_id].src_changed(self.src)
+            self._observers[observer_id].objects_detected(detections)
 
     def _notify_analysis_finished(self):
         for observer_id in self._observers:
@@ -81,7 +92,7 @@ class Tengu(object):
         """
         self.logger.debug('running with scene_analyzer:{}, detector:{}, tracker:{}, counter:{}, count_reporter:{}'.format(tengu_scene_analyzer, tengu_detector, tengu_tracker, tengu_counter, tengu_count_reporter))
         cam = cv2.VideoCapture(self._src)
-        while True:
+        while not self._stopped:
             ret, frame = cam.read()
             if not ret:
                 self.logger.debug('no frame is avaiable')
@@ -105,6 +116,7 @@ class Tengu(object):
             # detect
             if tengu_detector is not None:
                 detections = tengu_detector.detect(frame)
+                self._notify_objects_detected(detections)
 
                 # tracking-by-detection
                 if tengu_tracker is not None:
@@ -119,12 +131,17 @@ class Tengu(object):
                             tengu_count_reporter.update_report(counts)
 
         self._notify_analysis_finished()
+        self._stopped = True
 
     def save(self, model_folder):
         self.logger.debug('saving current models in {}...'.format(model_folder))
 
     def load(self, model_folder):
         self.logger.debug('loading models from {}...'.format(model_folder))
+
+    def stop(self):
+        self.logger.debug('stopping...')
+        self._stopped = True
 
 class App:
 
