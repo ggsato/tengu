@@ -91,7 +91,15 @@ class Tengu(object):
         this should return quicky for the caller to do its own tasks especially showing progress graphically
         """
         self.logger.debug('running with scene_analyzer:{}, detector:{}, tracker:{}, counter:{}, count_reporter:{}'.format(tengu_scene_analyzer, tengu_detector, tengu_tracker, tengu_counter, tengu_count_reporter))
-        cam = cv2.VideoCapture(self._src)
+        
+        try:
+            cam = cv2.VideoCapture(int(self._src))
+        except:
+            cam = cv2.VideoCapture(self._src)        
+        if cam is None or not cam.isOpened():
+            self.logger.debug(self._src + ' is not available')
+            return
+
         while not self._stopped:
             ret, frame = cam.read()
             if not ret:
@@ -120,11 +128,12 @@ class Tengu(object):
 
                 # tracking-by-detection
                 if tengu_tracker is not None:
-                    trackings = tengu_tracker.update_trackings(detections)
+                    tracked_objects = tengu_tracker.resolve_trackings(detections)
+                    self._notify_objects_tracked(tracked_objects)
 
                     # count trackings
                     if tengu_counter is not None:
-                        counts = tengu_counter.count(trackings)
+                        counts = tengu_counter.count(tracked_objects)
 
                         # make report
                         if tengu_count_reporter is not None:
