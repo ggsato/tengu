@@ -104,6 +104,10 @@ class Tengu(object):
             self.logger.debug(self._src + ' is not available')
             return
 
+        # register if necessary
+        if tengu_tracker is not None:
+            self.add_observer(tengu_tracker)
+
         while not self._stopped:
             ret, frame = cam.read()
             if not ret:

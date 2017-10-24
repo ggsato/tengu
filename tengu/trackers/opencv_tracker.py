@@ -1,0 +1,79 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+
+import cv2
+
+from ..tengu_tracker import OverlapRatioTracker, TrackedObject
+
+class OpenCVTrackedObject(TrackedObject):
+
+    def __init__(self, tracker, rect):
+        super(OpenCVTrackedObject, self).__init__(rect)
+        self._tracker = tracker
+
+    @property
+    def tracker(self):
+        return _tracker
+
+    def initialize(self, frame):
+        return self._tracker.init(frame, self.rect)
+
+    def update_tracker(self, frame):
+        updated, rect = self._tracker.update(frame)
+        if updated:
+            super(OpenCVTrackedObject, self).update_tracking(rect)
+
+class OpenCVTracker(OverlapRatioTracker):
+
+    tracker_types = ['BOOSTING', 'MIL','KCF', 'TLD', 'MEDIANFLOW']
+
+    def __init__(self, tracker_type, min_overlap_ratio=0.5, updates_to_expire=10):
+        super(OpenCVTracker, self).__init__(min_overlap_ratio=min_overlap_ratio, updates_to_expire=updates_to_expire)
+        self.tracker_type = tracker_type
+        self.last_frame = None
+        self.roi = None
+
+    def frame_changed(self, frame, frame_no):
+        self.last_frame = frame
+    
+    def resolve_trackings(self, detections):
+
+        """
+        1. initialize a tracker for a new tracked_object
+        OpenCVTracker is an online tracker that should be given an initial rectangle to track,
+        then, it will learn and update to track further.
+        2. update a tracker for an existing tracked_object
+        """
+        return super(OpenCVTracker, self).resolve_trackings(detections)
+
+    def prepare_updates(self, detections):
+        for tracked_object in self._tracked_objects:
+            tracked_object.update_tracker(self.last_frame)
+
+    def initialize_tracked_objects(self, detections):
+        for detection in detections:
+            tracker = OpenCVTracker.create_opencv_tracker(self.tracker_type)
+            tracked_object = OpenCVTrackedObject(tracker, detection)
+            if tracked_object.initialize(self.last_frame):
+                self._tracked_objects.append(tracked_object)
+
+    @staticmethod
+    def create_opencv_tracker(tracker_type):
+        tracker = None
+
+        if not tracker_type in OpenCVTracker.tracker_types:
+            self.logger.error('{} is not available.')
+            return tracker
+
+        if tracker_type == 'BOOSTING':
+            tracker = cv2.TrackerBoosting_create()
+        elif tracker_type == 'MIL':
+            tracker = cv2.TrackerMIL_create()
+        elif tracker_type == 'KCF':
+            tracker = cv2.TrackerKCF_create()
+        elif tracker_type == 'TLD':
+            tracker = cv2.TrackerTLD_create()
+        elif tracker_type == 'MEDIANFLOW':
+            tracker = cv2.TrackerMedianFlow_create()
+
+        return tracker

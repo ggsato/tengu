@@ -1,1 +1,1 @@
-from .kcf_tracker import KCFTracker
+from .opencv_tracker import *

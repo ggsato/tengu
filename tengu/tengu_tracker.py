@@ -67,10 +67,10 @@ class OverlapRatioTracker(TenguTracker):
         TenguTracker._global_updates += 1
 
         if len(self._tracked_objects) == 0:
-            self._tracked_objects = []
-            for detection in detections:
-                self._tracked_objects.append(TrackedObject(detection))
+            self.initialize_tracked_objects(detections)
             return self._tracked_objects
+
+        self.prepare_updates(detections)
 
         matrix = self.overlap_matrix(detections)
 
@@ -79,6 +79,13 @@ class OverlapRatioTracker(TenguTracker):
         self.filter_trackings()
 
         return self._tracked_objects
+
+    def prepare_updates(self, detections):
+        pass
+
+    def initialize_tracked_objects(self, detections):
+        for detection in detections:
+            self._tracked_objects.append(TrackedObject(detection))
 
     def overlap_matrix(self, detections):
         """ Calculates overlap ratio matrix
