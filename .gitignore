@@ -3,3 +3,4 @@
 *.egg-info
 .eggs
 *.jpg
+*DS_Store

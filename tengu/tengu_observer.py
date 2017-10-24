@@ -17,7 +17,7 @@ class TenguObserver(object):
     def objects_detected(self, detections):
         pass
 
-    def trackings_updateded(self, tracked_objects):
+    def tracked_objects_updated(self, tracked_objects):
         pass
 
     def object_counted(self, **kwargs):

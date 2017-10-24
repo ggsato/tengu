@@ -73,6 +73,10 @@ class Tengu(object):
         for observer_id in self._observers:
             self._observers[observer_id].src_changed(self.src)
 
+    def _notify_tracked_objects_updated(self, tracked_objects):
+        for observer_id in self._observers:
+            self._observers[observer_id].tracked_objects_updated(tracked_objects)
+
     def _notify_frame_changed(self, frame):
         for observer_id in self._observers:
             self._observers[observer_id].frame_changed(frame, self._current_frame)
@@ -129,7 +133,7 @@ class Tengu(object):
                 # tracking-by-detection
                 if tengu_tracker is not None:
                     tracked_objects = tengu_tracker.resolve_trackings(detections)
-                    self._notify_objects_tracked(tracked_objects)
+                    self._notify_tracked_objects_updated(tracked_objects)
 
                     # count trackings
                     if tengu_counter is not None:

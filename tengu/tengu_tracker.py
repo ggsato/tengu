@@ -40,15 +40,27 @@ class TenguTracker(TenguObserver):
 
     _global_updates = -1
 
-    def __init__(self, min_overlap_ratio=0.5, updates_to_expire=10):
+    def __init__(self):
         self.logger = logging.getLogger(__name__)
-        self._min_overlap_ratio = min_overlap_ratio
-        self._updates_to_expire = updates_to_expire
         self._tracked_objects = []
 
     @property
     def tracked_objects(self):
         return self._tracked_objects
+
+    def resolve_trackings(self, detections):
+        TenguTracker._global_updates += 1
+
+        # update tracked_objects
+
+        return self._tracked_objects
+
+class OverlapRatioTracker(TenguTracker):
+
+    def __init__(self, min_overlap_ratio=0.5, updates_to_expire=10):
+        super(OverlapRatioTracker, self).__init__()
+        self._min_overlap_ratio = min_overlap_ratio
+        self._updates_to_expire = updates_to_expire
     
     def resolve_trackings(self, detections):
 
@@ -81,7 +93,7 @@ class TenguTracker(TenguObserver):
         self.logger.debug('shape of matrix: {}'.format(matrix.shape))
         for d, detection in enumerate(detections):
             for t, tracked_object in enumerate(self._tracked_objects):
-                overlap_ratio = TenguTracker.calculate_overlap_ratio(detection, tracked_object.rect)
+                overlap_ratio = OverlapRatioTracker.calculate_overlap_ratio(detection, tracked_object.rect)
                 matrix[d][t] = overlap_ratio
         return matrix
 
