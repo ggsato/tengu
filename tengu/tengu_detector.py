@@ -6,23 +6,28 @@ import logging
 import cv2
 import numpy as np
 
-from tengu_observer import TenguObserver
-
 """ Reference implementation of TenguDetector
 As a reference, yet sometimes useful enough, background subtraction based detection is implemented
 """
 
-class TenguDetector(TenguObserver):
+class TenguDetector(object):
+
+    def __init__(self):
+        self.logger= logging.getLogger(__name__)
+    
+    def detect(self, frame):
+        pass
+
+class TenguBackgroundSubtractionDetector(TenguDetector):
 
     def __init__(self, use_gaussian=True, use_dilation=True, debug=False):
-        self.logger= logging.getLogger(__name__)
+        super(TenguBackgroundSubtractionDetector, self).__init__()
         self.avg_frame = None
         self.use_gaussian = use_gaussian
         self.use_dilation = use_dilation
         self.debug = debug
-    
-    def detect(self, frame):
 
+    def detect(self, frame):
         start = cv2.getTickCount()
 
         # gray and blur

@@ -4,8 +4,6 @@
 import numpy as np
 import logging
 
-from tengu_observer import TenguObserver
-
 """The default implementation of TenguTracker
 The default implementation of TenguTracker is based on o¥overlaps.
 If the currently tracked object's rectangle overlaps over a threshold is considered identical.
@@ -41,7 +39,7 @@ class TrackedObject(object):
         self._last_updates = TenguTracker._global_updates
         self.logger.debug('{}: updating track with {} at {}'.format(self, rect, self._last_updated_at))
 
-class TenguTracker(TenguObserver):
+class TenguTracker(object):
 
     _global_updates = -1
 

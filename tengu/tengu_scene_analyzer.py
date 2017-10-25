@@ -1,8 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-from tengu_observer import TenguObserver
 
-class TenguSceneAnalyzer(TenguObserver):
+class TenguSceneAnalyzer(object):
     
     def analyze_scene(self):
     	pass

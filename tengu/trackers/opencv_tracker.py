@@ -3,6 +3,7 @@
 
 import cv2
 
+from ..tengu_observer import TenguFrameChangeObserver
 from ..tengu_tracker import OverlapRatioTracker, TrackedObject
 
 class OpenCVTrackedObject(TrackedObject):
@@ -32,7 +33,7 @@ class OpenCVTrackedObject(TrackedObject):
         if updated:
             super(OpenCVTrackedObject, self).update_tracking(rect)
 
-class OpenCVTracker(OverlapRatioTracker):
+class OpenCVTracker(OverlapRatioTracker, TenguFrameChangeObserver):
 
     tracker_types = ['BOOSTING', 'MIL','KCF', 'TLD', 'MEDIANFLOW']
 
@@ -40,7 +41,6 @@ class OpenCVTracker(OverlapRatioTracker):
         super(OpenCVTracker, self).__init__(min_overlap_ratio=min_overlap_ratio, updates_to_expire=updates_to_expire)
         self.tracker_type = tracker_type
         self.last_frame = None
-        self.roi = None
 
     def frame_changed(self, frame, frame_no):
         self.last_frame = frame

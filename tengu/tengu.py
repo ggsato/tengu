@@ -12,7 +12,7 @@ import logging
 from flow import SceneFlow, FlowBlock
 from weakref import WeakValueDictionary
 
-from tengu_observer import TenguObserver
+from tengu_observer import *
 
 class Tengu(object):
 
@@ -55,7 +55,7 @@ class Tengu(object):
         return self._current_frame
 
     def add_observer(self, observer):
-        if observer == None or not isinstance(observer, TenguObserver):
+        if observer == None:
             return
         observer_id = id(observer)
         if self._observers.has_key(observer_id):
@@ -63,7 +63,7 @@ class Tengu(object):
         self._observers[observer_id] = observer
 
     def remove_observer(self, observer):
-        if observer == None or not isinstance(observer, TenguObserver):
+        if observer == None:
             return
         observer_id = id(observer)
         if self._observers.has_key(observer_id):
@@ -71,23 +71,33 @@ class Tengu(object):
 
     def _notify_src_changed(self):
         for observer_id in self._observers:
-            self._observers[observer_id].src_changed(self.src)
+            observer = self._observers[observer_id]
+            if isinstance(observer, TenguSrcChangeObserver):
+                observer.src_changed(self.src)
 
     def _notify_tracked_objects_updated(self, tracked_objects):
         for observer_id in self._observers:
-            self._observers[observer_id].tracked_objects_updated(tracked_objects)
+            observer = self._observers[observer_id]
+            if isinstance(observer, TenguTrackedObjectsUpdateObserver):
+                observer.tracked_objects_updated(tracked_objects)
 
     def _notify_frame_changed(self, frame):
         for observer_id in self._observers:
-            self._observers[observer_id].frame_changed(frame, self._current_frame)
+            observer = self._observers[observer_id]
+            if isinstance(observer, TenguFrameChangeObserver):
+                observer.frame_changed(frame, self._current_frame)
 
     def _notify_objects_detected(self, detections):
         for observer_id in self._observers:
-            self._observers[observer_id].objects_detected(detections)
+            observer = self._observers[observer_id]
+            if isinstance(observer, TenguObjectsDetectionObserver):
+                observer.objects_detected(detections)
 
     def _notify_analysis_finished(self):
         for observer_id in self._observers:
-            self._observers[observer_id].analysis_finished()
+            observer = self._observers[observer_id]
+            if isinstance(observer, TenguAnalysisObserver):
+                observer.analysis_finished()
 
     def run(self, tengu_scene_analyzer=None, tengu_detector=None, tengu_tracker=None, tengu_counter=None, tengu_count_reporter=None, queue=None, max_queue_wait=10):
         """
@@ -103,10 +113,6 @@ class Tengu(object):
         if cam is None or not cam.isOpened():
             self.logger.debug(self._src + ' is not available')
             return
-
-        # register if necessary
-        if tengu_tracker is not None:
-            self.add_observer(tengu_tracker)
 
         while not self._stopped:
             ret, frame = cam.read()
