@@ -15,13 +15,14 @@ class TrackedObject(object):
 
     obj_id = -1
 
-    def __init__(self, rect):
+    def __init__(self, rect, min_confirmation_updates=1):
         self.logger = logging.getLogger(__name__)
         TrackedObject.obj_id += 1
         # incremental unique object id
         self._obj_id = TrackedObject.obj_id
         self._overlapped_detections = [rect]
         self._last_updated_at = TenguTracker._global_updates
+        self._min_confirmation_updates = min_confirmation_updates
 
     @property
     def rect(self):
@@ -30,6 +31,10 @@ class TrackedObject(object):
     @property
     def last_updated_at(self):
         return self._last_updated_at
+
+    @property
+    def is_confirmed(self):
+        return len(self._overlapped_detections) > self._min_confirmation_updates
 
     def update_tracking(self, rect):
         self._overlapped_detections.append(rect)
@@ -57,7 +62,7 @@ class TenguTracker(TenguObserver):
 
 class OverlapRatioTracker(TenguTracker):
 
-    def __init__(self, min_overlap_ratio=0.5, updates_to_expire=10):
+    def __init__(self, min_overlap_ratio=0.3, updates_to_expire=10):
         super(OverlapRatioTracker, self).__init__()
         self._min_overlap_ratio = min_overlap_ratio
         self._updates_to_expire = updates_to_expire
@@ -70,22 +75,27 @@ class OverlapRatioTracker(TenguTracker):
             self.initialize_tracked_objects(detections)
             return self._tracked_objects
 
-        self.prepare_updates(detections)
+        self.prepare_updates()
 
         matrix = self.overlap_matrix(detections)
 
         self.update_trackings(detections, matrix)
 
-        self.filter_trackings()
+        self.obsolete_trackings()
+
+        self.logger.info('resolved, and now {} tracked objects'.format(len(self._tracked_objects)))
 
         return self._tracked_objects
 
-    def prepare_updates(self, detections):
+    def prepare_updates(self):
         pass
+
+    def new_tracked_object(self, detection):
+        return TrackedObject(detection)
 
     def initialize_tracked_objects(self, detections):
         for detection in detections:
-            self._tracked_objects.append(TrackedObject(detection))
+            self._tracked_objects.append(self.new_tracked_object(detection))
 
     def overlap_matrix(self, detections):
         """ Calculates overlap ratio matrix
@@ -128,20 +138,28 @@ class OverlapRatioTracker(TenguTracker):
         """
         # update based on votes
         votes = np.argmax(matrix, axis=1)
+        sums = np.sum(matrix, axis=1)
         self.logger.debug('argmax:{}'.format(votes))
-        for v, vote in enumerate(votes):
-            if vote == 0:
+        for s, asum in enumerate(sums):
+            if asum == 0:
+                self._tracked_objects.append(self.new_tracked_object(detections[s]))
                 continue
-            max_overlap_ratio = matrix[v, votes[v]]
+            max_overlap_ratio = matrix[s, votes[s]]
             if max_overlap_ratio < self._min_overlap_ratio:
                 continue
-            tracked_object = self._tracked_objects[votes[v]]
-            tracked_object.update_tracking(detections[v])
+            tracked_object = self._tracked_objects[votes[s]]
+            tracked_object.update_tracking(detections[s])
 
-    def filter_trackings(self):
+    def obsolete_trackings(self):
         """ Filters old trackings
         """
         for tracked_object in self._tracked_objects:
-            if TenguTracker._global_updates - tracked_object.last_updated_at > self._updates_to_expire:
-                # remove
+            if self.is_obsolete(tracked_object):
                 del self._tracked_objects[self._tracked_objects.index(tracked_object)]
+
+    def is_obsolete(self, tracked_object):
+        diff = TenguTracker._global_updates - tracked_object.last_updated_at
+        if not tracked_object.is_confirmed:
+            return diff > 0
+
+        return diff > self._updates_to_expire

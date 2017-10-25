@@ -10,15 +10,24 @@ class OpenCVTrackedObject(TrackedObject):
     def __init__(self, tracker, rect):
         super(OpenCVTrackedObject, self).__init__(rect)
         self._tracker = tracker
+        self._initialized = False
 
     @property
     def tracker(self):
         return _tracker
 
     def initialize(self, frame):
-        return self._tracker.init(frame, self.rect)
+        self._initialized = self._tracker.init(frame, self.rect)
+        return self._initialized
 
     def update_tracker(self, frame):
+        if not self.is_confirmed:
+            return
+
+        if not self._initialized:
+            self.initialize(frame)
+            return
+
         updated, rect = self._tracker.update(frame)
         if updated:
             super(OpenCVTrackedObject, self).update_tracking(rect)
@@ -46,16 +55,13 @@ class OpenCVTracker(OverlapRatioTracker):
         """
         return super(OpenCVTracker, self).resolve_trackings(detections)
 
-    def prepare_updates(self, detections):
+    def prepare_updates(self):
         for tracked_object in self._tracked_objects:
             tracked_object.update_tracker(self.last_frame)
 
-    def initialize_tracked_objects(self, detections):
-        for detection in detections:
-            tracker = OpenCVTracker.create_opencv_tracker(self.tracker_type)
-            tracked_object = OpenCVTrackedObject(tracker, detection)
-            if tracked_object.initialize(self.last_frame):
-                self._tracked_objects.append(tracked_object)
+    def new_tracked_object(self, detection):
+        tracker = OpenCVTracker.create_opencv_tracker(self.tracker_type)
+        return OpenCVTrackedObject(tracker, detection)
 
     @staticmethod
     def create_opencv_tracker(tracker_type):

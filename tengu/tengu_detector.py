@@ -63,7 +63,7 @@ class TenguDetector(TenguObserver):
 
         end = cv2.getTickCount()
         time = (end - start)/ cv2.getTickFrequency()
-        print('{} detected in {} ms'.format(len(detections), time))
+        self.logger.debug('{} detected in {} ms'.format(len(detections), time))
 
         if self.debug:
             # show opencv window
