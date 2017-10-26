@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 import numpy as np
-import logging
+import logging, copy
 
 """The default implementation of TenguTracker
 The default implementation of TenguTracker is based on o¥overlaps.
@@ -71,7 +71,7 @@ class OverlapRatioTracker(TenguTracker):
 
         if len(self._tracked_objects) == 0:
             self.initialize_tracked_objects(detections)
-            return self._tracked_objects
+            return copy.copy(self._tracked_objects)
 
         self.prepare_updates()
 
@@ -83,7 +83,7 @@ class OverlapRatioTracker(TenguTracker):
 
         self.logger.info('resolved, and now {} tracked objects'.format(len(self._tracked_objects)))
 
-        return self._tracked_objects
+        return copy.copy(self._tracked_objects)
 
     def prepare_updates(self):
         pass
@@ -151,9 +151,12 @@ class OverlapRatioTracker(TenguTracker):
     def obsolete_trackings(self):
         """ Filters old trackings
         """
+        removed = 0
         for tracked_object in self._tracked_objects:
             if self.is_obsolete(tracked_object):
                 del self._tracked_objects[self._tracked_objects.index(tracked_object)]
+                removed += 1
+        self.logger.info('removed {} tracked objects due to obsoletion'.format(removed))
 
     def is_obsolete(self, tracked_object):
         diff = TenguTracker._global_updates - tracked_object.last_updated_at

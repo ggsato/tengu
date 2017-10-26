@@ -22,7 +22,7 @@ class TenguTrackedObjectsUpdateObserver(object):
         pass
 
 class TenguObjectsCountObserver(object):
-    def object_counted(self, **kwargs):
+    def objects_counted(self, count):
         pass
 
 class TenguAnalysisObserver(object):

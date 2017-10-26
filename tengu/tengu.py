@@ -93,6 +93,12 @@ class Tengu(object):
             if isinstance(observer, TenguObjectsDetectionObserver):
                 observer.objects_detected(detections)
 
+    def _notify_objects_counted(self, count):
+        for observer_id in self._observers:
+            observer = self._observers[observer_id]
+            if isinstance(observer, TenguObjectsCountObserver):
+                observer.objects_counted(count)
+
     def _notify_analysis_finished(self):
         for observer_id in self._observers:
             observer = self._observers[observer_id]
@@ -147,11 +153,12 @@ class Tengu(object):
 
                     # count trackings
                     if tengu_counter is not None:
-                        counts = tengu_counter.count(tracked_objects)
+                        count = tengu_counter.count(tracked_objects)
+                        self._notify_objects_counted(count)
 
                         # make report
                         if tengu_count_reporter is not None:
-                            tengu_count_reporter.update_report(counts)
+                            tengu_count_reporter.update_report(count)
 
         self._notify_analysis_finished()
         self._stopped = True
