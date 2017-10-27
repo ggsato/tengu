@@ -153,13 +153,15 @@ class Tengu(object):
 
                     # count trackings
                     if tengu_counter is not None:
-                        count = tengu_counter.count(tracked_objects)
-                        self._notify_objects_counted(count)
+                        counts = tengu_counter.count(tracked_objects)
+                        self._notify_objects_counted(counts)
 
-                        # make report
+                        # update for report
                         if tengu_count_reporter is not None:
-                            tengu_count_reporter.update_report(count)
+                            tengu_count_reporter.update_counts(counts)
 
+        if tengu_count_reporter is not None:
+            tengu_count_reporter.report()
         self._notify_analysis_finished()
         self._stopped = True
 
