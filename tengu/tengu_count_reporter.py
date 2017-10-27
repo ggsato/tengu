@@ -1,27 +1,46 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-import logging
 
-class TenguCountReporter(object):
-    
-    def update_counts(self, counts):
+class TenguAggregator(object):
+
+    def aggregate(self, counts):
         pass
-
-    def report(self):
-        pass
-
-class TenguTotalCountReporter(TenguCountReporter):
-
-    def __init__(self):
-        self.logger= logging.getLogger(__name__)
-        self._total_counts = 0
 
     @property
-    def total_counts(self):
-        return self._total_counts
+    def summary(self):
+        pass
 
-    def update_counts(self, counts):
+class TenguTotalAggregator(TenguAggregator):
+
+    def __init__(self):
+        self._total_counts = 0
+
+    def aggregate(self, counts):
         self._total_counts += counts
 
+    @property
+    def summary(self):
+        return self._total_counts
+
+class TenguFormatter(object):
+
+    def format(self, summary):
+        return summary
+
+class TenguConsoleWriter(object):
+
+    def write(self, formatted_txt):
+        print('TOTAL: {}'.format(formatted_txt))
+
+class TenguCountReporter(object):
+
+    def __init__(self, aggregator=TenguTotalAggregator(), formatter=TenguFormatter(), writer=TenguConsoleWriter()):
+        self._aggregator = aggregator
+        self._formatter = formatter
+        self._writer = writer
+    
+    def update_counts(self, counts):
+        self._aggregator.aggregate(counts)
+
     def report(self):
-        self.logger.info('TOTAL COUNTS = {}'.format(self._total_counts))
+        self._writer.write(self._formatter.format(self._aggregator.summary))
