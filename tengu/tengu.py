@@ -153,13 +153,21 @@ class Tengu(object):
 
                     # count trackings
                     if tengu_counter is not None:
+                        self.logger.debug('calling counter')
                         counts = tengu_counter.count(tracked_objects)
                         self._notify_objects_counted(counts)
 
                         # update for report
                         if tengu_count_reporter is not None:
+                            self.logger.debug('calling count reporter {}'.format(tengu_count_reporter))
                             tengu_count_reporter.update_counts(counts)
+                        else:
+                            self.logger.debug('skip calling count reporter')
 
+                    else:
+                        self.logger.debug('skip calling counter')
+
+        self.logger.info('exitted run loop, exitting...')
         if tengu_count_reporter is not None:
             tengu_count_reporter.report()
         self._notify_analysis_finished()
