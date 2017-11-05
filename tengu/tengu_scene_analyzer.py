@@ -24,8 +24,9 @@ class TenguSceneAnalyzer(object):
 
 class KLTSceneAnalyzer(TenguSceneAnalyzer):
     
-    def __init__(self, lk_params=None, feature_params=None, **kwargs):
+    def __init__(self, draw_flows=False, lk_params=None, feature_params=None, **kwargs):
         super(KLTSceneAnalyzer, self).__init__(**kwargs)
+        self.draw_flows = draw_flows
         self.frame_idx = 0
         self.update_interval = 10
         self.tracks = [] 
@@ -47,6 +48,10 @@ class KLTSceneAnalyzer(TenguSceneAnalyzer):
         # set prev
         self.prev_gray = scene_gray
         self.frame_idx += 1
+
+        if self.draw_flows:
+            return scene_gray
+
         return scene
 
     def calculate_flow(self, img0, img1):
@@ -73,6 +78,11 @@ class KLTSceneAnalyzer(TenguSceneAnalyzer):
 
             tr.append((x, y))
             new_tracks.append(tr)
+
+            if self.draw_flows:
+                cv2.circle(img1, (x, y), 3, (255, 255, 255), -1)
+
+        cv2.polylines(img1, [np.int32(tr) for tr in new_tracks], False, (192, 192, 192))
 
         return new_tracks
 

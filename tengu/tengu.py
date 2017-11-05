@@ -135,7 +135,10 @@ class Tengu(object):
             # TEST
             if self._current_frame > 10000:
                 break
+
+            # increment
             self._current_frame += 1
+
             # block for a client if necessary to synchronize
             if queue is not None:
                 # wait until queue becomes ready
@@ -144,15 +147,19 @@ class Tengu(object):
                 except Queue.Full:
                     self.logger.error('queue is full, quitting...')
                     break
+
+            # use copy for gui use, which is done asynchronously, meaning may corrupt buffer during camera updates
+            copy = frame.copy()
+
             # notify
-            self._notify_frame_changed(frame)
+            self._notify_frame_changed(copy)
 
             # analyze scene
             if tengu_scene_analyzer is not None:
-                scene = tengu_scene_analyzer.analyze_scene(frame)
+                scene = tengu_scene_analyzer.analyze_scene(copy)
                 self._notify_scene_changed(scene)
             else:
-                scene = frame
+                scene = copy
 
             # detect
             if tengu_detector is not None:
@@ -195,163 +202,6 @@ class Tengu(object):
     def stop(self):
         self.logger.debug('stopping...')
         self._stopped = True
-
-class App:
-
-    lk_params = dict( winSize  = (21, 21), maxLevel = 3, criteria = (cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, 10, 0.01))
-    feature_params = dict( maxCorners = 1000, qualityLevel = 0.1, minDistance = 10, blockSize = 10)
-
-    def __init__(self, video_src, global_scale):
-        self.cam = cv2.VideoCapture(video_src)
-        self.video_src = video_src
-        self.global_scale = global_scale   
-        self.tracks = [] 
-        self.frame_idx = 0
-        self.detect_interval = 10
-        # e.g. 25fps * 4 seconds * 10 = 40 seconds
-        self.max_track_length = 1000
-        self.scene_flow = None
-
-
-    def calculate_flow(self, img0, img1, frame_gray):
-        start_time = time.time()
-        p0 = np.float32([tr[-1] for tr in self.tracks]).reshape(-1, 1, 2)
-        p1, st, err = cv2.calcOpticalFlowPyrLK(img0, img1, p0, None, **App.lk_params)
-        p0r, st, err = cv2.calcOpticalFlowPyrLK(img1, img0, p1, None, **App.lk_params)
-        d = abs(p0-p0r).reshape(-1, 2).max(-1)
-        good = d < 1
-        new_tracks = []
-        for tr, (x, y), good_flag in zip(self.tracks, p1.reshape(-1, 2), good):
-            if not good_flag:
-                # this track is not effective anymore
-                self.scene_flow.update_flow(tr)
-                continue
-
-            if frame_gray.shape[0] <= int(y) or frame_gray.shape[1] <= int(x):
-                # this track has left the region
-                self.scene_flow.update_flow(tr)
-                continue
-
-            # if len(tr) > self.max_track_length / 10:
-            #     full_flow_length = SceneFlow.compute_flow_length(tr)
-            #     if full_flow_length < self.scene_flow.flow_block_size:
-            #         # ignore this track
-            #         # the corresponding block will stay marked as stationally
-            #         print('ignoring a track at ' + str(tr[-1]))
-            #         continue
-            if len(tr) > self.max_track_length:
-                del tr[0]
-
-            tr.append((x, y))
-            new_tracks.append(tr)
-            cv2.circle(frame_gray, (x, y), 3, (255, 255, 255), -1)
-
-        cv2.polylines(frame_gray, [np.int32(tr) for tr in new_tracks], False, (192, 192, 192))
-
-        elapsed_time = time.time() - start_time
-        #print('calculated and clustered in (' + str(elapsed_time) + ')sec')
-
-        return new_tracks
-
-    def update_tracking_points(self, frame_gray):
-        # ignore static flow block areas
-        tmp_flows = self.scene_flow.get_flows(False)
-        tmp_flows_gray = cv2.cvtColor(tmp_flows, cv2.COLOR_BGR2GRAY)
-        ret,mask = cv2.threshold(tmp_flows_gray,16,255,cv2.THRESH_BINARY)
-        # don't pick up existing pixels
-        for x, y in [np.int32(tr[-1]) for tr in self.tracks]:
-            cv2.circle(mask, (x, y), 10, 0, -1)
-        # find good points
-        p = cv2.goodFeaturesToTrack(frame_gray, mask = mask, **App.feature_params)
-        if p is None:
-            print('No good features')
-        else:
-            for x, y in np.float32(p).reshape(-1, 2):
-                self.tracks.append([(x, y)])
-
-        return mask
-
-    def run(self):
-        cv2.namedWindow('Flows')
-        prev_gray = None
-        frame_lines = None
-        show_edges = False
-        while True:
-            ret, frame = self.cam.read()
-            if not ret:
-                print('no frame is avaiable')
-                break
-
-            resized = cv2.resize(frame,None, fx=self.global_scale, fy=self.global_scale, interpolation=cv2.INTER_AREA)
-            frame_gray = cv2.cvtColor(resized, cv2.COLOR_BGR2GRAY)
-            if show_edges and frame_lines is None:
-                frame_lines = np.ones_like(frame_gray) * 255
-            
-            # prepare flows
-            if self.scene_flow is None:
-                print('initializing shape as ' + str(resized.shape))
-                self.scene_flow = SceneFlow(resized.shape)
-                print('initialized shape as ' + str(self.scene_flow.get_flows(False).shape))
-
-            # calculate optical flow
-            if len(self.tracks) > 0:
-                img0, img1 = prev_gray, frame_gray
-                self.tracks = self.calculate_flow(img0, img1, frame_gray)
-
-            # update tracking points
-            if self.frame_idx % self.detect_interval == 0:
-                mask = self.update_tracking_points(frame_gray)
-                if show_edges:
-                    # get lines
-                    new_frame_lines = np.ones_like(frame_lines) * 255
-                    edges = cv2.Canny(frame_gray,10,150,apertureSize = 3)
-                    masked_edges = cv2.bitwise_and(edges, mask)
-                    # probabilistic
-                    lines = cv2.HoughLinesP(masked_edges,1,np.pi/180,50,minLineLength=3,maxLineGap=0)
-                    if lines is not None:
-                        for line in lines:
-                            x1,y1,x2,y2 = line[0]
-                            # ignore if this is a similar direction to the flow direction
-                            blk_angle = self.scene_flow.get_angle_at((x1, y1))
-                            line_angle = SceneFlow.get_angle([(x1, y1), (x2, y2)])
-                            diff_angle = math.fabs(blk_angle - line_angle)
-                            if diff_angle < (math.pi/6):
-                                continue
-                            else:
-                                # inverse line angle
-                                line_angle = SceneFlow.get_angle([(x2, y2), (x1, y1)])
-                                diff_angle = math.fabs(blk_angle - line_angle)
-                                if diff_angle < (math.pi/6):
-                                    continue
-                            cv2.line(new_frame_lines,(x1,y1),(x2,y2),0,2)
-                    # blend
-                    frame_lines = cv2.addWeighted(frame_lines,0.9,new_frame_lines,0.1,0)
-
-            # prepare for the next
-            self.frame_idx += 1
-            prev_gray = frame_gray
-
-            cv2.imshow('Frame', frame_gray)
-            #cv2.imshow('Mask', mask)
-            cv2.imshow('Flows', self.scene_flow.get_flows())
-            if show_edges:
-                cv2.imshow('Lines', frame_lines)
-
-            ch = 0xFF & cv2.waitKey(1)
-
-            if ch == 27:
-                break
-            elif ch == -1:
-                continue
-            elif ch == 255:
-                # do nothing
-                continue
-
-        imfile = self.video_src[self.video_src.rindex('/')+1:self.video_src.index('.')]+'.jpg'
-        print('saving ' + imfile)
-        cv2.imwrite(imfile, self.scene_flow.get_flows())
-
-        cv2.destroyAllWindows()
 
 def main():
     print(sys.argv)
