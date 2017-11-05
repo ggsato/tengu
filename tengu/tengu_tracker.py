@@ -81,7 +81,7 @@ class OverlapRatioTracker(TenguTracker):
 
         self.obsolete_trackings()
 
-        self.logger.info('resolved, and now {} tracked objects'.format(len(self._tracked_objects)))
+        self.logger.debug('resolved, and now {} tracked objects'.format(len(self._tracked_objects)))
 
         return copy.copy(self._tracked_objects)
 
@@ -156,7 +156,7 @@ class OverlapRatioTracker(TenguTracker):
             if self.is_obsolete(tracked_object):
                 del self._tracked_objects[self._tracked_objects.index(tracked_object)]
                 removed += 1
-        self.logger.info('removed {} tracked objects due to obsoletion'.format(removed))
+        self.logger.debug('removed {} tracked objects due to obsoletion'.format(removed))
 
     def is_obsolete(self, tracked_object):
         diff = TenguTracker._global_updates - tracked_object.last_updated_at

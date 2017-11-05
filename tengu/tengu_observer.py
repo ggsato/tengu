@@ -6,7 +6,7 @@ class TenguSrcChangeObserver(object):
         pass
 
 class TenguSceneChangeObserver(object):
-    def scene_change(self, **kwargs):
+    def scene_changed(self, frame):
         pass
 
 class TenguFrameChangeObserver(object):

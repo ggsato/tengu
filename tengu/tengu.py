@@ -75,6 +75,12 @@ class Tengu(object):
             if isinstance(observer, TenguSrcChangeObserver):
                 observer.src_changed(self.src)
 
+    def _notify_scene_changed(self, scene):
+        for observer_id in self._observers:
+            observer = self._observers[observer_id]
+            if isinstance(observer, TenguSceneChangeObserver):
+                observer.scene_changed(scene)
+
     def _notify_tracked_objects_updated(self, tracked_objects):
         for observer_id in self._observers:
             observer = self._observers[observer_id]
@@ -141,9 +147,16 @@ class Tengu(object):
             # notify
             self._notify_frame_changed(frame)
 
+            # analyze scene
+            if tengu_scene_analyzer is not None:
+                scene = tengu_scene_analyzer.analyze_scene(frame)
+                self._notify_scene_changed(scene)
+            else:
+                scene = frame
+
             # detect
             if tengu_detector is not None:
-                detections = tengu_detector.detect(frame)
+                detections = tengu_detector.detect(scene)
                 self._notify_objects_detected(detections)
 
                 # tracking-by-detection
