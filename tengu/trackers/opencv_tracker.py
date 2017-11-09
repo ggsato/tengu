@@ -37,8 +37,8 @@ class OpenCVTracker(TenguTracker, TenguFrameChangeObserver):
 
     tracker_types = ['BOOSTING', 'MIL','KCF', 'TLD', 'MEDIANFLOW']
 
-    def __init__(self, tracker_type, min_overlap_ratio=0.5, updates_to_expire=10):
-        super(OpenCVTracker, self).__init__(min_overlap_ratio=min_overlap_ratio, updates_to_expire=updates_to_expire)
+    def __init__(self, tracker_type):
+        super(OpenCVTracker, self).__init__()
         self.tracker_type = tracker_type
         self.last_frame = None
 

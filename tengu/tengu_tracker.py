@@ -46,21 +46,24 @@ class TenguTracker(object):
     _global_updates = -1
     _min_value = 0.0001
 
-    def __init__(self, obsoletion=10):
+    def __init__(self, obsoletion=100):
         self.logger = logging.getLogger(__name__)
         self._tracked_objects = []
         self._obsoletion = obsoletion
 
     @property
     def tracked_objects(self):
-        return self._tracked_objects
+        return copy.copy(self._tracked_objects)
 
     def resolve_trackings(self, detections):
         TenguTracker._global_updates += 1
 
         if len(self._tracked_objects) == 0:
             self.initialize_tracked_objects(detections)
-            return copy.copy(self._tracked_objects)
+            return self.tracked_objects
+
+        if len(detections) == 0:
+        	return self.tracked_objects
 
         self.prepare_updates()
 
@@ -72,7 +75,7 @@ class TenguTracker(object):
 
         self.logger.debug('resolved, and now {} tracked objects'.format(len(self._tracked_objects)))
 
-        return copy.copy(self._tracked_objects)
+        return self.tracked_objects
 
     def prepare_updates(self):
         pass
@@ -99,7 +102,7 @@ class TenguTracker(object):
         shape = (len(self._tracked_objects), len(detections))
         self.logger.debug('shape: {}'.format(shape))
         cost_matrix = np.zeros(shape, dtype=np.float32)
-        if shape[1] == 1:
+        if len(shape) == 1:
         	# the dimesion should be forced
         	cost_matrix = np.expand_dims(cost_matrix, axis=1)
         self.logger.debug('shape of cost_matrix: {}'.format(cost_matrix.shape))
