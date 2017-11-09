@@ -1,8 +1,10 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
+import math
 import numpy as np
 import logging, copy
+from scipy.optimize import linear_sum_assignment
 
 """The default implementation of TenguTracker
 The default implementation of TenguTracker is based on o¥overlaps.
@@ -42,10 +44,12 @@ class TrackedObject(object):
 class TenguTracker(object):
 
     _global_updates = -1
+    _min_value = 0.0001
 
-    def __init__(self):
+    def __init__(self, obsoletion=10):
         self.logger = logging.getLogger(__name__)
         self._tracked_objects = []
+        self._obsoletion = obsoletion
 
     @property
     def tracked_objects(self):
@@ -54,30 +58,15 @@ class TenguTracker(object):
     def resolve_trackings(self, detections):
         TenguTracker._global_updates += 1
 
-        # update tracked_objects
-
-        return self._tracked_objects
-
-class OverlapRatioTracker(TenguTracker):
-
-    def __init__(self, min_overlap_ratio=0.3, updates_to_expire=10):
-        super(OverlapRatioTracker, self).__init__()
-        self._min_overlap_ratio = min_overlap_ratio
-        self._updates_to_expire = updates_to_expire
-    
-    def resolve_trackings(self, detections):
-
-        TenguTracker._global_updates += 1
-
         if len(self._tracked_objects) == 0:
             self.initialize_tracked_objects(detections)
             return copy.copy(self._tracked_objects)
 
         self.prepare_updates()
 
-        matrix = self.overlap_matrix(detections)
-
-        self.update_trackings(detections, matrix)
+        cost_matrix = self.calculate_cost_matrix(detections)
+        row_ind, col_ind = self.optimize_and_assign(cost_matrix)
+        self.update_trackings_with_optimized_assignments(detections, row_ind, col_ind)
 
         self.obsolete_trackings()
 
@@ -95,25 +84,32 @@ class OverlapRatioTracker(TenguTracker):
         for detection in detections:
             self._tracked_objects.append(self.new_tracked_object(detection))
 
-    def overlap_matrix(self, detections):
-        """ Calculates overlap ratio matrix
-        overlap_matrix calculates a matrix of overlap ratio as DxT, where D is detections, and T is tracked objects.
+    def calculate_cost_matrix(self, detections):
+    	""" Calculates cost matrix
+        Given the number of tracked objects, m, and the number of detections, n,
+        cost matrix consists of mxn matrix C.
+        Cmn: a cost at (m, n), -Infinity<=Cmn<=0
+		
+		Then, such a cost matrix is optimized to produce a combination of minimum cost assignments.
+		For more information, see Hungarian algorithm(Wikipedia), scipy.optimize.linear_sum_assignment
         """
         if len(self._tracked_objects) == 0:
             return None
 
-        shape = (len(detections), max(len(self._tracked_objects), 2))
+        shape = (len(self._tracked_objects), len(detections))
         self.logger.debug('shape: {}'.format(shape))
-        matrix = np.zeros(shape, dtype=np.float32)
-        self.logger.debug('shape of matrix: {}'.format(matrix.shape))
-        for d, detection in enumerate(detections):
-            for t, tracked_object in enumerate(self._tracked_objects):
-                overlap_ratio = OverlapRatioTracker.calculate_overlap_ratio(detection, tracked_object.rect)
-                matrix[d][t] = overlap_ratio
-        return matrix
+        cost_matrix = np.zeros(shape, dtype=np.float32)
+        if shape[1] == 1:
+        	# the dimesion should be forced
+        	cost_matrix = np.expand_dims(cost_matrix, axis=1)
+        self.logger.debug('shape of cost_matrix: {}'.format(cost_matrix.shape))
+        for t, tracked_object in enumerate(self._tracked_objects):
+            for d, detection in enumerate(detections):
+                cost = self.calculate_cost_by_overlap_ratio(detection, tracked_object.rect)
+                cost_matrix[t][d] = cost
+        return cost_matrix
 
-    @staticmethod
-    def calculate_overlap_ratio(rect_a, rect_b):
+    def calculate_cost_by_overlap_ratio(self, rect_a, rect_b):
         """ Calculates a overlap ratio against rect_b with respect to rect_a
         """
         ratio = 0.0
@@ -129,24 +125,19 @@ class OverlapRatioTracker(TenguTracker):
             return ratio
         # finally
         ratio = (dx * dy) / (rect_a[2] * rect_a[3])
-        return ratio
+        self.logger.debug('ratio of {} and {} = {}'.format(rect_a, rect_b, ratio))
 
-    def update_trackings(self, detections, matrix):
-        """ Resolve tracked objects based on the matrix
-        """
-        # update based on votes
-        votes = np.argmax(matrix, axis=1)
-        sums = np.sum(matrix, axis=1)
-        self.logger.debug('argmax:{}'.format(votes))
-        for s, asum in enumerate(sums):
-            if asum == 0:
-                self._tracked_objects.append(self.new_tracked_object(detections[s]))
-                continue
-            max_overlap_ratio = matrix[s, votes[s]]
-            if max_overlap_ratio < self._min_overlap_ratio:
-                continue
-            tracked_object = self._tracked_objects[votes[s]]
-            tracked_object.update_tracking(detections[s])
+        return -1 * math.log(max(ratio, TenguTracker._min_value))
+
+    def optimize_and_assign(self, cost_matrix):
+    	row_ind, col_ind = linear_sum_assignment(cost_matrix)
+    	min_cost = cost_matrix[row_ind, col_ind].sum()
+    	self.logger.debug('min optimzied cost of {} = {}'.format(cost_matrix, min_cost))
+    	return row_ind, col_ind
+
+    def update_trackings_with_optimized_assignments(self, detections, row_ind, col_ind):
+    	for ix, row in enumerate(row_ind):
+    		self._tracked_objects[row].update_tracking(detections[col_ind[ix]])
 
     def obsolete_trackings(self):
         """ Filters old trackings
@@ -163,4 +154,4 @@ class OverlapRatioTracker(TenguTracker):
         if not tracked_object.is_confirmed:
             return diff > 0
 
-        return diff > self._updates_to_expire
+        return diff > self._obsoletion
