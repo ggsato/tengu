@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-import cv2
+import logging, cv2
 
 from ..tengu_observer import TenguFrameChangeObserver
 from ..tengu_tracker import TenguTracker, TrackedObject
@@ -68,7 +68,7 @@ class OpenCVTracker(TenguTracker, TenguFrameChangeObserver):
         tracker = None
 
         if not tracker_type in OpenCVTracker.tracker_types:
-            self.logger.error('{} is not available.')
+            logging.error('{} is not available.')
             return tracker
 
         if tracker_type == 'BOOSTING':

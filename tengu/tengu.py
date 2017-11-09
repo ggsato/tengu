@@ -156,10 +156,10 @@ class Tengu(object):
 
             # analyze scene
             if tengu_scene_analyzer is not None:
-                scene = tengu_scene_analyzer.analyze_scene(copy)
+                scene = tengu_scene_analyzer.analyze_scene(frame)
                 self._notify_scene_changed(scene)
             else:
-                scene = copy
+                scene = frame
 
             # detect
             if tengu_detector is not None:
