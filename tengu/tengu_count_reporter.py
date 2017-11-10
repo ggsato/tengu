@@ -44,7 +44,7 @@ class TenguFpsAggregator(TenguAggregator):
         self.current_frames += 1
         current_tick = time.time()
         elapsed = current_tick - self.last_tick
-        logging.info('elapsed = {}'.format(elapsed))
+        logging.debug('elapsed = {}'.format(elapsed))
         if elapsed > 1:
             fps = int(self.current_frames / elapsed)
             self.fps_second.append(fps)
@@ -75,7 +75,7 @@ class TenguNumberListToCSVFormatter(TenguFormatter):
             sf.write(row)
         formatted_text = sf.getvalue()
         sf.close()
-        logging.info('formatted_text = {}'.format(formatted_text))
+        logging.debug('formatted_text = {}'.format(formatted_text))
         return formatted_text
 
 class TenguConsoleWriter(object):
@@ -102,7 +102,7 @@ class TenguCountReporter(object):
         logging.debug("aggregator: {}, formatter:{}, writer:{}".format(self._aggregator, self._formatter, self._writer))
     
     def update_counts(self, counts):
-        logging.info('updating counts...')
+        logging.debug('updating counts...')
         self._aggregator.aggregate(counts)
 
     def report(self):

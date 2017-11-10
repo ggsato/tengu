@@ -36,7 +36,7 @@ class TrackedObject(object):
     def is_confirmed(self):
         return len(self._overlapped_detections) > self._min_confirmation_updates
 
-    def update_tracking(self, rect):
+    def update_tracking(self, rect, *args):
         self._overlapped_detections.append(rect)
         self._last_updates = TenguTracker._global_updates
         self.logger.debug('{}: updating track with {} at {}'.format(self, rect, self._last_updated_at))
@@ -71,6 +71,8 @@ class TenguTracker(object):
         row_ind, col_ind = self.optimize_and_assign(cost_matrix)
         self.update_trackings_with_optimized_assignments(detections, row_ind, col_ind)
 
+        # TODO: Create new trackings
+        # Obsolete old ones
         self.obsolete_trackings()
 
         self.logger.debug('resolved, and now {} tracked objects'.format(len(self._tracked_objects)))
