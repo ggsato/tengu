@@ -63,7 +63,7 @@ class ClusteredKLTTracker(TenguTracker):
 		node_clusters = self.find_node_clusters()
 
 		# create a cost matrix
-		
+
 
 		return super(ClusteredKLTTracker, self).calculate_cost_matrix(detections)
 
@@ -87,25 +87,18 @@ class ClusteredKLTTracker(TenguTracker):
 
 	def update_weights(self, detections):
 		
-		for detection in detections:
-			# find nodes in this detected area
-			in_nodes = self.find_nodes_inside(detection)
-			self.update_mutual_edges_weight(in_nodes)
-
-	def find_nodes_inside(self, detection):
-
-		in_nodes = []
 		nodes = self._klt_scene_analyzer.nodes
 		graph_nodes = list(self.graph.nodes())
 		for node in nodes:
-			if node.inside_rect(detection):
-				if not node in graph_nodes:
-					self.graph.add_node(node)
-				in_nodes.append(node)
-
-		self.logger.info('found {} nodes inside {}'.format(len(in_nodes), detection))
-
-		return in_nodes
+			for detection in detections:
+				in_nodes = []
+				if node.inside_rect(detection):
+					if not node in graph_nodes:
+						self.graph.add_node(node)
+					in_nodes.append(node)
+				if len(in_nodes) > 0:
+					self.update_mutual_edges_weight(in_nodes)
+					#self.logger.info('found {} in-nodes'.format(len(in_nodes)))
 
 	def update_mutual_edges_weight(self, in_nodes):
 
@@ -128,7 +121,7 @@ class ClusteredKLTTracker(TenguTracker):
 					edge['weight'] = current_weight + 1
 					#self.logger.info('updating an edge, {}, from {} to {}'.format(edge, current_weight, edge['weight']))
 					updated_edges.append(edge)
-		self.logger.info('updated {} edges'.format(len(updated_edges)))
+		#self.logger.info('updated {} edges'.format(len(updated_edges)))
 
 	def find_node_clusters(self):
 
