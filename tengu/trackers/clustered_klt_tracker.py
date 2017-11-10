@@ -87,18 +87,22 @@ class ClusteredKLTTracker(TenguTracker):
 
 	def update_weights(self, detections):
 		
+		in_nodes_dict = {}
+		for detection in detections:
+			in_nodes_dict[detection] = []
 		nodes = self._klt_scene_analyzer.nodes
 		graph_nodes = list(self.graph.nodes())
 		for node in nodes:
 			for detection in detections:
-				in_nodes = []
 				if node.inside_rect(detection):
 					if not node in graph_nodes:
 						self.graph.add_node(node)
-					in_nodes.append(node)
-				if len(in_nodes) > 0:
-					self.update_mutual_edges_weight(in_nodes)
-					#self.logger.info('found {} in-nodes'.format(len(in_nodes)))
+					in_nodes_dict[detection].append(node)
+
+		for detection in in_nodes_dict:
+			in_nodes = in_nodes_dict[detection]
+			self.update_mutual_edges_weight(in_nodes)
+			self.logger.info('found {} in-nodes in {}'.format(len(in_nodes), detection))
 
 	def update_mutual_edges_weight(self, in_nodes):
 
@@ -127,11 +131,10 @@ class ClusteredKLTTracker(TenguTracker):
 
 		communities = nxcom.girvan_newman(self.graph)
 		community = next(communities)
-		node_cluster = NodeCluster(community)
-		self.logger.info('adding a node cluster: {} having {} nodes'.format(node_cluster, len(community)))
 		node_clusters = []
 		for group in community:
 			if len(group) > ClusteredKLTTracker._minimum_community_size:
-				self.logger.info('found a group of size {}'.format(len(group)))
+				self.logger.debug('found a group of size {}'.format(len(group)))
 				node_clusters.append(NodeCluster(group))
+		self.logger.info('community groups: {}, large enough groups: {}'.format(len(community), len(node_clusters)))
 		return node_clusters
