@@ -14,19 +14,32 @@ If the currently tracked object's rectangle overlaps over a threshold is conside
 class TrackedObject(object):
 
     obj_id = -1
+    min_confirmation_updates = 1
 
-    def __init__(self, rect, min_confirmation_updates=1):
+    def __init__(self):
         self.logger = logging.getLogger(__name__)
         TrackedObject.obj_id += 1
         # incremental unique object id
         self._obj_id = TrackedObject.obj_id
-        self._overlapped_detections = [rect]
         self._last_updated_at = TenguTracker._global_updates
-        self._min_confirmation_updates = min_confirmation_updates
+        self._assignments = []
+    
+    # tracklet properties
+    @property
+    def position(self):
+        pass
+
+    @property
+    def size(self):
+        pass
+
+    @property
+    def velocity(self):
+        pass
 
     @property
     def rect(self):
-        return self._overlapped_detections[-1]
+        return self._assignments[-1]
 
     @property
     def last_updated_at(self):
@@ -34,12 +47,12 @@ class TrackedObject(object):
 
     @property
     def is_confirmed(self):
-        return len(self._overlapped_detections) > self._min_confirmation_updates
+        return len(self._assignments) > TrackedObject.min_confirmation_updates
 
-    def update_tracking(self, rect):
-        self._overlapped_detections.append(rect)
+    def update_with_assignment(self, assignment):
+        self._assignments.append(assignment)
         self._last_updates = TenguTracker._global_updates
-        self.logger.debug('{}: updating track with {} at {}'.format(self, rect, self._last_updated_at))
+        self.logger.debug('{}: updating track with {} at {}'.format(self, assignment, self._last_updated_at))
 
 class TenguCostMatrix(object):
 
@@ -90,7 +103,9 @@ class TenguTracker(object):
         pass
 
     def new_tracked_object(self, detection):
-        return TrackedObject(detection)
+        to = TrackedObject()
+        to.update_with_assignment(detection)
+        return to
 
     def initialize_tracked_objects(self, detections):
         for detection in detections:
@@ -155,7 +170,7 @@ class TenguTracker(object):
 
     def update_trackings_with_optimized_assignments(self, assignments, row_ind, col_ind):
     	for ix, row in enumerate(row_ind):
-    		self._tracked_objects[row].update_tracking(assignments[col_ind[ix]])
+    		self._tracked_objects[row].update_with_assignment(assignments[col_ind[ix]])
 
     def obsolete_trackings(self):
         """ Filters old trackings

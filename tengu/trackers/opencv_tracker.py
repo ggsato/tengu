@@ -8,8 +8,8 @@ from ..tengu_tracker import TenguTracker, TrackedObject
 
 class OpenCVTrackedObject(TrackedObject):
 
-    def __init__(self, tracker, rect):
-        super(OpenCVTrackedObject, self).__init__(rect)
+    def __init__(self, tracker):
+        super(OpenCVTrackedObject, self).__init__()
         self._tracker = tracker
         self._initialized = False
 
@@ -61,7 +61,9 @@ class OpenCVTracker(TenguTracker, TenguFrameChangeObserver):
 
     def new_tracked_object(self, detection):
         tracker = OpenCVTracker.create_opencv_tracker(self.tracker_type)
-        return OpenCVTrackedObject(tracker, detection)
+        to = OpenCVTrackedObject(tracker)
+        to.update_with_assignment(detection)
+        return to
 
     @staticmethod
     def create_opencv_tracker(tracker_type):
