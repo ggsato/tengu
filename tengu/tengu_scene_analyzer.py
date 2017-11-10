@@ -13,20 +13,28 @@ class TenguSceneAnalyzer(object):
         self.scale = scale
     
     def analyze_scene(self, frame):
-        cropped = frame
-    	if self.roi is not None:
-            # crop
-            cropped = frame[self.roi[1]:self.roi[3], self.roi[0]:self.roi[2]]
+        cropped = None
+    	
         if self.scale == 1.0:
-            return cropped
+            cropped = frame
+        else:
+            cropped = cv2.resize(cropped, None, fx=self.scale, fy=self.scale, interpolation=cv2.INTER_AREA)
+
+        if self.roi is not None:
+            # crop
+            cropped = cropped[self.roi[1]:self.roi[3], self.roi[0]:self.roi[2]]
         
-        return cv2.resize(cropped, None, fx=self.scale, fy=self.scale, interpolation=cv2.INTER_AREA)
+        return cropped
 
 class TenguNode(object):
 
     def __init__(self, tr, *argv):
         super(TenguNode, self).__init__(*argv)
         self.tr = tr
+
+    def inside_rect(self, rect):
+        x, y = self.tr[-1]
+        return (x > rect[0] and x < (rect[0]+rect[2])) and (y > rect[1] and y < (rect[1]+rect[3]))
 
 class KLTSceneAnalyzer(TenguSceneAnalyzer):
     
@@ -40,14 +48,7 @@ class KLTSceneAnalyzer(TenguSceneAnalyzer):
         self.lk_params = lk_params
         self.feature_params = feature_params
         self.prev_gray = None
-        self._last_added_nodes = []
         self._last_removed_nodes = []
-
-    @property
-    def last_added_nodes(self):
-        added_nodes = self._last_added_nodes
-        self._last_added_nodes = []
-        return added_nodes
 
     @property
     def last_removed_nodes(self):
@@ -56,6 +57,12 @@ class KLTSceneAnalyzer(TenguSceneAnalyzer):
         return removed_nodes
 
     def analyze_scene(self, frame):
+        if self.roi is None:
+            h = 480
+            w = 640
+            offset_y = max(0, int((frame.shape[0] - h) / 2))
+            offset_x = max(0, int((frame.shape[1] - w) / 2))
+            self.roi = [offset_x, offset_y, offset_x+w, offset_y+h]
         scene = super(KLTSceneAnalyzer, self).analyze_scene(frame)
         scene_gray = cv2.cvtColor(scene, cv2.COLOR_BGR2GRAY)
         # calculate optical flow
@@ -116,4 +123,3 @@ class KLTSceneAnalyzer(TenguSceneAnalyzer):
             for x, y in np.float32(p).reshape(-1, 2):
                 new_node = TenguNode([(x, y)])
                 self.nodes.append(new_node)
-                self._last_added_nodes.append(new_node)
