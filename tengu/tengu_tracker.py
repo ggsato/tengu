@@ -13,16 +13,20 @@ If the currently tracked object's rectangle overlaps over a threshold is conside
 
 class TrackedObject(object):
 
-    obj_id = -1
+    _class_obj_id = -1
     min_confirmation_updates = 1
 
     def __init__(self):
         self.logger = logging.getLogger(__name__)
-        TrackedObject.obj_id += 1
+        TrackedObject._class_obj_id += 1
         # incremental unique object id
-        self._obj_id = TrackedObject.obj_id
+        self._obj_id = TrackedObject._class_obj_id
         self._last_updated_at = TenguTracker._global_updates
         self._assignments = []
+
+    @property
+    def obj_id(self):
+        return self._obj_id
     
     # tracklet properties
     @property

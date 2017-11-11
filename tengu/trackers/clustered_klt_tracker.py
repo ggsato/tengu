@@ -94,25 +94,25 @@ class ClusteredKLTTracker(TenguTracker):
         # update node and edge(add, remove)
         self.update_graph()
         lap1 = time.time()
-        self.logger.info('udpate_graph took {} s'.format(lap1 - start))
+        self.logger.debug('udpate_graph took {} s'.format(lap1 - start))
 
         # update weights
         self.update_weights(detections)
         lap2 = time.time()
-        self.logger.info('update_weights took {} s'.format(lap2 - lap1))
+        self.logger.debug('update_weights took {} s'.format(lap2 - lap1))
 
         # detect communities
         self.current_node_clusters = self.find_node_clusters()
         lap3 = time.time()
-        self.logger.info('find_node_clusters took {} s'.format(lap3 - lap2))
+        self.logger.debug('find_node_clusters took {} s'.format(lap3 - lap2))
 
         # assign detections to node_clusters
         self.assign_detections_to_node_clusters(detections, self.current_node_clusters)
         lap4 = time.time()
-        self.logger.info('assign_detections_to_node_clusters took {} s'.format(lap4 - lap3))
+        self.logger.debug('assign_detections_to_node_clusters took {} s'.format(lap4 - lap3))
 
         end = time.time()
-        self.logger.info('prepare_updates took {} s'.format(end - start))
+        self.logger.debug('prepare_updates took {} s'.format(end - start))
 
     def initialize_tracked_objects(self, detections):
         
@@ -122,7 +122,7 @@ class ClusteredKLTTracker(TenguTracker):
             to = self.new_tracked_object(node_cluster)
             self._tracked_objects.append(to)
 
-        self.logger.info('initialized {} klt tracked objects'.format(len(self.current_node_clusters)))
+        self.logger.debug('initialized {} klt tracked objects'.format(len(self.current_node_clusters)))
 
     def new_tracked_object(self, assignment):
         to = ClusteredKLTTrackedObject()
@@ -146,7 +146,7 @@ class ClusteredKLTTracker(TenguTracker):
         
         nodes = self._klt_scene_analyzer.nodes
         graph_nodes = list(self.graph.nodes())
-        self.logger.info('updating graph with {} nodes, and {} graph nodes, {} edges'.format(len(nodes), len(graph_nodes), len(self.graph.edges())))
+        self.logger.debug('updating graph with {} nodes, and {} graph nodes, {} edges'.format(len(nodes), len(graph_nodes), len(self.graph.edges())))
 
         # remove
         removed_nodes = self._klt_scene_analyzer.last_removed_nodes
@@ -154,10 +154,10 @@ class ClusteredKLTTracker(TenguTracker):
         for removed_node in removed_nodes:
             if removed_node in graph_nodes:
                 removed_edges = self.graph.edges(removed_node)
-                self.logger.info('removing {} edges'.format(len(removed_edges)))
+                self.logger.debug('removing {} edges'.format(len(removed_edges)))
                 self.graph.remove_edges_from(removed_edges)
                 removed_graph_nodes.append(removed_node)
-        self.logger.info('removing {} nodes'.format(len(removed_graph_nodes)))
+        self.logger.debug('removing {} nodes'.format(len(removed_graph_nodes)))
         self.graph.remove_nodes_from(removed_graph_nodes)
 
     def update_weights(self, detections):
@@ -177,7 +177,7 @@ class ClusteredKLTTracker(TenguTracker):
         for detection in in_nodes_dict:
             in_nodes = in_nodes_dict[detection]
             self.update_mutual_edges_weight(in_nodes)
-            self.logger.info('found {} in-nodes in {}'.format(len(in_nodes), detection))
+            self.logger.debug('found {} in-nodes in {}'.format(len(in_nodes), detection))
 
     def update_mutual_edges_weight(self, in_nodes):
 
@@ -189,7 +189,7 @@ class ClusteredKLTTracker(TenguTracker):
             # make an edge
             if not self.graph.has_edge(node, last_node):
                 # create one
-                #self.logger.info('creating an edge from {} to {}'.format(node, another_node))
+                #self.logger.debug('creating an edge from {} to {}'.format(node, another_node))
                 edge = (node, last_node, {'weight': 1})
                 self.graph.add_edges_from([edge])
                 updated_edges.append(edge)
@@ -198,9 +198,9 @@ class ClusteredKLTTracker(TenguTracker):
             if not edge in updated_edges:
                 current_weight = edge['weight']
                 edge['weight'] = current_weight + 1
-                #self.logger.info('updating an edge, {}, from {} to {}'.format(edge, current_weight, edge['weight']))
+                #self.logger.debug('updating an edge, {}, from {} to {}'.format(edge, current_weight, edge['weight']))
                 updated_edges.append(edge)
-        self.logger.info('updated {} edges'.format(len(updated_edges)))
+        self.logger.debug('updated {} edges'.format(len(updated_edges)))
 
     def find_node_clusters(self):
 
@@ -213,7 +213,7 @@ class ClusteredKLTTracker(TenguTracker):
             if len(group) > ClusteredKLTTracker._minimum_community_size:
                 self.logger.debug('found a group of size {}'.format(len(group)))
                 node_clusters.append(NodeCluster(group))
-        self.logger.info('community groups: {}, large enough groups: {}'.format(len(community), len(node_clusters)))
+        self.logger.debug('community groups: {}, large enough groups: {}'.format(len(community), len(node_clusters)))
 
         return node_clusters
 
