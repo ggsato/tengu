@@ -98,7 +98,6 @@ class TenguTracker(object):
         self.logger.debug('min optimzied cost of {} = {}'.format(tengu_cost_matrix.cost_matrix, min_cost))
         self.update_trackings_with_optimized_assignments(tengu_cost_matrix.assignments, row_ind, col_ind)
 
-        # TODO: Create new trackings
         # Obsolete old ones
         self.obsolete_trackings()
 
@@ -109,9 +108,9 @@ class TenguTracker(object):
     def prepare_updates(self, detections):
         pass
 
-    def new_tracked_object(self, detection):
+    def new_tracked_object(self, assignment):
         to = TrackedObject()
-        to.update_with_assignment(detection)
+        to.update_with_assignment(assignment)
         return to
 
     def initialize_tracked_objects(self, detections):
@@ -177,6 +176,13 @@ class TenguTracker(object):
     def update_trackings_with_optimized_assignments(self, assignments, row_ind, col_ind):
     	for ix, row in enumerate(row_ind):
     		self._tracked_objects[row].update_with_assignment(assignments[col_ind[ix]])
+
+        # create new ones
+        for ix, assignment in enumerate(assignments):
+            if not ix in col_ind:
+                # this is not assigned, create a new one
+                to = self.new_tracked_object(assignment)
+                self._tracked_objects.append(to)
 
     def obsolete_trackings(self):
         """ Filters old trackings

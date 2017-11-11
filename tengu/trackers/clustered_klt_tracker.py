@@ -118,11 +118,15 @@ class ClusteredKLTTracker(TenguTracker):
         self.prepare_updates(detections)
 
         for node_cluster in self.current_node_clusters:
-            to = ClusteredKLTTrackedObject()
-            to.update_with_assignment(node_cluster)
+            to = self.new_tracked_object(node_cluster)
             self._tracked_objects.append(to)
 
         self.logger.info('initialized {} klt tracked objects'.format(len(self.current_node_clusters)))
+
+    def new_tracked_object(self, assignment):
+        to = ClusteredKLTTrackedObject()
+        to.update_with_assignment(assignment)
+        return to
 
     def calculate_cost_matrix(self, detections):        
 
@@ -201,6 +205,7 @@ class ClusteredKLTTracker(TenguTracker):
 
         #communities = nxcom.girvan_newman(self.graph)
         #community = next(communities)
+        # TODO: this simply finds connected sets of nodes, so find a way to disconnect
         community = sorted(nx.connected_components(self.graph), key=len, reverse=True)
         node_clusters = []
         for group in community:
