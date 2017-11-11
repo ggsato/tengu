@@ -117,7 +117,7 @@ class ClusteredKLTTracker(TenguTracker):
         self.logger.debug('assign_detections_to_node_clusters took {} s'.format(lap4 - lap3))
 
         end = time.time()
-        self.logger.debug('prepare_updates took {} s'.format(end - start))
+        self.logger.info('prepare_updates took {} s'.format(end - start))
 
     def initialize_tracked_objects(self, detections):
         
@@ -131,6 +131,7 @@ class ClusteredKLTTracker(TenguTracker):
 
     def new_tracked_object(self, assignment):
         to = ClusteredKLTTrackedObject()
+        self.logger.info('created klt tracked object {} of id {}'.format(to, to.obj_id))
         to.update_with_assignment(assignment)
         return to
 
@@ -256,5 +257,5 @@ class ClusteredKLTTracker(TenguTracker):
         if isinstance(tracked_object.last_assignment, NodeCluster):
             similarity = tracked_object.last_assignment.similarity(node_cluster)
             return -1 * math.log(max(similarity, TenguTracker._min_value))
-            
+
         return super(ClusteredKLTTracker, self).calculate_cost_by_overlap_ratio(tracked_object.last_assignment, node_cluster.rect_from_group())

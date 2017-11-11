@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-import math
+import math, time
 import numpy as np
 import logging, copy
 from scipy.optimize import linear_sum_assignment
@@ -21,7 +21,7 @@ class TrackedObject(object):
         TrackedObject._class_obj_id += 1
         # incremental unique object id
         self._obj_id = TrackedObject._class_obj_id
-        self._last_updated_at = TenguTracker._global_updates
+        self._last_updated_at = -1
         self._assignments = []
 
     @property
@@ -43,7 +43,7 @@ class TrackedObject(object):
 
     @property
     def rect(self):
-        #self.logger.info('retruning rect from {}'.format(self))
+        self.logger.info('retruning rect of {}@{} as {}'.format(id(self), self.obj_id, self.last_assignment))
         return self._assignments[-1]
 
     @property
@@ -59,9 +59,10 @@ class TrackedObject(object):
         return self._assignments[-1]
 
     def update_with_assignment(self, assignment):
+        if len(self._assignments) > 0:
+            self.logger.info('{}@{}: updating with {} from {} at {}'.format(id(self), self.obj_id, assignment, self._assignments[-1], self._last_updated_at))
         self._assignments.append(assignment)
-        self._last_updates = TenguTracker._global_updates
-        self.logger.debug('{}: updating track with {} at {}'.format(self, assignment, self._last_updated_at))
+        self._last_updated_at = TenguTracker._global_updates
 
 class TenguCostMatrix(object):
 
@@ -96,16 +97,31 @@ class TenguTracker(object):
         if len(detections) == 0:
             return self.tracked_objects
 
+        start = time.time()
+
         self.prepare_updates(detections)
+        lap1 = time.time()
+        self.logger.debug('prepare_updates took {} s'.format(lap1 - start))
 
         tengu_cost_matrix_list = self.calculate_cost_matrix(detections)
+        lap2 = time.time()
+        self.logger.debug('calculate_cost_matrix took {} s'.format(lap2 - lap1))
+
         TenguTracker.optimize_and_assign(tengu_cost_matrix_list)
+        lap3 = time.time()
+        self.logger.debug('optimize_and_assign took {} s'.format(lap3 - lap2))
+
         self.update_trackings_with_optimized_assignments(tengu_cost_matrix_list)
+        lap4 = time.time()
+        self.logger.debug('update_trackings_with_optimized_assignments took {} s'.format(lap4 - lap3))
 
         # Obsolete old ones
         self.obsolete_trackings()
+        lap5 = time.time()
+        self.logger.debug('obsolete_trackings took {} s'.format(lap5 - lap4))
 
-        self.logger.debug('resolved, and now {} tracked objects'.format(len(self._tracked_objects)))
+        end = time.time()
+        self.logger.info('resolved, and now {} tracked objects at {}, executed in {} s'.format(len(self._tracked_objects), TenguTracker._global_updates, end-start))
 
         return self.tracked_objects
 
@@ -133,8 +149,9 @@ class TenguTracker(object):
         cost_matrix = self.create_empty_cost_matrix(len(detections))
         for t, tracked_object in enumerate(self._tracked_objects):
             for d, detection in enumerate(detections):
-                cost = self.calculate_cost_by_overlap_ratio(detection, tracked_object.rect)
+                cost = self.calculate_cost_by_overlap_ratio(tracked_object.rect, detection)
                 cost_matrix[t][d] = cost
+                self.logger.info('cost at [{}][{}] of ({}, {}) = {}'.format(t, d, id(tracked_object), id(detection), cost))
         return [TenguCostMatrix(detections, cost_matrix)]
 
     def create_empty_cost_matrix(self, cols):
@@ -162,13 +179,15 @@ class TenguTracker(object):
         bottom_b = rect_b[1] + rect_b[3]
         dx = min(right_a, right_b) - max(rect_a[0], rect_b[0])
         if dx <= 0:
-            return ratio
-        dy = min(bottom_a, bottom_b) - max(rect_a[1], rect_b[1])
-        if dy <= 0:
-            return ratio
-        # finally
-        ratio = (dx * dy) / (rect_a[2] * rect_a[3])
-        self.logger.debug('ratio of {} and {} = {}'.format(rect_a, rect_b, ratio))
+            pass
+        else:
+            dy = min(bottom_a, bottom_b) - max(rect_a[1], rect_b[1])
+            if dy <= 0:
+                pass
+            else:
+                # finally
+                ratio = (dx * dy) / (rect_a[2] * rect_a[3])
+        self.logger.info('ratio of {} and {} = {}'.format(rect_a, rect_b, ratio))
 
         return -1 * math.log(max(ratio, TenguTracker._min_value))
 
@@ -179,19 +198,24 @@ class TenguTracker(object):
             tengu_cost_matrix.ind = (row_ind, col_ind)
 
     def update_trackings_with_optimized_assignments(self, tengu_cost_matrix_list):
-        for tengu_cost_matrix in tengu_cost_matrix_list:
+        for m, tengu_cost_matrix in enumerate(tengu_cost_matrix_list):
+            self.logger.info('updating based on {} cost matrix, ind ={}'.format(m, tengu_cost_matrix.ind))
             for ix, row in enumerate(tengu_cost_matrix.ind[0]):
-                if self._tracked_objects[row].last_updated_at == TenguTracker._global_updates:
+                tracked_object = self._tracked_objects[row]
+                if tracked_object.last_updated_at == TenguTracker._global_updates:
                     # already updated
                     continue
-                self._tracked_objects[row].update_with_assignment(tengu_cost_matrix.assignments[tengu_cost_matrix.ind[1][ix]])
+                new_assignment = tengu_cost_matrix.assignments[tengu_cost_matrix.ind[1][ix]]
+                self.logger.info('updating tracked object {} of id={} having {} with {} at {}'.format(id(tracked_object), tracked_object.obj_id, tracked_object.rect, new_assignment, TenguTracker._global_updates))
+                tracked_object.update_with_assignment(new_assignment)
 
-                # create new ones
-                for ix, assignment in enumerate(tengu_cost_matrix.assignments):
-                    if not ix in tengu_cost_matrix.ind[1]:
-                        # this is not assigned, create a new one
-                        to = self.new_tracked_object(assignment)
-                        self._tracked_objects.append(to)
+            # create new ones
+            for ix, assignment in enumerate(tengu_cost_matrix.assignments):
+                if not ix in tengu_cost_matrix.ind[1]:
+                    # this is not assigned, create a new one
+                    to = self.new_tracked_object(assignment)
+                    self._tracked_objects.append(to)
+                    self.logger.debug('created tracked object {} of id={} at {}'.format(to, to.obj_id, TenguTracker._global_updates))
 
     def obsolete_trackings(self):
         """ Filters old trackings
