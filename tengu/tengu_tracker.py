@@ -65,10 +65,12 @@ class TrackedObject(object):
 
 class TenguCostMatrix(object):
 
-	def __init__(self, assignments, cost_matrix):
-		super(TenguCostMatrix, self).__init__()
-		self.assignments = assignments
-		self.cost_matrix = cost_matrix
+    def __init__(self, assignments, cost_matrix):
+        super(TenguCostMatrix, self).__init__()
+        self.assignments = assignments
+        self.cost_matrix = cost_matrix
+        # row_ind, col_ind
+        self.ind = None
 
 class TenguTracker(object):
 
@@ -92,15 +94,13 @@ class TenguTracker(object):
             return self.tracked_objects
 
         if len(detections) == 0:
-        	return self.tracked_objects
+            return self.tracked_objects
 
         self.prepare_updates(detections)
 
-        tengu_cost_matrix = self.calculate_cost_matrix(detections)
-        row_ind, col_ind = TenguTracker.optimize_and_assign(tengu_cost_matrix.cost_matrix)
-        min_cost = tengu_cost_matrix.cost_matrix[row_ind, col_ind].sum()
-        self.logger.debug('min optimzied cost of {} = {}'.format(tengu_cost_matrix.cost_matrix, min_cost))
-        self.update_trackings_with_optimized_assignments(tengu_cost_matrix.assignments, row_ind, col_ind)
+        tengu_cost_matrix_list = self.calculate_cost_matrix(detections)
+        TenguTracker.optimize_and_assign(tengu_cost_matrix_list)
+        self.update_trackings_with_optimized_assignments(tengu_cost_matrix_list)
 
         # Obsolete old ones
         self.obsolete_trackings()
@@ -122,35 +122,35 @@ class TenguTracker(object):
             self._tracked_objects.append(self.new_tracked_object(detection))
 
     def calculate_cost_matrix(self, detections):
-    	""" Calculates cost matrix
+        """ Calculates cost matrix
         Given the number of tracked objects, m, and the number of detections, n,
         cost matrix consists of mxn matrix C.
         Cmn: a cost at (m, n), -Infinity<=Cmn<=0
-		
-		Then, such a cost matrix is optimized to produce a combination of minimum cost assignments.
-		For more information, see Hungarian algorithm(Wikipedia), scipy.optimize.linear_sum_assignment
+        
+        Then, such a cost matrix is optimized to produce a combination of minimum cost assignments.
+        For more information, see Hungarian algorithm(Wikipedia), scipy.optimize.linear_sum_assignment
         """
-       	cost_matrix = self.create_empty_cost_matrix(len(detections))
+        cost_matrix = self.create_empty_cost_matrix(len(detections))
         for t, tracked_object in enumerate(self._tracked_objects):
             for d, detection in enumerate(detections):
                 cost = self.calculate_cost_by_overlap_ratio(detection, tracked_object.rect)
                 cost_matrix[t][d] = cost
-        return TenguCostMatrix(detections, cost_matrix)
+        return [TenguCostMatrix(detections, cost_matrix)]
 
     def create_empty_cost_matrix(self, cols):
-    	if len(self._tracked_objects) == 0:
+        if len(self._tracked_objects) == 0:
             return None
 
         shape = (len(self._tracked_objects), cols)
         self.logger.debug('shape: {}'.format(shape))
         cost_matrix = np.zeros(shape, dtype=np.float32)
         if len(shape) == 1:
-        	# the dimesion should be forced
-        	cost_matrix = np.expand_dims(cost_matrix, axis=1)
+            # the dimesion should be forced
+            cost_matrix = np.expand_dims(cost_matrix, axis=1)
 
         self.logger.debug('shape of cost_matrix: {}'.format(cost_matrix.shape))
 
-       	return cost_matrix
+        return cost_matrix
 
     def calculate_cost_by_overlap_ratio(self, rect_a, rect_b):
         """ Calculates a overlap ratio against rect_b with respect to rect_a
@@ -173,20 +173,25 @@ class TenguTracker(object):
         return -1 * math.log(max(ratio, TenguTracker._min_value))
 
     @staticmethod
-    def optimize_and_assign(cost_matrix):
-    	row_ind, col_ind = linear_sum_assignment(cost_matrix)
-    	return row_ind, col_ind
+    def optimize_and_assign(tengu_cost_matrix_list):
+        for tengu_cost_matrix in tengu_cost_matrix_list:
+            row_ind, col_ind = linear_sum_assignment(tengu_cost_matrix.cost_matrix)
+            tengu_cost_matrix.ind = (row_ind, col_ind)
 
-    def update_trackings_with_optimized_assignments(self, assignments, row_ind, col_ind):
-    	for ix, row in enumerate(row_ind):
-    		self._tracked_objects[row].update_with_assignment(assignments[col_ind[ix]])
+    def update_trackings_with_optimized_assignments(self, tengu_cost_matrix_list):
+        for tengu_cost_matrix in tengu_cost_matrix_list:
+            for ix, row in enumerate(tengu_cost_matrix.ind[0]):
+                if self._tracked_objects[row].last_updated_at == TenguTracker._global_updates:
+                    # already updated
+                    continue
+                self._tracked_objects[row].update_with_assignment(tengu_cost_matrix.assignments[tengu_cost_matrix.ind[1][ix]])
 
-        # create new ones
-        for ix, assignment in enumerate(assignments):
-            if not ix in col_ind:
-                # this is not assigned, create a new one
-                to = self.new_tracked_object(assignment)
-                self._tracked_objects.append(to)
+                # create new ones
+                for ix, assignment in enumerate(tengu_cost_matrix.assignments):
+                    if not ix in tengu_cost_matrix.ind[1]:
+                        # this is not assigned, create a new one
+                        to = self.new_tracked_object(assignment)
+                        self._tracked_objects.append(to)
 
     def obsolete_trackings(self):
         """ Filters old trackings

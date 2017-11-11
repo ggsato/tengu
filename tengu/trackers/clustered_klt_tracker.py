@@ -38,10 +38,15 @@ class ClusteredKLTTrackedObject(TrackedObject):
     @property
     def rect(self):
         #self.logger.info('retruning rect from {}'.format(self))
-        if self.last_assignment.detection is None:
-            return self.last_assignment.rect_from_group()
+        if isinstance(self.last_assignment, NodeCluster):
 
-        return self._assignments[-1].detection
+            if self.last_assignment.detection is None:
+                return self.last_assignment.rect_from_group()
+
+            return self._assignments[-1].detection
+
+        # otherwise, this is just a rect
+        return self._assignments[-1]
 
 
 class NodeCluster(object):
@@ -139,8 +144,9 @@ class ClusteredKLTTracker(TenguTracker):
                 cost_matrix[t][c] = cost
 
         tengu_cost_matrix = TenguCostMatrix(self.current_node_clusters, cost_matrix)
+        overlap_cost_matrix = super(ClusteredKLTTracker, self).calculate_cost_matrix(detections)[0]
 
-        return tengu_cost_matrix
+        return [tengu_cost_matrix, overlap_cost_matrix]
 
     def update_graph(self):
         
@@ -239,12 +245,16 @@ class ClusteredKLTTracker(TenguTracker):
                     coverage = covered / len(node_cluster.group)
                 cost_matrix[c][d] = -1 * math.log(max(coverage, TenguTracker._min_value))
         # solve
-        row_ind, col_ind = TenguTracker.optimize_and_assign(cost_matrix)
-        for ix, row in enumerate(row_ind):
-            node_clusters[row].detection = detections[col_ind[ix]]
+        tengu_cost_matrix = TenguCostMatrix(detections, cost_matrix)
+        TenguTracker.optimize_and_assign([tengu_cost_matrix])
+        for ix, row in enumerate(tengu_cost_matrix.ind[0]):
+            node_clusters[row].detection = detections[tengu_cost_matrix.ind[1][ix]]
 
         # NOTE that some node clusters may not be assigned detections
 
     def calculate_cost(self, tracked_object, node_cluster):
-        similarity = tracked_object.last_assignment.similarity(node_cluster)
-        return -1 * math.log(max(similarity, TenguTracker._min_value))
+        if isinstance(tracked_object.last_assignment, NodeCluster):
+            similarity = tracked_object.last_assignment.similarity(node_cluster)
+            return -1 * math.log(max(similarity, TenguTracker._min_value))
+            
+        return super(ClusteredKLTTracker, self).calculate_cost_by_overlap_ratio(tracked_object.last_assignment, node_cluster.rect_from_group())
