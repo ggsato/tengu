@@ -4,6 +4,7 @@
 import logging, math, time
 from operator import attrgetter
 
+import cv2
 import numpy as np
 
 import networkx as nx
