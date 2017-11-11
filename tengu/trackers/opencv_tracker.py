@@ -55,7 +55,7 @@ class OpenCVTracker(TenguTracker, TenguFrameChangeObserver):
         """
         return super(OpenCVTracker, self).resolve_trackings(detections)
 
-    def prepare_updates(self):
+    def prepare_updates(self, detections):
         for tracked_object in self._tracked_objects:
             tracked_object.update_tracker(self.last_frame)
 

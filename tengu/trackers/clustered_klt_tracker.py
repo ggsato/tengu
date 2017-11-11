@@ -1,11 +1,14 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-import logging, math
+import logging, math, time
 from operator import attrgetter
+
+import numpy as np
 
 import networkx as nx
 from networkx.algorithms import community as nxcom
+from scipy.optimize import linear_sum_assignment
 
 from ..tengu_scene_analyzer import KLTSceneAnalyzer, TenguNode
 from ..tengu_tracker import TenguTracker, TrackedObject, TenguCostMatrix
@@ -28,19 +31,49 @@ a cost matrix is calculated for assignments.
 
 class ClusteredKLTTrackedObject(TrackedObject):
 
-    def __init__(self, rect, **kwargs):
-        super(ClusteredKLTTrackedObject, self).__init__(rect, **kwargs)
+    def __init__(self):
+        super(ClusteredKLTTrackedObject, self).__init__()
 
+    @property
+    def rect(self):
+        #self.logger.info('retruning rect from {}'.format(self))
+        if self.last_assignment.detection is None:
+            return self.last_assignment.rect_from_group()
 
-    def update_tracking(self, clustered_node):
-        # TODO: detection may not be available, and that's the whole point to use ClusteredKLT
-        return super(ClusteredKLTTrackedObject, self).update_tracking(rect, *args)
+        return self._assignments[-1].detection
+
 
 class NodeCluster(object):
+
+    _min_rect_length = 10
 
     def __init__(self, group):
         super(NodeCluster, self).__init__()
         self.group = group
+        self.detection = None
+
+    def similarity(self, another_node_cluster):
+        similarity = 0.
+        for node in self.group:
+            if node in another_node_cluster.group:
+                similarity += 1
+        if similarity > 0:
+            similarity = similarity / len(self.group)
+        return similarity
+
+    def rect_from_group(self):
+        sum_x = 0
+        sum_y = 0
+        for node in self.group:
+            x, y = node.tr[-1]
+            sum_x += x
+            sum_y += y
+        avg_x = max(NodeCluster._min_rect_length, int(sum_x / len(self.group)))
+        avg_y = max(NodeCluster._min_rect_length, int(sum_y / len(self.group)))
+        # x, y, w, h
+        offset = int(NodeCluster._min_rect_length/2)
+        rect = [avg_x - offset, avg_y - offset, NodeCluster._min_rect_length, NodeCluster._min_rect_length]
+        return rect
 
 class ClusteredKLTTracker(TenguTracker):
 
@@ -51,28 +84,58 @@ class ClusteredKLTTracker(TenguTracker):
         # TODO: check class?
         self._klt_scene_analyzer = klt_scene_analyzer
         self.graph = nx.Graph()
+        self.current_node_clusters = None
 
-    def calculate_cost_matrix(self, detections):
-        
+    def prepare_updates(self, detections):
+
+        start = time.time()
+
         # update node and edge(add, remove)
         self.update_graph()
+        lap1 = time.time()
+        self.logger.info('udpate_graph took {} s'.format(lap1 - start))
 
         # update weights
         self.update_weights(detections)
+        lap2 = time.time()
+        self.logger.info('update_weights took {} s'.format(lap2 - lap1))
 
         # detect communities
-        node_clusters = self.find_node_clusters()
+        self.current_node_clusters = self.find_node_clusters()
+        lap3 = time.time()
+        self.logger.info('find_node_clusters took {} s'.format(lap3 - lap2))
+
+        # assign detections to node_clusters
+        self.assign_detections_to_node_clusters(detections, self.current_node_clusters)
+        lap4 = time.time()
+        self.logger.info('assign_detections_to_node_clusters took {} s'.format(lap4 - lap3))
+
+        end = time.time()
+        self.logger.info('prepare_updates took {} s'.format(end - start))
+
+    def initialize_tracked_objects(self, detections):
+        
+        self.prepare_updates(detections)
+
+        for node_cluster in self.current_node_clusters:
+            to = ClusteredKLTTrackedObject()
+            to.update_with_assignment(node_cluster)
+            self._tracked_objects.append(to)
+
+        self.logger.info('initialized {} klt tracked objects'.format(len(self.current_node_clusters)))
+
+    def calculate_cost_matrix(self, detections):        
 
         # create a cost matrix
-        cost_matrix = self.create_empty_cost_matrix(len(node_clusters))
+        cost_matrix = self.create_empty_cost_matrix(len(self.current_node_clusters))
         for t, tracked_object in enumerate(self._tracked_objects):
-            for c, node_cluster in enumerate(node_clusters):
+            for c, node_cluster in enumerate(self.current_node_clusters):
                 cost = self.calculate_cost(tracked_object, node_cluster)
                 cost_matrix[t][c] = cost
 
-        tengu_cost_matrix = TenguCostMatrix(node_clusters, cost_matrix)
+        tengu_cost_matrix = TenguCostMatrix(self.current_node_clusters, cost_matrix)
 
-        return super(ClusteredKLTTracker, self).calculate_cost_matrix(detections)
+        return tengu_cost_matrix
 
     def update_graph(self):
         
@@ -114,41 +177,68 @@ class ClusteredKLTTracker(TenguTracker):
     def update_mutual_edges_weight(self, in_nodes):
 
         updated_edges = []
+        last_node = None
         for node in in_nodes:
-            # make sure all the mutual edges exist
-            for another_node in in_nodes:
-                if another_node == node:
-                    continue
-                if not self.graph.has_edge(node, another_node):
-                    # create one
-                    #self.logger.info('creating an edge from {} to {}'.format(node, another_node))
-                    edge = (node, another_node, {'weight': 1})
-                    self.graph.add_edges_from([edge])
-                    updated_edges.append(edge)
-                    continue
-                edge = self.graph[node][another_node]
-                if not edge in updated_edges:
-                    current_weight = edge['weight']
-                    edge['weight'] = current_weight + 1
-                    #self.logger.info('updating an edge, {}, from {} to {}'.format(edge, current_weight, edge['weight']))
-                    updated_edges.append(edge)
-        #self.logger.info('updated {} edges'.format(len(updated_edges)))
+            if last_node is None:
+                last_node = in_nodes[-1]
+            # make an edge
+            if not self.graph.has_edge(node, last_node):
+                # create one
+                #self.logger.info('creating an edge from {} to {}'.format(node, another_node))
+                edge = (node, last_node, {'weight': 1})
+                self.graph.add_edges_from([edge])
+                updated_edges.append(edge)
+                continue
+            edge = self.graph[node][last_node]
+            if not edge in updated_edges:
+                current_weight = edge['weight']
+                edge['weight'] = current_weight + 1
+                #self.logger.info('updating an edge, {}, from {} to {}'.format(edge, current_weight, edge['weight']))
+                updated_edges.append(edge)
+        self.logger.info('updated {} edges'.format(len(updated_edges)))
 
     def find_node_clusters(self):
 
-        communities = nxcom.girvan_newman(self.graph)
-        community = next(communities)
+        #communities = nxcom.girvan_newman(self.graph)
+        #community = next(communities)
+        community = sorted(nx.connected_components(self.graph), key=len, reverse=True)
         node_clusters = []
         for group in community:
             if len(group) > ClusteredKLTTracker._minimum_community_size:
                 self.logger.debug('found a group of size {}'.format(len(group)))
                 node_clusters.append(NodeCluster(group))
         self.logger.info('community groups: {}, large enough groups: {}'.format(len(community), len(node_clusters)))
+
         return node_clusters
 
-    def calculate_cost(self, tracked_object, node_cluster):
+    def assign_detections_to_node_clusters(self, detections, node_clusters):
         """
+        create a cost matrix Cmn, m is the number of node_clusters, n is of detections
+        then, solve by hungarian algorithm
         """
-        cost = 0
+        # create cost matrix
+        shape = (len(node_clusters), len(detections))
+        cost_matrix = np.zeros(shape, dtype=np.float32)
+        if len(shape) == 1:
+            # the dimesion should be forced
+            cost_matrix = np.expand_dims(cost_matrix, axis=1)
+        for c, node_cluster in enumerate(node_clusters):
+            for d, detection in enumerate(detections):
+                covered = 0
+                for graph_node in node_cluster.group:
+                    if graph_node.inside_rect(detection):
+                        covered += 1
+                coverage = 0.
+                if covered > 0:
+                    coverage = covered / len(node_cluster.group)
+                cost_matrix[c][d] = -1 * math.log(max(coverage, TenguTracker._min_value))
+        # solve
+        row_ind, col_ind = TenguTracker.optimize_and_assign(cost_matrix)
+        for ix, row in enumerate(row_ind):
+            node_clusters[row].detection = detections[col_ind[ix]]
 
-        return -1 * math.log(max(cost, TenguTracker._min_value))
+        # NOTE that some node clusters may not be assigned detections
+
+    def calculate_cost(self, tracked_object, node_cluster):
+        similarity = tracked_object.last_assignment.similarity(node_cluster)
+        return -1 * math.log(max(similarity, TenguTracker._min_value))

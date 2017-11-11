@@ -39,6 +39,7 @@ class TrackedObject(object):
 
     @property
     def rect(self):
+        #self.logger.info('retruning rect from {}'.format(self))
         return self._assignments[-1]
 
     @property
@@ -48,6 +49,10 @@ class TrackedObject(object):
     @property
     def is_confirmed(self):
         return len(self._assignments) > TrackedObject.min_confirmation_updates
+
+    @property
+    def last_assignment(self):
+        return self._assignments[-1]
 
     def update_with_assignment(self, assignment):
         self._assignments.append(assignment)
@@ -85,10 +90,12 @@ class TenguTracker(object):
         if len(detections) == 0:
         	return self.tracked_objects
 
-        self.prepare_updates()
+        self.prepare_updates(detections)
 
         tengu_cost_matrix = self.calculate_cost_matrix(detections)
-        row_ind, col_ind = self.optimize_and_assign(tengu_cost_matrix.cost_matrix)
+        row_ind, col_ind = TenguTracker.optimize_and_assign(tengu_cost_matrix.cost_matrix)
+        min_cost = tengu_cost_matrix.cost_matrix[row_ind, col_ind].sum()
+        self.logger.debug('min optimzied cost of {} = {}'.format(tengu_cost_matrix.cost_matrix, min_cost))
         self.update_trackings_with_optimized_assignments(tengu_cost_matrix.assignments, row_ind, col_ind)
 
         # TODO: Create new trackings
@@ -99,7 +106,7 @@ class TenguTracker(object):
 
         return self.tracked_objects
 
-    def prepare_updates(self):
+    def prepare_updates(self, detections):
         pass
 
     def new_tracked_object(self, detection):
@@ -162,10 +169,9 @@ class TenguTracker(object):
 
         return -1 * math.log(max(ratio, TenguTracker._min_value))
 
-    def optimize_and_assign(self, cost_matrix):
+    @staticmethod
+    def optimize_and_assign(cost_matrix):
     	row_ind, col_ind = linear_sum_assignment(cost_matrix)
-    	min_cost = cost_matrix[row_ind, col_ind].sum()
-    	self.logger.debug('min optimzied cost of {} = {}'.format(cost_matrix, min_cost))
     	return row_ind, col_ind
 
     def update_trackings_with_optimized_assignments(self, assignments, row_ind, col_ind):

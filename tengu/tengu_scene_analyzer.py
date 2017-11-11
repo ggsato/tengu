@@ -37,6 +37,8 @@ class TenguNode(object):
         return (x > rect[0] and x < (rect[0]+rect[2])) and (y > rect[1] and y < (rect[1]+rect[3]))
 
 class KLTSceneAnalyzer(TenguSceneAnalyzer):
+
+    _max_nodes = 100
     
     def __init__(self, draw_flows=False, lk_params=None, feature_params=None, **kwargs):
         super(KLTSceneAnalyzer, self).__init__(**kwargs)
@@ -123,3 +125,6 @@ class KLTSceneAnalyzer(TenguSceneAnalyzer):
             for x, y in np.float32(p).reshape(-1, 2):
                 new_node = TenguNode([(x, y)])
                 self.nodes.append(new_node)
+                if len(self.nodes) > KLTSceneAnalyzer._max_nodes:
+                    self._last_removed_nodes.append(self.nodes[0])
+                    del self.nodes[0]
