@@ -194,6 +194,7 @@ class KLTSceneAnalyzer(TenguSceneAnalyzer):
             x = int(latest_point[0])
             if mask.shape[0] <= y or mask.shape[1] <= x or mask[y][x] == 0:
                 #print('removing tracks leading from ' + str(latest_point) + ' at ' + str(node_index) )    
+                self._last_removed_nodes.append(self.nodes[node_index])
                 del self.nodes[node_index]
 
     def draw_count_lines(self, debug, from_x, from_y):
