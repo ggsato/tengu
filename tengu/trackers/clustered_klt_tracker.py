@@ -37,7 +37,7 @@ class ClusteredKLTTrackedObject(TrackedObject):
 
     @property
     def rect(self):
-        #self.logger.info('retruning rect from {}'.format(self))
+        self.logger.debug('retruning rect from {}'.format(self))
         if isinstance(self.last_assignment, NodeCluster):
 
             if self.last_assignment.detection is None:
@@ -87,6 +87,7 @@ class NodeCluster(object):
 class ClusteredKLTTracker(TenguTracker):
 
     _minimum_community_size = 2
+    _minimum_node_similarity = 0.3
     
     def __init__(self, klt_scene_analyzer, **kwargs):
         super(ClusteredKLTTracker, self).__init__(**kwargs)
@@ -131,7 +132,7 @@ class ClusteredKLTTracker(TenguTracker):
                 cv2.circle(debug, graph_node.tr[-1], 5, 255, -1)
             graph_edges = list(self.graph.edges())
             for graph_edge in graph_edges:
-                self.logger.info('drawing an edge {}'.format(graph_edge))
+                self.logger.debug('drawing an edge {}'.format(graph_edge))
                 cv2.line(debug, graph_edge[0].tr[-1], graph_edge[1].tr[-1], 192, min(10, self.graph[graph_edge[0]][graph_edge[1]]['weight']))
             cv2.imshow('Clustered KLT Debug', debug)
 
@@ -147,7 +148,7 @@ class ClusteredKLTTracker(TenguTracker):
 
     def new_tracked_object(self, assignment):
         to = ClusteredKLTTrackedObject()
-        self.logger.info('created klt tracked object {} of id {}'.format(to, to.obj_id))
+        self.logger.debug('created klt tracked object {} of id {}'.format(to, to.obj_id))
         to.update_with_assignment(assignment)
         return to
 
@@ -205,12 +206,19 @@ class ClusteredKLTTracker(TenguTracker):
             self.logger.debug('found {} in-nodes in {}'.format(len(in_nodes), detection))
 
     def update_mutual_edges_weight(self, in_nodes):
-
+        """
+        check if a node is similar enough to another.
+        if similar, create or update their edge, otherwise, ignore.
+        """
         updated_edges = []
         last_node = None
         for node in in_nodes:
             if last_node is None:
                 last_node = in_nodes[-1]
+            similarity = node.similarity(last_node)
+            if similarity < ClusteredKLTTracker._minimum_node_similarity:
+                self.logger.info('skipping making edge, {} is not similar enough to {}, the similarity = {}'.format(node, last_node, similarity))
+                continue
             # make an edge
             if not self.graph.has_edge(node, last_node):
                 # create one
@@ -294,4 +302,4 @@ class ClusteredKLTTracker(TenguTracker):
                 self.graph.remove_node(node)
                 # remove from sceneanalyzer as well
                 del self._klt_scene_analyzer.nodes[self._klt_scene_analyzer.nodes.index(node)]
-                self.logger.info('removed obsolete node and its edges due to diff = {}'.format(diff))
+                self.logger.debug('removed obsolete node and its edges due to diff = {}'.format(diff))

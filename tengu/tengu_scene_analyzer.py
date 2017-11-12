@@ -46,6 +46,11 @@ class TenguNode(object):
         x, y = self.tr[-1]
         return (x > rect[0] and x < (rect[0]+rect[2])) and (y > rect[1] and y < (rect[1]+rect[3]))
 
+    def similarity(self, another_node):
+        similarity = 1.
+        # TODO implement
+        return similarity
+
 class KLTSceneAnalyzer(TenguSceneAnalyzer):
 
     _max_nodes = 1000

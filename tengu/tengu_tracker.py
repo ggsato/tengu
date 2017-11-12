@@ -60,7 +60,7 @@ class TrackedObject(object):
 
     def update_with_assignment(self, assignment):
         if len(self._assignments) > 0:
-            self.logger.info('{}@{}: updating with {} from {} at {}'.format(id(self), self.obj_id, assignment, self._assignments[-1], self._last_updated_at))
+            self.logger.debug('{}@{}: updating with {} from {} at {}'.format(id(self), self.obj_id, assignment, self._assignments[-1], self._last_updated_at))
         self._assignments.append(assignment)
         self._last_updated_at = TenguTracker._global_updates
 
@@ -121,7 +121,7 @@ class TenguTracker(object):
         self.logger.debug('obsolete_trackings took {} s'.format(lap5 - lap4))
 
         end = time.time()
-        self.logger.info('resolved, and now {} tracked objects at {}, executed in {} s'.format(len(self._tracked_objects), TenguTracker._global_updates, end-start))
+        self.logger.debug('resolved, and now {} tracked objects at {}, executed in {} s'.format(len(self._tracked_objects), TenguTracker._global_updates, end-start))
 
         return self.tracked_objects
 
@@ -206,7 +206,7 @@ class TenguTracker(object):
                     # already updated
                     continue
                 new_assignment = tengu_cost_matrix.assignments[tengu_cost_matrix.ind[1][ix]]
-                self.logger.info('updating tracked object {} of id={} having {} with {} at {}'.format(id(tracked_object), tracked_object.obj_id, tracked_object.rect, new_assignment, TenguTracker._global_updates))
+                self.logger.debug('updating tracked object {} of id={} having {} with {} at {}'.format(id(tracked_object), tracked_object.obj_id, tracked_object.rect, new_assignment, TenguTracker._global_updates))
                 tracked_object.update_with_assignment(new_assignment)
 
             # create new ones
