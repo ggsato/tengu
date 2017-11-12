@@ -43,7 +43,7 @@ class TrackedObject(object):
 
     @property
     def rect(self):
-        self.logger.info('retruning rect of {}@{} as {}'.format(id(self), self.obj_id, self.last_assignment))
+        self.logger.debug('retruning rect of {}@{} as {}'.format(id(self), self.obj_id, self.last_assignment))
         return self._assignments[-1]
 
     @property
@@ -151,7 +151,7 @@ class TenguTracker(object):
             for d, detection in enumerate(detections):
                 cost = self.calculate_cost_by_overlap_ratio(tracked_object.rect, detection)
                 cost_matrix[t][d] = cost
-                self.logger.info('cost at [{}][{}] of ({}, {}) = {}'.format(t, d, id(tracked_object), id(detection), cost))
+                self.logger.debug('cost at [{}][{}] of ({}, {}) = {}'.format(t, d, id(tracked_object), id(detection), cost))
         return [TenguCostMatrix(detections, cost_matrix)]
 
     def create_empty_cost_matrix(self, cols):
@@ -187,7 +187,7 @@ class TenguTracker(object):
             else:
                 # finally
                 ratio = (dx * dy) / (rect_a[2] * rect_a[3])
-        self.logger.info('ratio of {} and {} = {}'.format(rect_a, rect_b, ratio))
+        self.logger.debug('ratio of {} and {} = {}'.format(rect_a, rect_b, ratio))
 
         return -1 * math.log(max(ratio, TenguTracker._min_value))
 
@@ -199,7 +199,7 @@ class TenguTracker(object):
 
     def update_trackings_with_optimized_assignments(self, tengu_cost_matrix_list):
         for m, tengu_cost_matrix in enumerate(tengu_cost_matrix_list):
-            self.logger.info('updating based on {} cost matrix, ind ={}'.format(m, tengu_cost_matrix.ind))
+            self.logger.debug('updating based on {} cost matrix, ind ={}'.format(m, tengu_cost_matrix.ind))
             for ix, row in enumerate(tengu_cost_matrix.ind[0]):
                 tracked_object = self._tracked_objects[row]
                 if tracked_object.last_updated_at == TenguTracker._global_updates:

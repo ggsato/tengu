@@ -58,6 +58,9 @@ class NodeCluster(object):
         self.group = group
         self.detection = None
 
+    def __repr__(self):
+        return '{} nodes, detection={}'.format(len(self.group), self.detection)
+
     def similarity(self, another_node_cluster):
         similarity = 0.
         for node in self.group:
@@ -117,7 +120,7 @@ class ClusteredKLTTracker(TenguTracker):
         self.logger.debug('assign_detections_to_node_clusters took {} s'.format(lap4 - lap3))
 
         end = time.time()
-        self.logger.info('prepare_updates took {} s'.format(end - start))
+        self.logger.debug('prepare_updates took {} s'.format(end - start))
 
     def initialize_tracked_objects(self, detections):
         
@@ -179,6 +182,8 @@ class ClusteredKLTTracker(TenguTracker):
                 if node.inside_rect(detection):
                     if not node in graph_nodes:
                         self.graph.add_node(node)
+                    else:
+                        node.update_last_detected()
                     in_nodes_dict[detection].append(node)
 
         for detection in in_nodes_dict:
@@ -259,3 +264,21 @@ class ClusteredKLTTracker(TenguTracker):
             return -1 * math.log(max(similarity, TenguTracker._min_value))
 
         return super(ClusteredKLTTracker, self).calculate_cost_by_overlap_ratio(tracked_object.last_assignment, node_cluster.rect_from_group())
+
+    def obsolete_trackings(self):
+
+        # obsolete trackings
+        super(ClusteredKLTTracker, self).obsolete_trackings()
+
+        # obsolete nodes
+        graph_nodes = list(self.graph.nodes())
+        for node in graph_nodes:
+            diff = TenguTracker._global_updates - node.last_detected_at
+            if diff > self._obsoletion:
+                # node is obsolete
+                removed_edges = self.graph.edges(node)
+                self.graph.remove_edges_from(removed_edges)
+                self.graph.remove_node(node)
+                # remove from sceneanalyzer as well
+                del self._klt_scene_analyzer.nodes[self._klt_scene_analyzer.nodes.index(node)]
+                self.logger.info('removed obsolete node and its edges due to diff = {}'.format(diff))

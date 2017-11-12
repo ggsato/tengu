@@ -4,6 +4,8 @@ import logging
 import cv2
 import numpy as np
 
+from .tengu_tracker import TenguTracker
+
 class TenguSceneAnalyzer(object):
 
     def __init__(self, roi=None, scale=1.0):
@@ -31,6 +33,14 @@ class TenguNode(object):
     def __init__(self, tr, *argv):
         super(TenguNode, self).__init__(*argv)
         self.tr = tr
+        self._last_detected_at = TenguTracker._global_updates
+
+    def update_last_detected(self):
+        self._last_detected_at = TenguTracker._global_updates
+
+    @property
+    def last_detected_at(self):
+        return self._last_detected_at
 
     def inside_rect(self, rect):
         x, y = self.tr[-1]

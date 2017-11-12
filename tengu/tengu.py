@@ -187,6 +187,7 @@ class Tengu(object):
                     else:
                         self.logger.debug('skip calling counter')
 
+            # only for debugging
             time.sleep(1)
 
         self.logger.info('exitted run loop, exitting...')
