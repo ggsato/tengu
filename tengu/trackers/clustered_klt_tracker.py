@@ -122,6 +122,19 @@ class ClusteredKLTTracker(TenguTracker):
         end = time.time()
         self.logger.debug('prepare_updates took {} s'.format(end - start))
 
+        if self._klt_scene_analyzer.draw_flows:
+            # this is a debug mode
+            debug = self._klt_scene_analyzer.prev_gray.copy()
+            # draw a graph
+            graph_nodes = list(self.graph.nodes())
+            for graph_node in graph_nodes:
+                cv2.circle(debug, graph_node.tr[-1], 5, 255, -1)
+            graph_edges = list(self.graph.edges())
+            for graph_edge in graph_edges:
+                self.logger.info('drawing an edge {}'.format(graph_edge))
+                cv2.line(debug, graph_edge[0].tr[-1], graph_edge[1].tr[-1], 192, min(10, self.graph[graph_edge[0]][graph_edge[1]]['weight']))
+            cv2.imshow('Clustered KLT Debug', debug)
+
     def initialize_tracked_objects(self, detections):
         
         self.prepare_updates(detections)
