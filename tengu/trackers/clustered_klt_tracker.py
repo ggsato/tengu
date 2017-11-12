@@ -244,11 +244,24 @@ class ClusteredKLTTracker(TenguTracker):
         node_clusters = []
         for group in community:
             if len(group) > ClusteredKLTTracker._minimum_community_size:
+                self.find_and_cut_obsolete_edges(group)
                 self.logger.debug('found a group of size {}'.format(len(group)))
                 node_clusters.append(NodeCluster(group))
         self.logger.debug('community groups: {}, large enough groups: {}'.format(len(community), len(node_clusters)))
 
         return node_clusters
+
+    def find_and_cut_obsolete_edges(self, group):
+
+        for node in group:
+            edges = self.graph.edges(node)
+            for edge in edges:
+                another = edge[1]
+                similarity = node.similarity(another)
+                # TODO consider better ways to find out this threshold
+                if similarity <  ClusteredKLTTracker._minimum_node_similarity:
+                    self.graph.remove_edge(node, another)
+                    self.logger.info('the similarity({}) is too low, removed and edge from {} to {}'.format(similarity, node, another))
 
     def assign_detections_to_node_clusters(self, detections, node_clusters):
         """
