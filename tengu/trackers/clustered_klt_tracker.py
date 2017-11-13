@@ -123,6 +123,9 @@ class ClusteredKLTTracker(TenguTracker):
         end = time.time()
         self.logger.debug('prepare_updates took {} s'.format(end - start))
 
+        # update
+        self._klt_scene_analyzer.last_detections = detections
+
         if self._klt_scene_analyzer.draw_flows:
             # this is a debug mode
             debug = self._klt_scene_analyzer.prev_gray.copy()

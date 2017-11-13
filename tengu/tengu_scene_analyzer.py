@@ -151,6 +151,9 @@ class KLTSceneAnalyzer(TenguSceneAnalyzer):
         self._last_removed_nodes = []
         self.debug = None
 
+        # used for mask
+        self.last_detections = None
+
     @property
     def last_removed_nodes(self):
         removed_nodes = self._last_removed_nodes
@@ -235,6 +238,10 @@ class KLTSceneAnalyzer(TenguSceneAnalyzer):
                         # don't increase nodes at the last, counter line
                         continue
                     cv2.line(mask, (line[0][0] - from_x, line[0][1] - from_y), (line[0][2] - from_x, line[0][3] - from_y), 255, 3)
+        use_detections = False
+        if use_detections and self.last_detections is not None:
+            for detection in self.last_detections:
+                cv2.rectangle(mask, (int(detection[0]), int(detection[1])), (int(detection[0]+detection[2]), int(detection[1]+detection[3])), 255, -1)
         # don't pick up existing pixels
         for x, y in [np.int32(node.tr[-1]) for node in self.nodes]:
             cv2.circle(mask, (x, y), 10, 0, -1)
