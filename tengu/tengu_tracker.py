@@ -205,7 +205,7 @@ class TenguTracker(object):
                 cost = tengu_cost_matrix.cost_matrix[row][tengu_cost_matrix.ind[1][ix]]
                 tracked_object = self._tracked_objects[row]
                 if cost > TenguTracker._confident_min_cost:
-                    self.logger.info('{} is not updated due to too high cost {}'.format(tracked_object.obj_id, cost))
+                    self.logger.debug('{} is not updated due to too high cost {}'.format(tracked_object.obj_id, cost))
                     continue
                 if tracked_object.last_updated_at == TenguTracker._global_updates:
                     # already updated
