@@ -49,6 +49,8 @@ class ClusteredKLTTracklet(Tracklet):
             2-1: rect <= rect_from_group
             2-2: rect <= avg_movement
         3. only detection is available
+            3-1: reuse last group
+            3-2: reuse not available
                 rect <= detection
         4. none is available
             4-1: the last update was done without detection either by 3 or 2
@@ -99,11 +101,25 @@ class ClusteredKLTTracklet(Tracklet):
                     self.recent_updates_by('2-2')
             else:
                 # pattern 3
-                empty = NodeCluster([])
+                # if any tr of the last node cluster is valid, use the cluster
+                # TODO: but in the first place, if any tr is alive, all this costly operation can be minimized??
+                group = []
+                if len(self._assignments) > 0 and self._assignments[-1].group is not None:
+                    valid = False
+                    for node in self._assignments[-1].group:
+                        if node.inside_rect(assignment):
+                            valid = True
+                            break
+                    if valid:
+                        group = self._assignments[-1].group
+                empty = NodeCluster(group)
                 empty.detection = assignment
                 self._assignments.append(empty)
                 self._rect = assignment
-                self.recent_updates_by('3')
+                if len(group) > 0:
+                    self.recent_updates_by('3-1')
+                else:
+                    self.recent_updates_by('3-2')
 
         self._last_updated_at = TenguTracker._global_updates
 
@@ -118,6 +134,7 @@ class ClusteredKLTTracklet(Tracklet):
             last_move_x, last_move_y = self._assignments[-1].avg_movement()
             if last_move_x is None:
                 # can't estimate
+                self.recent_updates_by('4-1x')
                 return
             self.recent_updates_by('4-1')
         else:
@@ -132,6 +149,7 @@ class ClusteredKLTTracklet(Tracklet):
                 last_move_x, last_move_y = self._assignments[-2].avg_movement()
                 if last_move_x is None:
                     # can't estimate
+                    self.recent_updates_by('4-2-2x')
                     return
                 self.recent_updates_by('4-2-2')
             else:

@@ -70,6 +70,10 @@ class Tracklet(object):
     def last_update_pattern(self):
         return self._recent_updates[-1]
 
+    @property
+    def observations(self):
+        return len(self._assignments)
+
     def update_with_assignment(self, assignment):
         """
         update tracklet with the new assignment

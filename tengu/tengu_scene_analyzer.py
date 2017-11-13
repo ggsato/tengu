@@ -44,8 +44,8 @@ class TenguNode(object):
     # if threshold is 0.5, the lowest similarity Smin:
     # Smin = 100
     _min_distance = 50.
-    # Smin = 20 degrees
-    _min_angle = math.pi / 180 * 10
+    # Smin = 10 degrees
+    _min_angle = math.pi / 180 * 5
     # Smin = 10 per 10 frames
     _min_speed = _min_distance / 100
     _min_speed_length = 10
@@ -179,7 +179,7 @@ class KLTSceneAnalyzer(TenguSceneAnalyzer):
         self.count_lines = count_lines
 
         self.frame_idx = 0
-        self.update_interval = 1
+        self.update_interval = 10
         self.nodes = [] 
         self.max_track_length = 100
         self.prev_gray = None
