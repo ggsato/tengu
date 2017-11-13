@@ -296,6 +296,30 @@ class TenguTracker(object):
                 removed += 1
         self.logger.debug('removed {} tracked objects due to obsoletion'.format(removed))
 
+        # actively merge existing tracklets
+        if len(self._tracklets) < 1:
+            return
+
+        duplicated = []
+        half_ix = int(len(self._tracklets)/2)
+        for tracklet in self._tracklets[:half_ix]:
+            for another in self._tracklets[half_ix:]:
+                if tracklet == another:
+                    continue
+                cost = self.calculate_cost_by_overlap_ratio(tracklet.rect, another.rect)
+                if cost < 0.2:
+                    length = len(tracklet._assignments)
+                    length_another = len(another._assignments)
+                    if length >= length_another:
+                        duplicated.append(another)
+                    else:
+                        duplicated.append(tracklet)
+                    break
+
+        self.logger.debug('removing duplicates {}'.format(duplicated))
+        for duplicate in duplicated:
+            del self._tracklets[self._tracklets.index(duplicate)]
+
     def is_obsolete(self, tracklet):
         diff = TenguTracker._global_updates - tracklet.last_updated_at
         if not tracklet.is_confirmed:

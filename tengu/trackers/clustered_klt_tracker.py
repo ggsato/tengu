@@ -264,7 +264,7 @@ class NodeCluster(object):
             total_estimates[1] += origin_estimate[1]
 
         next_rect = (int(total_estimates[0]/len(origin_estimates)), int(total_estimates[1]/len(origin_estimates)), current_rect[2], current_rect[3])
-        self.logger.info('next rect {} was estimated from {}'.format(next_rect, current_rect))
+        self.logger.debug('next rect {} was estimated from {}'.format(next_rect, current_rect))
         return next_rect
 
 class ClusteredKLTTracker(TenguTracker):
