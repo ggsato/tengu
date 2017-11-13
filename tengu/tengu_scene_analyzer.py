@@ -34,6 +34,7 @@ class TenguNode(object):
     _similarity_weights = [0.25, 0.25, 0.25, 0.25]
     _min_distance = 10
     _min_angle = math.pi / 180 * 10
+    _min_speed_length = 10
     _min_acceleration = _min_distance/2
 
     def __init__(self, tr, *argv):
@@ -69,6 +70,10 @@ class TenguNode(object):
         this is useful when an object moves to a similar direction at faster but constant speed passes in front, and steals some nodes
         speed_similarity = ??
         """
+
+        if self == another:
+            self.logger.info('similarity is 1.0, the same node')
+            return 1.0
         
         pos0 = self.tr[-1]
         pos1 = another.tr[-1]
@@ -84,23 +89,23 @@ class TenguNode(object):
         orientation_similarity = TenguNode._min_angle/diff_angle
         self.logger.info('orientation_similarity between {} and {} is {}, diff={}'.format(angle0, angle1, orientation_similarity, diff_angle))
 
-        if len(self.tr) < 2 or len(another.tr) < 2:
+        if len(self.tr) < TenguNode._min_speed_length or len(another.tr) < TenguNode._min_speed_length:
             speed_similarity = 1.0
             acceleration_similarity = 1.0
             self.logger.info('skipping speed and acceleration similarity calculation')
         else:
-            speed0 = TenguNode.compute_distance(pos0, self.tr[-2])
-            speed1 = TenguNode.compute_distance(pos1, another.tr[-2])
+            speed0 = TenguNode.compute_distance(pos0, self.tr[-1 * TenguNode._min_speed_length])
+            speed1 = TenguNode.compute_distance(pos1, another.tr[-1 * TenguNode._min_speed_length])
             diff_speed = max(TenguNode._min_distance, math.fabs(speed0 - speed1))
             speed_similarity = TenguNode._min_distance/diff_speed
             self.logger.info('speed similarity between {} and {} is {}, diff={}'.format(speed0, speed1, speed_similarity, diff_speed))
 
-            if len(self.tr) < 3 or len(another.tr) < 3:
+            if len(self.tr) < TenguNode._min_speed_length*2 or len(another.tr) < TenguNode._min_speed_length*2:
                 acceleration_similarity = 1.0
                 self.logger.info('skipping acceleration similarity calculation')
             else:
-                speed00 = TenguNode.compute_distance(self.tr[0], self.tr[1])
-                speed10 = TenguNode.compute_distance(another.tr[0], another.tr[1])
+                speed00 = TenguNode.compute_distance(self.tr[0], self.tr[TenguNode._min_speed_length])
+                speed10 = TenguNode.compute_distance(another.tr[0], another.tr[TenguNode._min_speed_length])
                 acceleration0 = speed0 - speed00
                 acceleration1 = speed1 - speed10
                 diff_acceleration = max(TenguNode._min_acceleration, math.fabs(acceleration1 - acceleration0))
