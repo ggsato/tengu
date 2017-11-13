@@ -250,9 +250,7 @@ class NodeCluster(object):
             prev = node.tr[-1]
             prev2 = node.tr[-2]
 
-            offset = [prev2[0]-current_rect[0], prev2[1]-current_rect[1]]
-
-            origin_estimate = [prev[0]-offset[0], prev[1]-offset[1]]
+            origin_estimate = [prev[0]-int(current_rect[2]/2), prev[1]-int(current_rect[3]/2)]
             origin_estimates.append(origin_estimate)
 
         if len(origin_estimates) == 0:

@@ -318,7 +318,8 @@ class TenguTracker(object):
 
         self.logger.debug('removing duplicates {}'.format(duplicated))
         for duplicate in duplicated:
-            del self._tracklets[self._tracklets.index(duplicate)]
+            if duplicate in self._tracklets:
+                del self._tracklets[self._tracklets.index(duplicate)]
 
     def is_obsolete(self, tracklet):
         diff = TenguTracker._global_updates - tracklet.last_updated_at
