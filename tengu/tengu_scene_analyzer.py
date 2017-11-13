@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-import logging
+import logging, math
 import cv2
 import numpy as np
 
@@ -30,8 +30,14 @@ class TenguSceneAnalyzer(object):
 
 class TenguNode(object):
 
+    # location, orientation, acceleration, speed
+    _similarity_weights = [0.25, 0.25, 0.25, 0.25]
+    _min_distance = 10
+    _min_angle = math.pi / 180 * 10
+
     def __init__(self, tr, *argv):
         super(TenguNode, self).__init__(*argv)
+        self.logger = logging.getLogger(__name__)
         self.tr = tr
         self._last_detected_at = TenguTracker._global_updates
 
@@ -46,10 +52,52 @@ class TenguNode(object):
         x, y = self.tr[-1]
         return (x > rect[0] and x < (rect[0]+rect[2])) and (y > rect[1] and y < (rect[1]+rect[3]))
 
-    def similarity(self, another_node):
-        similarity = 1.
-        # TODO implement
-        return similarity
+    def similarity(self, another):
+        """
+        similarity is measured as a weighed average of the followings
+        1. location (x, y)
+        this is useful to detect a node that gets stuck and stays somewhere
+        location_similarity = ??
+        2. orientation
+        this is useful when an object moves to a different direction passes in front, and steals some nodes
+        orientation_similarity = ??
+        3. accelaration
+        this is useful when an object moves to a similar direction passes in front, and steals some nodes
+        accelaration_similarity = ??
+        4. speed
+        this is useful when an object moves to a similar direction at faster but constant speed passes in front, and steals some nodes
+        speed_similarity = ??
+        """
+        
+        pos0 = self.tr[-1]
+        pos1 = another.tr[-1]
+        distance = max(TenguNode._min_distance, TenguNode.compute_distance(pos0, pos1))
+        location_similarity = TenguNode._min_distance/distance
+        self.logger.info('location_similarity between {} and {} is {}, distance={}'.format(pos0, pos1, location_similarity, distance))
+
+        angle0 = TenguNode.get_angle(self.tr)
+        angle1 = TenguNode.get_angle(another.tr)
+        diff_angle = max(TenguNode._min_angle, math.fabs(angle0 - angle1))
+        if diff_angle > math.pi:
+            diff_angle -= math.pi
+        orientation_similarity = TenguNode._min_angle/diff_angle
+        self.logger.info('orientation_similarity between {} and {} is {}, diff={}'.format(angle0, angle1, orientation_similarity, diff_angle))
+
+        return location_similarity * 0.5 + orientation_similarity * 0.5
+
+    @staticmethod
+    def compute_distance(pos0, pos1):
+        return math.sqrt((pos1[0]-pos0[0])**2+(pos1[1]-pos0[1])**2)
+
+    @staticmethod
+    def get_angle(tr):
+        p_from = tr[0]
+        p_to = tr[-1]
+        diff_x = p_to[0] - p_from[0]
+        diff_y = p_to[1] - p_from[1]
+        # angle = (-pi, pi)
+        angle = math.atan2(diff_y, diff_x)
+        return angle
 
 class KLTSceneAnalyzer(TenguSceneAnalyzer):
 
@@ -208,9 +256,7 @@ class KLTSceneAnalyzer(TenguSceneAnalyzer):
 
         for l, lane in enumerate(self.count_lines):
             for i, line in enumerate(self.count_lines[lane]):
-                color = (0, 255, 255)
-                if line[6]:
-                    color = (0, 0, 255)
+                color = 192
                 cv2.line(debug, (line[0][0] - from_x, line[0][1] - from_y), (line[0][2] - from_x, line[0][3] - from_y), color, 3)
                 # draw a perpendicular line to it
                 cv2.arrowedLine(debug, (line[1][0]-from_x, line[1][1]-from_y), (line[1][2]-from_x, line[1][3]-from_y), color)
