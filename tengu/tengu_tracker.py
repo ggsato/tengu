@@ -77,6 +77,7 @@ class TenguTracker(object):
 
     _global_updates = -1
     _min_value = 0.0001
+    _confident_min_cost = 0.3
 
     def __init__(self, obsoletion=100):
         self.logger = logging.getLogger(__name__)
@@ -201,7 +202,11 @@ class TenguTracker(object):
         for m, tengu_cost_matrix in enumerate(tengu_cost_matrix_list):
             self.logger.debug('updating based on {} cost matrix, ind ={}'.format(m, tengu_cost_matrix.ind))
             for ix, row in enumerate(tengu_cost_matrix.ind[0]):
+                cost = tengu_cost_matrix.cost_matrix[row][tengu_cost_matrix.ind[1][ix]]
                 tracked_object = self._tracked_objects[row]
+                if cost > TenguTracker._confident_min_cost:
+                    self.logger.info('{} is not updated due to too high cost {}'.format(tracked_object.obj_id, cost))
+                    continue
                 if tracked_object.last_updated_at == TenguTracker._global_updates:
                     # already updated
                     continue
