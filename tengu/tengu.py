@@ -81,11 +81,11 @@ class Tengu(object):
             if isinstance(observer, TenguSceneChangeObserver):
                 observer.scene_changed(scene)
 
-    def _notify_tracked_objects_updated(self, tracked_objects):
+    def _notify_tracklets_updated(self, tracklets):
         for observer_id in self._observers:
             observer = self._observers[observer_id]
-            if isinstance(observer, TenguTrackedObjectsUpdateObserver):
-                observer.tracked_objects_updated(tracked_objects)
+            if isinstance(observer, TenguTrackletsUpdateObserver):
+                observer.tracklets_updated(tracklets)
 
     def _notify_frame_changed(self, frame):
         for observer_id in self._observers:
@@ -168,13 +168,13 @@ class Tengu(object):
 
                 # tracking-by-detection
                 if tengu_tracker is not None:
-                    tracked_objects = tengu_tracker.resolve_trackings(detections)
-                    self._notify_tracked_objects_updated(tracked_objects)
+                    tracklets = tengu_tracker.resolve_trackings(detections)
+                    self._notify_tracklets_updated(tracklets)
 
                     # count trackings
                     if tengu_counter is not None:
                         self.logger.debug('calling counter')
-                        counts = tengu_counter.count(tracked_objects)
+                        counts = tengu_counter.count(tracklets)
                         self._notify_objects_counted(counts)
 
                         # update for report

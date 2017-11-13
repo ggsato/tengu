@@ -17,8 +17,8 @@ class TenguObjectsDetectionObserver(object):
     def objects_detected(self, detections):
         pass
 
-class TenguTrackedObjectsUpdateObserver(object):
-    def tracked_objects_updated(self, tracked_objects):
+class TenguTrackletsUpdateObserver(object):
+    def tracklets_updated(self, tracklets):
         pass
 
 class TenguObjectsCountObserver(object):
@@ -29,7 +29,7 @@ class TenguAnalysisObserver(object):
     def analysis_finished(self):
         pass
 
-class TenguObserver(TenguSrcChangeObserver, TenguSceneChangeObserver, TenguFrameChangeObserver, TenguObjectsDetectionObserver, TenguTrackedObjectsUpdateObserver, TenguObjectsCountObserver, TenguAnalysisObserver):
+class TenguObserver(TenguSrcChangeObserver, TenguSceneChangeObserver, TenguFrameChangeObserver, TenguObjectsDetectionObserver, TenguTrackletsUpdateObserver, TenguObjectsCountObserver, TenguAnalysisObserver):
     """
     This is a base class of all the Tengu observers including Detector, Tracker, Counter, CountReporter, and any other GUI classes.
     """

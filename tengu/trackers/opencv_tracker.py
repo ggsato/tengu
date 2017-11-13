@@ -4,12 +4,12 @@
 import logging, cv2
 
 from ..tengu_observer import TenguFrameChangeObserver
-from ..tengu_tracker import TenguTracker, TrackedObject
+from ..tengu_tracker import TenguTracker, Tracklet
 
-class OpenCVTrackedObject(TrackedObject):
+class OpenCVTracklet(Tracklet):
 
     def __init__(self, tracker):
-        super(OpenCVTrackedObject, self).__init__()
+        super(OpenCVTracklet, self).__init__()
         self._tracker = tracker
         self._initialized = False
 
@@ -31,7 +31,7 @@ class OpenCVTrackedObject(TrackedObject):
 
         updated, rect = self._tracker.update(frame)
         if updated:
-            super(OpenCVTrackedObject, self).update_tracking(rect)
+            super(OpenCVTracklet, self).update_tracking(rect)
 
 class OpenCVTracker(TenguTracker, TenguFrameChangeObserver):
 
@@ -48,20 +48,20 @@ class OpenCVTracker(TenguTracker, TenguFrameChangeObserver):
     def resolve_trackings(self, detections):
 
         """
-        1. initialize a tracker for a new tracked_object
+        1. initialize a tracker for a new tracklet
         OpenCVTracker is an online tracker that should be given an initial rectangle to track,
         then, it will learn and update to track further.
-        2. update a tracker for an existing tracked_object
+        2. update a tracker for an existing tracklet
         """
         return super(OpenCVTracker, self).resolve_trackings(detections)
 
     def prepare_updates(self, detections):
-        for tracked_object in self._tracked_objects:
-            tracked_object.update_tracker(self.last_frame)
+        for tracklet in self._tracklets:
+            tracklet.update_tracker(self.last_frame)
 
-    def new_tracked_object(self, detection):
+    def new_tracklet(self, detection):
         tracker = OpenCVTracker.create_opencv_tracker(self.tracker_type)
-        to = OpenCVTrackedObject(tracker)
+        to = OpenCVTracklet(tracker)
         to.update_with_assignment(detection)
         return to
 

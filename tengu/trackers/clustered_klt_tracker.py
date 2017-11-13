@@ -12,7 +12,7 @@ from networkx.algorithms import community as nxcom
 from scipy.optimize import linear_sum_assignment
 
 from ..tengu_scene_analyzer import KLTSceneAnalyzer, TenguNode
-from ..tengu_tracker import TenguTracker, TrackedObject, TenguCostMatrix
+from ..tengu_tracker import TenguTracker, Tracklet, TenguCostMatrix
 
 """
 This tracker represents a list of optical flow trackes as a weighed undirected graph.
@@ -30,10 +30,10 @@ Once a graph is clustered into sets of vertices(optical flow tracks),
 a cost matrix is calculated for assignments.
 """
 
-class ClusteredKLTTrackedObject(TrackedObject):
+class ClusteredKLTTracklet(Tracklet):
 
     def __init__(self):
-        super(ClusteredKLTTrackedObject, self).__init__()
+        super(ClusteredKLTTracklet, self).__init__()
 
     @property
     def rect(self):
@@ -135,18 +135,18 @@ class ClusteredKLTTracker(TenguTracker):
             self.draw_graph()
             cv2.imshow('Clustered KLT Debug', self.debug)
 
-    def initialize_tracked_objects(self, detections):
+    def initialize_tracklets(self, detections):
         
         self.prepare_updates(detections)
 
         for node_cluster in self.current_node_clusters:
-            to = self.new_tracked_object(node_cluster)
-            self._tracked_objects.append(to)
+            to = self.new_tracklet(node_cluster)
+            self._tracklets.append(to)
 
         self.logger.debug('initialized {} klt tracked objects'.format(len(self.current_node_clusters)))
 
-    def new_tracked_object(self, assignment):
-        to = ClusteredKLTTrackedObject()
+    def new_tracklet(self, assignment):
+        to = ClusteredKLTTracklet()
         self.logger.debug('created klt tracked object {} of id {}'.format(to, to.obj_id))
         to.update_with_assignment(assignment)
         return to
@@ -155,9 +155,9 @@ class ClusteredKLTTracker(TenguTracker):
 
         # create a cost matrix
         cost_matrix = self.create_empty_cost_matrix(len(self.current_node_clusters))
-        for t, tracked_object in enumerate(self._tracked_objects):
+        for t, tracklet in enumerate(self._tracklets):
             for c, node_cluster in enumerate(self.current_node_clusters):
-                cost = self.calculate_cost(tracked_object, node_cluster)
+                cost = self.calculate_cost(tracklet, node_cluster)
                 cost_matrix[t][c] = cost
 
         tengu_cost_matrix = TenguCostMatrix(self.current_node_clusters, cost_matrix)
@@ -292,12 +292,12 @@ class ClusteredKLTTracker(TenguTracker):
 
         # NOTE that some node clusters may not be assigned detections
 
-    def calculate_cost(self, tracked_object, node_cluster):
-        if isinstance(tracked_object.last_assignment, NodeCluster):
-            similarity = tracked_object.last_assignment.similarity(node_cluster)
+    def calculate_cost(self, tracklet, node_cluster):
+        if isinstance(tracklet.last_assignment, NodeCluster):
+            similarity = tracklet.last_assignment.similarity(node_cluster)
             return -1 * math.log(max(similarity, TenguTracker._min_value))
 
-        return super(ClusteredKLTTracker, self).calculate_cost_by_overlap_ratio(tracked_object.last_assignment, node_cluster.rect_from_group())
+        return super(ClusteredKLTTracker, self).calculate_cost_by_overlap_ratio(tracklet.last_assignment, node_cluster.rect_from_group())
 
     def obsolete_trackings(self):
 

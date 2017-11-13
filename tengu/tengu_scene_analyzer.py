@@ -160,7 +160,11 @@ class KLTSceneAnalyzer(TenguSceneAnalyzer):
     _max_nodes = 1000
     
     def __init__(self, draw_flows=False, lk_params=None, feature_params=None, track_window=None, count_lines=None, **kwargs):
-        super(KLTSceneAnalyzer, self).__init__(roi=[track_window[0], track_window[1], track_window[0]+track_window[2], track_window[1]+track_window[3]], **kwargs)
+        if track_window is None:
+            roi = None
+        else:
+            roi = [track_window[0], track_window[1], track_window[0]+track_window[2], track_window[1]+track_window[3]]
+        super(KLTSceneAnalyzer, self).__init__(roi=roi, **kwargs)
 
         self.draw_flows = draw_flows
         self.lk_params = lk_params
