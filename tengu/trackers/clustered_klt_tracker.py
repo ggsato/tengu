@@ -148,11 +148,13 @@ class ClusteredKLTTracklet(Tracklet):
         if len(valid_group) > 0:
             empty = NodeCluster(valid_group)
             self._assignments.append(empty)
-            last_move_x, last_move_y = self._assignments[-1].avg_movement()
-            if last_move_x is None:
+            next_rect = empty.estinamte_next_rect(self._rect)
+            if next_rect is None:
                 self.recent_updates_by('4-0x')
-                return
-            self.recent_updates_by('4-0')
+            else:
+                self._rect = next_rect
+                self.recent_updates_by('4-0')
+            return
         else:
             if self._assignments[-1].detection is None:
                 # pattern 4-1
@@ -239,6 +241,31 @@ class NodeCluster(object):
             return None, None
 
         return avg_node.last_move(min_length)
+
+    def estinamte_next_rect(self, current_rect):
+        origin_estimates = []
+        for node in self.group:
+            if len(node.tr) == 1:
+                continue
+            prev = node.tr[-1]
+            prev2 = node.tr[-2]
+
+            offset = [prev2[0]-current_rect[0], prev2[1]-current_rect[1]]
+
+            origin_estimate = [prev[0]-offset[0], prev[1]-offset[1]]
+            origin_estimates.append(origin_estimate)
+
+        if len(origin_estimates) == 0:
+            return None
+
+        total_estimates = [0, 0]
+        for origin_estimate in origin_estimates:
+            total_estimates[0] += origin_estimate[0]
+            total_estimates[1] += origin_estimate[1]
+
+        next_rect = (int(total_estimates[0]/len(origin_estimates)), int(total_estimates[1]/len(origin_estimates)), current_rect[2], current_rect[3])
+        self.logger.info('next rect {} was estimated from {}'.format(next_rect, current_rect))
+        return next_rect
 
 class ClusteredKLTTracker(TenguTracker):
 
