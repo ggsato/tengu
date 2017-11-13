@@ -32,8 +32,9 @@ a cost matrix is calculated for assignments.
 
 class ClusteredKLTTracklet(Tracklet):
 
-    def __init__(self):
+    def __init__(self, tracker):
         super(ClusteredKLTTracklet, self).__init__()
+        self.tracker = tracker
         self._rect = None
 
     @property
@@ -104,22 +105,29 @@ class ClusteredKLTTracklet(Tracklet):
                 # if any tr of the last node cluster is valid, use the cluster
                 # TODO: but in the first place, if any tr is alive, all this costly operation can be minimized??
                 group = []
+                valid = False
                 if len(self._assignments) > 0 and self._assignments[-1].group is not None:
-                    valid = False
                     for node in self._assignments[-1].group:
                         if node.inside_rect(assignment):
                             valid = True
                             break
                     if valid:
                         group = self._assignments[-1].group
+                else:
+                    # find from existing nodes matching this detection
+                    group = self.tracker.find_nodes_inside_detection(assignment)
+
                 empty = NodeCluster(group)
                 empty.detection = assignment
                 self._assignments.append(empty)
                 self._rect = assignment
                 if len(group) > 0:
-                    self.recent_updates_by('3-1')
+                    if valid:
+                        self.recent_updates_by('3-1')
+                    else:
+                        self.recent_updates_by('3-2')
                 else:
-                    self.recent_updates_by('3-2')
+                    self.recent_updates_by('3-3')
 
         self._last_updated_at = TenguTracker._global_updates
 
@@ -274,7 +282,7 @@ class ClusteredKLTTracker(TenguTracker):
         self.logger.debug('initialized {} klt tracked objects'.format(len(self.current_node_clusters)))
 
     def new_tracklet(self, assignment):
-        to = ClusteredKLTTracklet()
+        to = ClusteredKLTTracklet(self)
         self.logger.debug('created klt tracked object {} of id {}'.format(to, to.obj_id))
         to.update_with_assignment(assignment)
         return to
@@ -371,9 +379,9 @@ class ClusteredKLTTracker(TenguTracker):
         for group in community:
             if len(group) > ClusteredKLTTracker._minimum_community_size:
                 self.find_and_cut_obsolete_edges(group)
-                self.logger.info('found a group of size {}'.format(len(group)))
+                self.logger.debug('found a group of size {}'.format(len(group)))
                 node_clusters.append(NodeCluster(group))
-        self.logger.info('community groups: {}, large enough groups: {}'.format(len(community), len(node_clusters)))
+        self.logger.debug('community groups: {}, large enough groups: {}'.format(len(community), len(node_clusters)))
 
         return node_clusters
 
@@ -456,3 +464,11 @@ class ClusteredKLTTracker(TenguTracker):
                 edges = list(self.graph.edges(graph_node))
                 for edge in edges:
                     cv2.line(self.debug, edge[0].tr[-1], edge[1].tr[-1], 256, min(10, self.graph[edge[0]][edge[1]]['weight']))
+
+    def find_nodes_inside_detection(self, detection):
+        nodes = []
+        graph_nodes = list(self.graph.nodes())
+        for graph_node in graph_nodes:
+            if graph_node.inside_rect(detection):
+                nodes.append(graph_node)
+        return nodes

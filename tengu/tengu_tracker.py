@@ -271,7 +271,7 @@ class TenguTracker(object):
                     self.logger.debug('{} is not updated due to too high cost {}'.format(tracklet.obj_id, cost))
                     continue
                 new_assignment = tengu_cost_matrix.assignments[tengu_cost_matrix.ind[1][ix]]
-                self.logger.info('updating tracked object {} of id={} having {} with {} at {}'.format(id(tracklet), tracklet.obj_id, tracklet.rect, new_assignment, TenguTracker._global_updates))
+                self.logger.debug('updating tracked object {} of id={} having {} with {} at {}'.format(id(tracklet), tracklet.obj_id, tracklet.rect, new_assignment, TenguTracker._global_updates))
                 tracklet.update_with_assignment(new_assignment)
 
             # create new ones
