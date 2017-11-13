@@ -31,7 +31,6 @@ class TenguSceneAnalyzer(object):
 class TenguNode(object):
 
     # location, orientation, acceleration, speed
-    _similarity_weights = [0.25, 0.25, 0.25, 0.25]
     _min_distance = 10
     _min_angle = math.pi / 180 * 10
     _min_speed_length = 10
@@ -112,8 +111,7 @@ class TenguNode(object):
                 acceleration_similarity = TenguNode._min_acceleration / diff_acceleration
                 self.logger.info('acceleration similarity between {} and {} is {}, diff={}'.format(acceleration0, acceleration1, acceleration_similarity, diff_acceleration))
 
-        similarity = location_similarity * TenguNode._similarity_weights[0] + orientation_similarity * TenguNode._similarity_weights[1] \
-                    + speed_similarity * TenguNode._similarity_weights[2] + acceleration_similarity * TenguNode._similarity_weights[3]
+        similarity = max(location_similarity, orientation_similarity, speed_similarity, acceleration_similarity)
 
         self.logger.info('similarity = {}'.format(similarity))
 
