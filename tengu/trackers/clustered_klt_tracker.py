@@ -34,9 +34,17 @@ class ClusteredKLTTracklet(Tracklet):
 
     def __init__(self):
         super(ClusteredKLTTracklet, self).__init__()
+        self._rect = None
 
     @property
     def rect(self):
+        """
+        an internal rect is updated with or without assignment as follows:
+        1. both of node cluster and detection are available
+        2. only node cluaster is available
+        3. only detection is available
+        4. none is available
+        """
         self.logger.debug('retruning rect from {}'.format(self))
         if isinstance(self.last_assignment, NodeCluster):
 
@@ -48,6 +56,11 @@ class ClusteredKLTTracklet(Tracklet):
         # otherwise, this is just a rect
         return self._assignments[-1]
 
+    def update_with_assignment(self, assignment):
+        super(ClusteredKLTTracklet, self).update_with_assignment(assignment)
+
+    def update_without_assignment(self):
+        super(ClusteredKLTTracklet, self).update_without_assignment()
 
 class NodeCluster(object):
 

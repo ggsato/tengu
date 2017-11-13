@@ -14,7 +14,8 @@ If the currently tracked object's rectangle overlaps over a threshold is conside
 class Tracklet(object):
 
     _class_obj_id = -1
-    min_confirmation_updates = 25
+    _min_confirmation_updates = 25
+    _estimation_decay = 0.5
 
     def __init__(self):
         self.logger = logging.getLogger(__name__)
@@ -23,6 +24,7 @@ class Tracklet(object):
         self._obj_id = Tracklet._class_obj_id
         self._last_updated_at = -1
         self._assignments = []
+        self._rect = None
 
     @property
     def obj_id(self):
@@ -43,26 +45,57 @@ class Tracklet(object):
 
     @property
     def rect(self):
-        self.logger.debug('retruning rect of {}@{} as {}'.format(id(self), self.obj_id, self.last_assignment))
-        return self._assignments[-1]
+        return self._rect
 
     @property
     def last_updated_at(self):
         return self._last_updated_at
 
     @property
+    def updated(self):
+        return self._last_updated_at == Tracklet._class_obj_id
+
+    @property
     def is_confirmed(self):
-        return len(self._assignments) > Tracklet.min_confirmation_updates
+        return len(self._assignments) > Tracklet._min_confirmation_updates
 
     @property
     def last_assignment(self):
         return self._assignments[-1]
 
     def update_with_assignment(self, assignment):
+        """
+        update tracklet with the new assignment
+        note that this could be called multiple times in case multiple cost matrixes are used
+        """
         if len(self._assignments) > 0:
             self.logger.debug('{}@{}: updating with {} from {} at {}'.format(id(self), self.obj_id, assignment, self._assignments[-1], self._last_updated_at))
+        
+        if self._last_updated_at == TenguTracker._global_updates:
+            # nothing to do here
+            pass
+
         self._assignments.append(assignment)
+        self._rect = assignment
         self._last_updated_at = TenguTracker._global_updates
+
+    def update_without_assignment(self):
+        """
+        no update was available
+        so update by an estimation if possible
+        """
+        if len(self._assignments) == 1:
+            # no speed calculation possible
+            return
+
+        prev = self._assignments[-1]
+        prev2 = self._assignments[-2]
+
+        last_move_x = int((prev[0]+prev[2]/2) - (prev2[0]+prev2[2]/2))
+        last_move_y = int((prev[1]+prev[3]/2) - (prev2[1]+prev2[3]/2))
+        new_x = self._rect[0] + last_move_x * Tracklet._estimation_decay
+        new_y = self._rect[1] + last_move_y * Tracklet._estimation_decay
+        self._rect = (new_x, new_y, self._rect[2], self._rect[3])
 
 class TenguCostMatrix(object):
 
@@ -221,6 +254,10 @@ class TenguTracker(object):
                     to = self.new_tracklet(assignment)
                     self._tracklets.append(to)
                     self.logger.debug('created tracked object {} of id={} at {}'.format(to, to.obj_id, TenguTracker._global_updates))
+
+        for tracklet in self._tracklets:
+            if not tracklet.updated:
+                tracklet.update_without_assignment()
 
     def obsolete_trackings(self):
         """ Filters old trackings
