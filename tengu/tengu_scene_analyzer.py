@@ -25,6 +25,16 @@ class TenguSceneAnalyzer(object):
         if self.roi is not None:
             # crop
             cropped = cropped[self.roi[1]:self.roi[3], self.roi[0]:self.roi[2]]
+
+        equalize = False
+        if equalize:
+            clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
+            ycb = cv2.cvtColor(cropped, cv2.COLOR_BGR2YCrCb)
+            y,c,b = cv2.split(ycb)
+            y_eq = clahe.apply(y)
+            ycb_eq = cv2.merge((y_eq, c, b))
+            equalized = cv2.cvtColor(ycb_eq, cv2.COLOR_YCrCb2BGR)
+            cropped = equalized
         
         return cropped
 
@@ -32,15 +42,15 @@ class TenguNode(object):
 
     # location, orientation, acceleration, speed
     # if threshold is 0.5, the lowest similarity Smin:
-    # Smin = 20
-    _min_distance = 10.
+    # Smin = 100
+    _min_distance = 50.
     # Smin = 20 degrees
     _min_angle = math.pi / 180 * 10
-    # Smin = 2 per 10 frames
-    _min_speed = 1.
+    # Smin = 10 per 10 frames
+    _min_speed = _min_distance / 100
     _min_speed_length = 10
     # Smin = 1
-    _min_acceleration = _min_speed/2
+    _min_acceleration = _min_speed / 5
 
     def __init__(self, tr, *argv):
         super(TenguNode, self).__init__(*argv)
@@ -117,9 +127,17 @@ class TenguNode(object):
                 acceleration_similarity = TenguNode._min_acceleration / diff_acceleration
                 self.logger.debug('acceleration similarity between {} and {} is {}, diff={}'.format(acceleration0, acceleration1, acceleration_similarity, diff_acceleration))
 
+        # debug
+        disable_similarity = False
+        if disable_similarity:
+            location_similarity = 1.0
+            orientation_similarity = 1.0
+            speed_similarity = 1.0
+            acceleration_similarity = 1.0
+
         similarity = min(location_similarity, orientation_similarity, speed_similarity, acceleration_similarity)
 
-        self.logger.debug('similarity = {}'.format(similarity))
+        self.logger.debug('similarity = {} [{}, {}, {}, {}]'.format(similarity, location_similarity, orientation_similarity, speed_similarity, acceleration_similarity))
 
         return similarity
 
@@ -227,7 +245,7 @@ class KLTSceneAnalyzer(TenguSceneAnalyzer):
     def find_corners_to_track(self, scene_gray, from_x, from_y):
         self.logger.debug('finding corners')
         # cleanup points outside of lanes and counters
-        cleanup_outside_of_lanes = True
+        cleanup_outside_of_lanes = False
         if cleanup_outside_of_lanes:
             self.cleanup_outside_lane_nodes(scene_gray, from_x, from_y)
 
@@ -235,7 +253,7 @@ class KLTSceneAnalyzer(TenguSceneAnalyzer):
         # every pixel is not tracked by default
         mask = np.zeros_like(scene_gray)
         # more masks
-        use_counter = True
+        use_counter = False
         if use_counter:
             for lane in self.count_lines:
                 lines = len(self.count_lines[lane])
@@ -244,13 +262,13 @@ class KLTSceneAnalyzer(TenguSceneAnalyzer):
                         # don't increase nodes at the last, counter line
                         continue
                     cv2.line(mask, (line[0][0] - from_x, line[0][1] - from_y), (line[0][2] - from_x, line[0][3] - from_y), 255, 3)
-        use_detections = False
+        use_detections = True
         if use_detections and self.last_detections is not None:
             for detection in self.last_detections:
                 cv2.rectangle(mask, (int(detection[0]), int(detection[1])), (int(detection[0]+detection[2]), int(detection[1]+detection[3])), 255, -1)
         # don't pick up existing pixels
         for x, y in [np.int32(node.tr[-1]) for node in self.nodes]:
-            cv2.circle(mask, (x, y), 10, 0, -1)
+            cv2.circle(mask, (x, y), 20, 0, -1)
         # find good points
         p = cv2.goodFeaturesToTrack(scene_gray, mask = mask, **self.feature_params)
         if p is None:
