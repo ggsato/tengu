@@ -135,6 +135,8 @@ class ClusteredKLTTracklet(Tracklet):
         if Tracklet._disable_estimation:
             return
 
+        self.logger.debug('updating without {}@{}'.format(id(self), self.obj_id))
+
         # pattern 4
         if self._assignments[-1].detection is None:
             # pattern 4-1

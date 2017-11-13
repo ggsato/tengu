@@ -16,7 +16,7 @@ class Tracklet(object):
     _class_obj_id = -1
     _min_confirmation_updates = 10
     _estimation_decay = 0.5
-    _disable_estimation = True
+    _disable_estimation = False
     _recent_updates_length = 10
 
     def __init__(self):
@@ -56,7 +56,7 @@ class Tracklet(object):
 
     @property
     def updated(self):
-        return self._last_updated_at == Tracklet._class_obj_id
+        return self._last_updated_at == TenguTracker._global_updates
 
     @property
     def is_confirmed(self):
