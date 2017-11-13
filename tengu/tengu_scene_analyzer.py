@@ -34,6 +34,7 @@ class TenguNode(object):
     _similarity_weights = [0.25, 0.25, 0.25, 0.25]
     _min_distance = 10
     _min_angle = math.pi / 180 * 10
+    _min_acceleration = _min_distance/2
 
     def __init__(self, tr, *argv):
         super(TenguNode, self).__init__(*argv)
@@ -83,7 +84,35 @@ class TenguNode(object):
         orientation_similarity = TenguNode._min_angle/diff_angle
         self.logger.info('orientation_similarity between {} and {} is {}, diff={}'.format(angle0, angle1, orientation_similarity, diff_angle))
 
-        return location_similarity * 0.5 + orientation_similarity * 0.5
+        if len(self.tr) < 2 or len(another.tr) < 2:
+            speed_similarity = 1.0
+            acceleration_similarity = 1.0
+            self.logger.info('skipping speed and acceleration similarity calculation')
+        else:
+            speed0 = TenguNode.compute_distance(pos0, self.tr[-2])
+            speed1 = TenguNode.compute_distance(pos1, another.tr[-2])
+            diff_speed = max(TenguNode._min_distance, math.fabs(speed0 - speed1))
+            speed_similarity = TenguNode._min_distance/diff_speed
+            self.logger.info('speed similarity between {} and {} is {}, diff={}'.format(speed0, speed1, speed_similarity, diff_speed))
+
+            if len(self.tr) < 3 or len(another.tr) < 3:
+                acceleration_similarity = 1.0
+                self.logger.info('skipping acceleration similarity calculation')
+            else:
+                speed00 = TenguNode.compute_distance(self.tr[0], self.tr[1])
+                speed10 = TenguNode.compute_distance(another.tr[0], another.tr[1])
+                acceleration0 = speed0 - speed00
+                acceleration1 = speed1 - speed10
+                diff_acceleration = max(TenguNode._min_acceleration, math.fabs(acceleration1 - acceleration0))
+                acceleration_similarity = TenguNode._min_acceleration / diff_acceleration
+                self.logger.info('acceleration similarity between {} and {} is {}, diff={}'.format(acceleration0, acceleration1, acceleration_similarity, diff_acceleration))
+
+        similarity = location_similarity * TenguNode._similarity_weights[0] + orientation_similarity * TenguNode._similarity_weights[1] \
+                    + speed_similarity * TenguNode._similarity_weights[2] + acceleration_similarity * TenguNode._similarity_weights[3]
+
+        self.logger.info('similarity = {}'.format(similarity))
+
+        return similarity
 
     @staticmethod
     def compute_distance(pos0, pos1):
