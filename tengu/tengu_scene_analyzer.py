@@ -57,6 +57,7 @@ class TenguNode(object):
         self.logger = logging.getLogger(__name__)
         self.tr = tr
         self._last_detected_at = TenguTracker._global_updates
+        self._last_updated_at = TenguTracker._global_updates
 
     def update_last_detected(self):
         self._last_detected_at = TenguTracker._global_updates
@@ -64,6 +65,14 @@ class TenguNode(object):
     @property
     def last_detected_at(self):
         return self._last_detected_at
+
+    def update_tr(self, x, y):
+        self.tr.append((x, y))
+        self._last_updated_at = TenguTracker._global_updates
+
+    @property
+    def last_updated_at(self):
+        return self._last_updated_at
 
     def inside_rect(self, rect):
         x, y = self.tr[-1]
@@ -155,12 +164,12 @@ class TenguNode(object):
         angle = math.atan2(diff_y, diff_x)
         return angle
 
-    def last_move(self):
+    def last_move(self, min_length):
         prev = self.tr[-1]
-        prev2 = self.tr[-2]
+        prev2 = self.tr[-1 * min_length]
         move_x = prev[0]-prev2[0]
         move_y = prev[1]-prev2[1]
-        return move_x, move_y 
+        return int(move_x/min_length), int(move_y/min_length) 
 
 class KLTSceneAnalyzer(TenguSceneAnalyzer):
 
@@ -242,7 +251,7 @@ class KLTSceneAnalyzer(TenguSceneAnalyzer):
             if len(node.tr) > self.max_track_length:
                 del node.tr[0]
 
-            node.tr.append((x, y))
+            node.update_tr(x, y)
             new_nodes.append(node)
 
             if self.draw_flows:

@@ -15,7 +15,7 @@ class Tracklet(object):
 
     _class_obj_id = -1
     _min_confirmation_updates = 10
-    _estimation_decay = 0.5
+    _estimation_decay = 0.9
     _disable_estimation = False
     _recent_updates_length = 10
 
