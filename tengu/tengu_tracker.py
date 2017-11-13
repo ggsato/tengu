@@ -14,7 +14,7 @@ If the currently tracked object's rectangle overlaps over a threshold is conside
 class Tracklet(object):
 
     _class_obj_id = -1
-    _min_confirmation_updates = 25
+    _min_confirmation_updates = 10
     _estimation_decay = 0.5
 
     def __init__(self):

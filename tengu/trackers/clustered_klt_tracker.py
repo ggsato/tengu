@@ -41,11 +41,27 @@ class ClusteredKLTTracklet(Tracklet):
         """
         an internal rect is updated with or without assignment as follows:
         1. both of node cluster and detection are available
-        2. only node cluaster is available
+            1-1: 1st time by detection, and by node cluster 2nd time
+                rect <= 1st time detection
+            1-2: 1st time by node cluster, and by detection 2nd time
+                rect <= 2nd time detection
+        2. only node cluster is available
+            2-1: rect <= rect_from_group
+            2-2: rect <= avg_movement
         3. only detection is available
+                rect <= detection
         4. none is available
+            4-1: the last update was done without detection either by 3 or 2
+                rect <= avg_movement or NO UPDATE
+            4-2: the last update was done with detecion
+                4-2-1: only one detection is available
+                    rect <= NO UPDATE
+                4-2-2: the second last node cluster is available
+                    rect <= avg_movement or NO UPDATE
+                4-2-3: 2 detections are available
+                    rect <= two previous rects
         """
-        return super(ClusteredKLTTracklet, self).rect
+        return self._rect
 
     def update_with_assignment(self, assignment):
         if len(self._assignments) > 0:
@@ -55,19 +71,28 @@ class ClusteredKLTTracklet(Tracklet):
         if self._last_updated_at == TenguTracker._global_updates:
             # second updte
             if is_clustered_node:
-                # pattern 1
+                # pattern 1-1
                 self._assignments[-1].group = assignment
+                # detection is already set in the first update
             else:
-                # pattern 1
+                # pattern 1-2
                 self._assignments[-1].detection = assignment
+                # override the first rect
                 self._rect = assignment
         else:
             # first update
             if is_clustered_node:
                 # pattern 2
                 self._assignments.append(assignment)
-                # the last detection may be better
-                self._rect = assignment.rect_from_group()
+                last_move_x, last_move_y = self._assignments[-1].avg_movement()
+                if last_move_x is None or self._rect is None:
+                    # pattern 2-1
+                    self._rect = self._assignments[-1].rect_from_group()
+                else:
+                    # pattern 2-2
+                    new_x = self._rect[0] + last_move_x * Tracklet._estimation_decay
+                    new_y = self._rect[1] + last_move_y * Tracklet._estimation_decay
+                    self._rect = (new_x, new_y, self._rect[2], self._rect[3])
             else:
                 # pattern 3
                 empty = NodeCluster([])
@@ -80,15 +105,26 @@ class ClusteredKLTTracklet(Tracklet):
     def update_without_assignment(self):
         # pattern 4
         if self._assignments[-1].detection is None:
+            # pattern 4-1
             # estimate from node cluster
             last_move_x, last_move_y = self._assignments[-1].avg_movement()
+            if last_move_x is None:
+                # can't estimate
+                return
         else:
+            # pattern 4-2
             if len(self._assignments) == 1:
+                # 4-2-1
                 # only one detection is available, can't estimate
                 return
             elif self._assignments[-2].detection is None:
+                # 4-2-2
                 last_move_x, last_move_y = self._assignments[-2].avg_movement()
+                if last_move_x is None:
+                    # can't estimate
+                    return
             else:
+                # 4-2-3
                 prev = self._assignments[-1].detection
                 prev2 = self._assignments[-2].detection
                 last_move_x, last_move_y = Tracklet.movement_from_rects(prev, prev2)
@@ -135,11 +171,18 @@ class NodeCluster(object):
     def avg_movement(self):
         total_move_x = 0
         total_move_y = 0
+        valid = 0
         for node in self.group:
+            if len(node.tr) == 1:
+                continue
             last_move_x, last_move_y = node.last_move()
             total_move_x += last_move_x
             total_move_y += last_move_y
-        return int(total_move_x/len(self.group)), int(total_move_y/len(self.group))
+            valid += 1
+        if valid == 0:
+            return None, None
+
+        return int(total_move_x/valid), int(total_move_y/valid)
 
 class ClusteredKLTTracker(TenguTracker):
 
