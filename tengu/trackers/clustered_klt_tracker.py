@@ -225,7 +225,7 @@ class ClusteredKLTTracker(TenguTracker):
             # make an edge
             if not self.graph.has_edge(node, last_node):
                 # create one
-                self.logger.info('creating an edge from {} to {}'.format(node, another_node))
+                self.logger.info('creating an edge from {} to {}'.format(node, last_node))
                 edge = (node, last_node, {'weight': 1})
                 self.graph.add_edges_from([edge])
                 updated_edges.append(edge)
