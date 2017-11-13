@@ -16,6 +16,8 @@ class Tracklet(object):
     _class_obj_id = -1
     _min_confirmation_updates = 10
     _estimation_decay = 0.5
+    _disable_estimation = True
+    _recent_updates_length = 10
 
     def __init__(self):
         self.logger = logging.getLogger(__name__)
@@ -25,6 +27,7 @@ class Tracklet(object):
         self._last_updated_at = -1
         self._assignments = []
         self._rect = None
+        self._recent_updates = ['N/A']
 
     @property
     def obj_id(self):
@@ -63,6 +66,10 @@ class Tracklet(object):
     def last_assignment(self):
         return self._assignments[-1]
 
+    @property
+    def last_update_pattern(self):
+        return self._recent_updates[-1]
+
     def update_with_assignment(self, assignment):
         """
         update tracklet with the new assignment
@@ -79,11 +86,17 @@ class Tracklet(object):
         self._rect = assignment
         self._last_updated_at = TenguTracker._global_updates
 
+        self.recent_updates_by('1')
+
+
     def update_without_assignment(self):
         """
         no update was available
         so update by an estimation if possible
         """
+        if Tracklet._disable_estimation:
+            return
+
         if len(self._assignments) == 1:
             # no speed calculation possible
             return
@@ -96,6 +109,13 @@ class Tracklet(object):
         new_x = self._rect[0] + last_move_x * Tracklet._estimation_decay
         new_y = self._rect[1] + last_move_y * Tracklet._estimation_decay
         self._rect = (new_x, new_y, self._rect[2], self._rect[3])
+
+        self.recent_updates_by('2')
+
+    def recent_updates_by(self, update_pattern):
+        self._recent_updates.append(update_pattern)
+        if len(self._recent_updates) > Tracklet._recent_updates_length:
+            del self._recent_updates[0]
 
     @staticmethod
     def movement_from_rects(prev, prev2):
@@ -247,7 +267,7 @@ class TenguTracker(object):
                     self.logger.debug('{} is not updated due to too high cost {}'.format(tracklet.obj_id, cost))
                     continue
                 new_assignment = tengu_cost_matrix.assignments[tengu_cost_matrix.ind[1][ix]]
-                self.logger.debug('updating tracked object {} of id={} having {} with {} at {}'.format(id(tracklet), tracklet.obj_id, tracklet.rect, new_assignment, TenguTracker._global_updates))
+                self.logger.info('updating tracked object {} of id={} having {} with {} at {}'.format(id(tracklet), tracklet.obj_id, tracklet.rect, new_assignment, TenguTracker._global_updates))
                 tracklet.update_with_assignment(new_assignment)
 
             # create new ones

@@ -179,7 +179,7 @@ class KLTSceneAnalyzer(TenguSceneAnalyzer):
         self.count_lines = count_lines
 
         self.frame_idx = 0
-        self.update_interval = 10
+        self.update_interval = 1
         self.nodes = [] 
         self.max_track_length = 100
         self.prev_gray = None
@@ -283,7 +283,7 @@ class KLTSceneAnalyzer(TenguSceneAnalyzer):
         # find good points
         p = cv2.goodFeaturesToTrack(scene_gray, mask = mask, **self.feature_params)
         if p is None:
-            print('No good features')
+            self.logger.debug('No good features')
         else:
             for x, y in np.float32(p).reshape(-1, 2):
                 new_node = TenguNode([(x, y)])
