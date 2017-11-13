@@ -45,22 +45,57 @@ class ClusteredKLTTracklet(Tracklet):
         3. only detection is available
         4. none is available
         """
-        self.logger.debug('retruning rect from {}'.format(self))
-        if isinstance(self.last_assignment, NodeCluster):
-
-            if self.last_assignment.detection is None:
-                return self.last_assignment.rect_from_group()
-
-            return self._assignments[-1].detection
-
-        # otherwise, this is just a rect
-        return self._assignments[-1]
+        return super(ClusteredKLTTracklet, self).rect
 
     def update_with_assignment(self, assignment):
-        super(ClusteredKLTTracklet, self).update_with_assignment(assignment)
+        if len(self._assignments) > 0:
+            self.logger.debug('{}@{}: updating with {} from {} at {}'.format(id(self), self.obj_id, assignment, self._assignments[-1], self._last_updated_at))
+        
+        is_clustered_node = isinstance(assignment, NodeCluster)
+        if self._last_updated_at == TenguTracker._global_updates:
+            # second updte
+            if is_clustered_node:
+                # pattern 1
+                self._assignments[-1].group = assignment
+            else:
+                # pattern 1
+                self._assignments[-1].detection = assignment
+                self._rect = assignment
+        else:
+            # first update
+            if is_clustered_node:
+                # pattern 2
+                self._assignments.append(assignment)
+                # the last detection may be better
+                self._rect = assignment.rect_from_group()
+            else:
+                # pattern 3
+                empty = NodeCluster([])
+                empty.detection = assignment
+                self._assignments.append(empty)
+                self._rect = assignment
+
+        self._last_updated_at = TenguTracker._global_updates
 
     def update_without_assignment(self):
-        super(ClusteredKLTTracklet, self).update_without_assignment()
+        # pattern 4
+        if self._assignments[-1].detection is None:
+            # estimate from node cluster
+            last_move_x, last_move_y = self._assignments[-1].avg_movement()
+        else:
+            if len(self._assignments) == 1:
+                # only one detection is available, can't estimate
+                return
+            elif self._assignments[-2].detection is None:
+                last_move_x, last_move_y = self._assignments[-2].avg_movement()
+            else:
+                prev = self._assignments[-1].detection
+                prev2 = self._assignments[-2].detection
+                last_move_x, last_move_y = Tracklet.movement_from_rects(prev, prev2)
+
+        new_x = self._rect[0] + last_move_x * Tracklet._estimation_decay
+        new_y = self._rect[1] + last_move_y * Tracklet._estimation_decay
+        self._rect = (new_x, new_y, self._rect[2], self._rect[3])
 
 class NodeCluster(object):
 
@@ -96,6 +131,15 @@ class NodeCluster(object):
         offset = int(NodeCluster._min_rect_length/2)
         rect = [avg_x - offset, avg_y - offset, NodeCluster._min_rect_length, NodeCluster._min_rect_length]
         return rect
+
+    def avg_movement(self):
+        total_move_x = 0
+        total_move_y = 0
+        for node in self.group:
+            last_move_x, last_move_y = node.last_move()
+            total_move_x += last_move_x
+            total_move_y += last_move_y
+        return int(total_move_x/len(self.group)), int(total_move_y/len(self.group))
 
 class ClusteredKLTTracker(TenguTracker):
 
@@ -306,11 +350,11 @@ class ClusteredKLTTracker(TenguTracker):
         # NOTE that some node clusters may not be assigned detections
 
     def calculate_cost(self, tracklet, node_cluster):
-        if isinstance(tracklet.last_assignment, NodeCluster):
+        if tracklet.last_assignment.group is not None:
             similarity = tracklet.last_assignment.similarity(node_cluster)
             return -1 * math.log(max(similarity, TenguTracker._min_value))
 
-        return super(ClusteredKLTTracker, self).calculate_cost_by_overlap_ratio(tracklet.last_assignment, node_cluster.rect_from_group())
+        return super(ClusteredKLTTracker, self).calculate_cost_by_overlap_ratio(tracklet.rect, node_cluster.rect_from_group())
 
     def obsolete_trackings(self):
 

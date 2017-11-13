@@ -155,6 +155,13 @@ class TenguNode(object):
         angle = math.atan2(diff_y, diff_x)
         return angle
 
+    def last_move(self):
+        prev = self.tr[-1]
+        prev2 = self.tr[-2]
+        move_x = prev[0]-prev2[0]
+        move_y = prev[1]-prev2[1]
+        return move_x, move_y 
+
 class KLTSceneAnalyzer(TenguSceneAnalyzer):
 
     _max_nodes = 1000

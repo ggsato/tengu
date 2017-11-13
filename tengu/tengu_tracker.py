@@ -91,11 +91,17 @@ class Tracklet(object):
         prev = self._assignments[-1]
         prev2 = self._assignments[-2]
 
-        last_move_x = int((prev[0]+prev[2]/2) - (prev2[0]+prev2[2]/2))
-        last_move_y = int((prev[1]+prev[3]/2) - (prev2[1]+prev2[3]/2))
+        last_move_x, last_move_y = Tracklet.movement_from_rects(prev, prev2)
+        
         new_x = self._rect[0] + last_move_x * Tracklet._estimation_decay
         new_y = self._rect[1] + last_move_y * Tracklet._estimation_decay
         self._rect = (new_x, new_y, self._rect[2], self._rect[3])
+
+    @staticmethod
+    def movement_from_rects(prev, prev2):
+        move_x = int((prev[0]+prev[2]/2) - (prev2[0]+prev2[2]/2))
+        move_y = int((prev[1]+prev[3]/2) - (prev2[1]+prev2[3]/2))
+        return move_x, move_y
 
 class TenguCostMatrix(object):
 
@@ -239,9 +245,6 @@ class TenguTracker(object):
                 tracklet = self._tracklets[row]
                 if cost > TenguTracker._confident_min_cost:
                     self.logger.debug('{} is not updated due to too high cost {}'.format(tracklet.obj_id, cost))
-                    continue
-                if tracklet.last_updated_at == TenguTracker._global_updates:
-                    # already updated
                     continue
                 new_assignment = tengu_cost_matrix.assignments[tengu_cost_matrix.ind[1][ix]]
                 self.logger.debug('updating tracked object {} of id={} having {} with {} at {}'.format(id(tracklet), tracklet.obj_id, tracklet.rect, new_assignment, TenguTracker._global_updates))
