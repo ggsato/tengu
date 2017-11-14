@@ -142,7 +142,7 @@ class TenguTracker(object):
     _min_value = 0.0001
     _confident_min_cost = 0.3
 
-    def __init__(self, obsoletion=50):
+    def __init__(self, obsoletion=25):
         self.logger = logging.getLogger(__name__)
         self._tracklets = []
         self._obsoletion = obsoletion
@@ -236,6 +236,11 @@ class TenguTracker(object):
     def calculate_cost_by_overlap_ratio(self, rect_a, rect_b):
         """ Calculates a overlap ratio against rect_b with respect to rect_a
         """
+        ratio = self.calculate_overlap_ratio(rect_a, rect_b)
+
+        return -1 * math.log(max(ratio, TenguTracker._min_value))
+
+    def calculate_overlap_ratio(self, rect_a, rect_b):
         ratio = 0.0
         right_a = rect_a[0] + rect_a[2]
         right_b = rect_b[0] + rect_b[2]
@@ -252,8 +257,7 @@ class TenguTracker(object):
                 # finally
                 ratio = (dx * dy) / (rect_a[2] * rect_a[3])
         self.logger.debug('ratio of {} and {} = {}'.format(rect_a, rect_b, ratio))
-
-        return -1 * math.log(max(ratio, TenguTracker._min_value))
+        return ratio
 
     @staticmethod
     def optimize_and_assign(tengu_cost_matrix_list):
@@ -278,13 +282,30 @@ class TenguTracker(object):
             for ix, assignment in enumerate(tengu_cost_matrix.assignments):
                 if not ix in tengu_cost_matrix.ind[1]:
                     # this is not assigned, create a new one
+                    # but do not create one contains existing tracklets
                     to = self.new_tracklet(assignment)
+                    contains = False
+                    for tracklet in self._tracklets:
+                        if self.rect_contains(to.rect, tracklet.rect):
+                            contains = True
+                            break
+                    if contains:
+                        self.logger.info('skipping creating a new, but disturbing tracklet {}'.format(to))
+                        continue
                     self._tracklets.append(to)
                     self.logger.debug('created tracked object {} of id={} at {}'.format(to, to.obj_id, TenguTracker._global_updates))
 
         for tracklet in self._tracklets:
             if not tracklet.updated:
                 tracklet.update_without_assignment()
+
+    @staticmethod
+    def rect_contains(rect_a, rect_b):
+        x, y = rect_a[0], rect_a[1]
+        contains_upper_left = (x > rect_b[0] and x < (rect_b[0]+rect_b[2])) and (y > rect_b[1] and y < (rect_b[1]+rect_b[3]))
+        x, y = x + rect_a[2], y + rect_a[3]
+        contains_lower_right = (x > rect_b[0] and x < (rect_b[0]+rect_b[2])) and (y > rect_b[1] and y < (rect_b[1]+rect_b[3]))
+        return contains_upper_left and contains_lower_right
 
     def obsolete_trackings(self):
         """ Filters old trackings
@@ -301,9 +322,8 @@ class TenguTracker(object):
             return
 
         duplicated = []
-        half_ix = int(len(self._tracklets)/2)
-        for tracklet in self._tracklets[:half_ix]:
-            for another in self._tracklets[half_ix:]:
+        for tracklet in self._tracklets:
+            for another in self._tracklets:
                 if tracklet == another:
                     continue
                 cost = self.calculate_cost_by_overlap_ratio(tracklet.rect, another.rect)
@@ -311,9 +331,11 @@ class TenguTracker(object):
                     length = len(tracklet._assignments)
                     length_another = len(another._assignments)
                     if length >= length_another:
-                        duplicated.append(another)
+                        if not another in duplicated:
+                            duplicated.append(another)
                     else:
-                        duplicated.append(tracklet)
+                        if not tracklet in duplicated:
+                            duplicated.append(tracklet)
                     break
 
         self.logger.debug('removing duplicates {}'.format(duplicated))

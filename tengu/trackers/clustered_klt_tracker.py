@@ -154,6 +154,7 @@ class ClusteredKLTTracklet(Tracklet):
             else:
                 self._rect = next_rect
                 self.recent_updates_by('4-0')
+            self._last_updated_at = TenguTracker._global_updates
             return
         else:
             if self._assignments[-1].detection is None:
