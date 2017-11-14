@@ -138,12 +138,6 @@ class Tengu(object):
             # increment
             self._current_frame += 1
 
-            # skip if necessary
-            if self._every_x_frame > 1 and self._current_frame % self._every_x_frame != 0:
-                self._current_frame += 1
-                self.logger.debug('skipping frame at {}'.format(self._current_frame))
-                continue
-
             # rotate
             if self._rotation != 0:
                 rows, cols, channels = frame.shape
@@ -171,6 +165,12 @@ class Tengu(object):
                 self._notify_scene_changed(scene)
             else:
                 scene = frame
+
+            # skip if necessary
+            if self._every_x_frame > 1 and self._current_frame % self._every_x_frame != 0:
+                self._current_frame += 1
+                self.logger.debug('skipping frame at {}'.format(self._current_frame))
+                continue
 
             # detect
             if tengu_detector is not None:
