@@ -130,7 +130,7 @@ class Tengu(object):
 
         while not self._stopped:
             ret, frame = cam.read()
-            self.logger.info('frame shape = {}'.format(frame.shape))
+            #self.logger.info('frame shape = {}'.format(frame.shape))
             if not ret:
                 self.logger.debug('no frame is avaiable')
                 break
