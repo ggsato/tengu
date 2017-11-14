@@ -20,7 +20,7 @@ class TenguSceneAnalyzer(object):
         if self.scale == 1.0:
             cropped = frame
         else:
-            cropped = cv2.resize(cropped, None, fx=self.scale, fy=self.scale, interpolation=cv2.INTER_AREA)
+            cropped = cv2.resize(frame, None, fx=self.scale, fy=self.scale, interpolation=cv2.INTER_AREA)
 
         if self.roi is not None:
             # crop

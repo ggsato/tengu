@@ -16,13 +16,14 @@ from tengu_observer import *
 
 class Tengu(object):
 
-    def __init__(self, every_x_frame=1):
+    def __init__(self, every_x_frame=1, rotation=0):
         self.logger= logging.getLogger(__name__)
 
         self._observers = WeakValueDictionary()
         self._src = None
         self._current_frame = -1
         self._every_x_frame = every_x_frame
+        self._rotation = rotation
 
         self._stopped = False
 
@@ -129,6 +130,7 @@ class Tengu(object):
 
         while not self._stopped:
             ret, frame = cam.read()
+            self.logger.info('frame shape = {}'.format(frame.shape))
             if not ret:
                 self.logger.debug('no frame is avaiable')
                 break
@@ -141,6 +143,12 @@ class Tengu(object):
                 self._current_frame += 1
                 self.logger.debug('skipping frame at {}'.format(self._current_frame))
                 continue
+
+            # rotate
+            if self._rotation != 0:
+                rows, cols, channels = frame.shape
+                M = cv2.getRotationMatrix2D((cols/2, rows/2), self._rotation, 1)
+                frame = cv2.warpAffine(frame, M, (cols, rows))
 
             # block for a client if necessary to synchronize
             if queue is not None:
