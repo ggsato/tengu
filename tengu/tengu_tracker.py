@@ -142,7 +142,7 @@ class TenguTracker(object):
     _min_value = 0.0001
     _confident_min_cost = 0.3
 
-    def __init__(self, obsoletion=25):
+    def __init__(self, obsoletion=50):
         self.logger = logging.getLogger(__name__)
         self._tracklets = []
         self._obsoletion = obsoletion

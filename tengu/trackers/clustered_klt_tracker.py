@@ -114,9 +114,9 @@ class ClusteredKLTTracklet(Tracklet):
                             break
                     if valid:
                         group = self._assignments[-1].group
-                else:
-                    # find from existing nodes matching this detection
-                    group = self.tracker.find_nodes_inside_detection(assignment)
+                #else:
+                #    # find from existing nodes matching this detection
+                #    group = self.tracker.find_nodes_inside_detection(assignment)
 
                 empty = NodeCluster(group)
                 empty.detection = assignment
@@ -154,7 +154,7 @@ class ClusteredKLTTracklet(Tracklet):
             else:
                 self._rect = next_rect
                 self.recent_updates_by('4-0')
-            self._last_updated_at = TenguTracker._global_updates
+            #self._last_updated_at = TenguTracker._global_updates
             return
         else:
             if self._assignments[-1].detection is None:
