@@ -16,12 +16,13 @@ from tengu_observer import *
 
 class Tengu(object):
 
-    def __init__(self):
+    def __init__(self, every_x_frame=1):
         self.logger= logging.getLogger(__name__)
 
         self._observers = WeakValueDictionary()
         self._src = None
         self._current_frame = -1
+        self._every_x_frame = every_x_frame
 
         self._stopped = False
 
@@ -132,12 +133,14 @@ class Tengu(object):
                 self.logger.debug('no frame is avaiable')
                 break
 
-            # TEST
-            if self._current_frame > 10000:
-                break
-
             # increment
             self._current_frame += 1
+
+            # skip if necessary
+            if self._every_x_frame > 1 and self._current_frame % self._every_x_frame != 0:
+                self._current_frame += 1
+                self.logger.debug('skipping frame at {}'.format(self._current_frame))
+                continue
 
             # block for a client if necessary to synchronize
             if queue is not None:
