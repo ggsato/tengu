@@ -391,7 +391,6 @@ class ClusteredKLTTracker(TenguTracker):
         check if a node is similar enough to another.
         if similar, create or update their edge, otherwise, ignore.
         """
-        updated_edges = []
         last_node = None
         for node in in_nodes:
             if last_node is None:
@@ -418,17 +417,29 @@ class ClusteredKLTTracker(TenguTracker):
             if not self.graph.has_edge(node, last_node):
                 # create one
                 self.logger.debug('creating an edge from {} to {}, similarity={}'.format(node, last_node, similarity))
-                edge = (node, last_node, {'weight': 1})
+                edge = (node, last_node, {'weight': ClusteredKLTTracker.weight_from_similarity(similarity), 'last_update': TenguTracker._global_updates})
                 self.graph.add_edges_from([edge])
-                updated_edges.append(edge)
+                # # check
+                # if not self.graph.has_edge(last_node, node):
+                #     self.logger.error('edge is directed!')
+                # last_edges = self.graph.edges(last_node)
+                # found = False
+                # for last_edge in last_edges:
+                #     if last_edge[0] == node or last_edge[1] == node:
+                #         found = True
+                #         break
+                # if not found:
+                #     self.logger.error('edge is not found in edges!')
             edge = self.graph[node][last_node]
-            if not edge in updated_edges:
-                current_weight = edge['weight']
-                edge['weight'] = current_weight + 1
+            if edge['last_update'] != TenguTracker._global_updates:
+                edge['weight'] = ClusteredKLTTracker.weight_from_similarity(similarity)
+                edge['last_update'] = TenguTracker._global_updates
                 self.logger.debug('updating an edge, {}, from {} to {}'.format(edge, current_weight, edge['weight']))
-                updated_edges.append(edge)
             last_node = node
-        self.logger.debug('updated {} edges'.format(len(updated_edges)))
+
+    @staticmethod
+    def weight_from_similarity(similarity):
+        return int(min(similarity) * 10)
 
     def find_node_clusters(self):
 
@@ -439,26 +450,11 @@ class ClusteredKLTTracker(TenguTracker):
         node_clusters = []
         for group in community:
             if len(group) > ClusteredKLTTracker._minimum_community_size:
-                self.find_and_cut_obsolete_edges(group)
                 self.logger.debug('found a group of size {}'.format(len(group)))
                 node_clusters.append(NodeCluster(group))
         self.logger.debug('community groups: {}, large enough groups: {}'.format(len(community), len(node_clusters)))
 
         return node_clusters
-
-    def find_and_cut_obsolete_edges(self, group):
-
-        for node in group:
-            edges = self.graph.edges(node)
-            for edge in edges:
-                another = edge[1]
-                similarity = node.similarity(another)
-                # TODO consider better ways to find out this threshold
-                if similarity <  ClusteredKLTTracker._minimum_node_similarity:
-                    self.graph.remove_edge(node, another)
-                    self.logger.debug('the similarity({}) is too low, removed and edge from {} to {}'.format(similarity, node, another))
-                else:
-                    cv2.line(self.debug, node.tr[-1], another.tr[-1], 192, min(10, self.graph[node][another]['weight']))
 
     def assign_detections_to_node_clusters(self, detections, node_clusters):
         """
@@ -510,13 +506,28 @@ class ClusteredKLTTracker(TenguTracker):
                 del self._klt_scene_analyzer.nodes[self._klt_scene_analyzer.nodes.index(node)]
                 self.logger.debug('removed obsolete node and its edges due to diff = {}'.format(diff))
 
+        self.find_and_cut_obsolete_edges()
+
+    def find_and_cut_obsolete_edges(self):
+
+        for node_cluster in self.current_node_clusters:
+            for node in self.graph:
+                edges = self.graph.edges(node)
+                for edge in edges:
+                    another = edge[1]
+                    if node == another:
+                        continue
+                    similarity = node.similarity(another)
+                    # TODO consider better ways to find out this threshold
+                    if min(similarity) <  ClusteredKLTTracker._minimum_node_similarity:
+                        self.graph.remove_edge(node, another)
+                        self.logger.debug('the similarity({}) is too low, removed and edge from {} to {}'.format(similarity, node, another))
+
     def draw_graph(self):
         graph_nodes = list(self.graph.nodes())
         for graph_node in graph_nodes:
             cv2.circle(self.debug, graph_node.tr[-1], 5, 128, -1)
             edges = list(self.graph.edges(graph_node))
-            for edge in edges:
-               cv2.line(self.debug, edge[0].tr[-1], edge[1].tr[-1], 128, min(10, self.graph[edge[0]][edge[1]]['weight']))
         for node_cluster in self.current_node_clusters:
             rect = node_cluster.rect_from_group()
             cv2.rectangle(self.debug, (rect[0], rect[1]), (rect[0]+rect[2], rect[1]+rect[3]), 255, 3)
