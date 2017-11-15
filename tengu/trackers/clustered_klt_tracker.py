@@ -378,7 +378,7 @@ class ClusteredKLTTracker(TenguTracker):
                     if not node in graph_nodes:
                         self.graph.add_node(node)
                     else:
-                        node.update_last_detected()
+                        node.update_last_detected(detection)
                     in_nodes_dict[detection].append(node)
 
         for detection in in_nodes_dict:
@@ -529,7 +529,6 @@ class ClusteredKLTTracker(TenguTracker):
         graph_nodes = list(self.graph.nodes())
         for graph_node in graph_nodes:
             cv2.circle(self.debug, graph_node.tr[-1], 5, 128, -1)
-            edges = list(self.graph.edges(graph_node))
         for node_cluster in self.current_node_clusters:
             rect = node_cluster.rect_from_group()
             cv2.rectangle(self.debug, (rect[0], rect[1]), (rect[0]+rect[2], rect[1]+rect[3]), 255, 3)

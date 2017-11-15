@@ -4,7 +4,7 @@ import logging, math
 import cv2
 import numpy as np
 
-from .tengu_tracker import TenguTracker
+from .tengu_tracker import TenguTracker, Tracklet
 
 class TenguSceneAnalyzer(object):
 
@@ -56,13 +56,15 @@ class TenguNode(object):
         super(TenguNode, self).__init__(*argv)
         self.logger = logging.getLogger(__name__)
         self.tr = tr
+        self._last_detection = None
         self._last_detected_at = TenguTracker._global_updates
         self._last_updated_at = TenguTracker._global_updates
 
     def __repr__(self):
         return 'node at {} detected at {} updated at {}'.format(self.tr[-1], self._last_detected_at, self._last_updated_at)
 
-    def update_last_detected(self):
+    def update_last_detected(self, detection):
+        self._last_detection = detection
         self._last_detected_at = TenguTracker._global_updates
 
     @property
@@ -101,11 +103,16 @@ class TenguNode(object):
         if self == another:
             self.logger.debug('similarity is 1.0, the same node')
             return [1.0, 1.0, 1.0, 1.0]
-        
+
         pos0 = self.tr[-1]
         pos1 = another.tr[-1]
         distance = TenguNode.compute_distance(pos0, pos1)
-        location_similarity = TenguNode._min_distance/max(TenguNode._min_distance, distance)
+        if self._last_detection is not None and (TenguTracker._global_updates-self._last_detected_at)<Tracklet._min_confirmation_updates:
+            # use detection
+            half_rect = min(self._last_detection[2:])/2
+            location_similarity = half_rect/max(half_rect, distance)
+        else:
+            location_similarity = TenguNode._min_distance/max(TenguNode._min_distance, distance)
         self.logger.debug('location_similarity between {} and {} is {}, distance={}'.format(pos0, pos1, location_similarity, distance))
 
         if len(self.tr) < TenguNode._min_length or len(another.tr) < TenguNode._min_length:
@@ -165,6 +172,7 @@ class TenguNode(object):
         # debug
         disable_similarity = False
         if disable_similarity:
+            location_similarity = 1.0
             orientation_similarity = 1.0
             speed_similarity = 1.0
             acceleration_similarity = 1.0
