@@ -397,13 +397,14 @@ class ClusteredKLTTracker(TenguTracker):
             if last_node is None:
                 last_node = in_nodes[-1]
             similarity = node.similarity(last_node)
-            if similarity < ClusteredKLTTracker._minimum_node_similarity:
+            if min(similarity) < ClusteredKLTTracker._minimum_node_similarity:
                 self.logger.debug('skipping making edge, {} is not similar enough to {}, the similarity = {}'.format(node, last_node, similarity))
+                last_node = node
                 continue
             # make an edge
             if not self.graph.has_edge(node, last_node):
                 # create one
-                self.logger.debug('creating an edge from {} to {}'.format(node, last_node))
+                self.logger.debug('creating an edge from {} to {}, similarity={}'.format(node, last_node, similarity))
                 edge = (node, last_node, {'weight': 1})
                 self.graph.add_edges_from([edge])
                 updated_edges.append(edge)
@@ -413,6 +414,7 @@ class ClusteredKLTTracker(TenguTracker):
                 edge['weight'] = current_weight + 1
                 self.logger.debug('updating an edge, {}, from {} to {}'.format(edge, current_weight, edge['weight']))
                 updated_edges.append(edge)
+            last_node = node
         self.logger.debug('updated {} edges'.format(len(updated_edges)))
 
     def find_node_clusters(self):
@@ -507,7 +509,7 @@ class ClusteredKLTTracker(TenguTracker):
             cv2.rectangle(self.debug, (rect[0], rect[1]), (rect[0]+rect[2], rect[1]+rect[3]), 255, 3)
             for node in node_cluster.group:
                 cv2.circle(self.debug, node.tr[-1], 5, 256, -1)
-                edges = list(self.graph.edges(graph_node))
+                edges = list(self.graph.edges(node))
                 for edge in edges:
                     cv2.line(self.debug, edge[0].tr[-1], edge[1].tr[-1], 256, min(10, self.graph[edge[0]][edge[1]]['weight']))
 

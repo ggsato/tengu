@@ -41,14 +41,14 @@ class TenguSceneAnalyzer(object):
 class TenguNode(object):
 
     # location, orientation, acceleration, speed
+    _min_length = 25
     # if threshold is 0.5, the lowest similarity Smin:
     # Smin = 100
-    _min_distance = 50.
+    _min_distance = 50
     # Smin = 10 degrees
-    _min_angle = math.pi / 180 * 5
-    # Smin = 10 per 10 frames
-    _min_speed = _min_distance / 100
-    _min_speed_length = 10
+    _min_angle = math.pi / 180 * 10
+    # Smin = 5 per 10 frames
+    _min_speed = 5
     # Smin = 1
     _min_acceleration = _min_speed / 5
 
@@ -58,6 +58,9 @@ class TenguNode(object):
         self.tr = tr
         self._last_detected_at = TenguTracker._global_updates
         self._last_updated_at = TenguTracker._global_updates
+
+    def __repr__(self):
+        return 'node at {} detected at {} updated at {}'.format(self.tr[-1], self._last_detected_at, self._last_updated_at)
 
     def update_last_detected(self):
         self._last_detected_at = TenguTracker._global_updates
@@ -97,41 +100,64 @@ class TenguNode(object):
 
         if self == another:
             self.logger.debug('similarity is 1.0, the same node')
-            return 1.0
+            return [1.0, 1.0, 1.0, 1.0]
         
         pos0 = self.tr[-1]
         pos1 = another.tr[-1]
-        distance = max(TenguNode._min_distance, TenguNode.compute_distance(pos0, pos1))
-        location_similarity = TenguNode._min_distance/distance
+        distance = TenguNode.compute_distance(pos0, pos1)
+        location_similarity = TenguNode._min_distance/max(TenguNode._min_distance, distance)
         self.logger.debug('location_similarity between {} and {} is {}, distance={}'.format(pos0, pos1, location_similarity, distance))
 
-        angle0 = TenguNode.get_angle(self.tr)
-        angle1 = TenguNode.get_angle(another.tr)
-        diff_angle = max(TenguNode._min_angle, math.fabs(angle0 - angle1))
-        if diff_angle > math.pi:
-            diff_angle -= math.pi
-        orientation_similarity = TenguNode._min_angle/diff_angle
-        self.logger.debug('orientation_similarity between {} and {} is {}, diff={}'.format(angle0, angle1, orientation_similarity, diff_angle))
-
-        if len(self.tr) < TenguNode._min_speed_length or len(another.tr) < TenguNode._min_speed_length:
-            speed_similarity = 1.0
-            acceleration_similarity = 1.0
-            self.logger.debug('skipping speed and acceleration similarity calculation')
+        if len(self.tr) < TenguNode._min_length or len(another.tr) < TenguNode._min_length:
+            # not reliable
+            orientation_similarity = 0
+            speed_similarity = 0
+            acceleration_similarity = 0
         else:
-            speed0 = TenguNode.compute_distance(pos0, self.tr[-1 * TenguNode._min_speed_length])
-            speed1 = TenguNode.compute_distance(pos1, another.tr[-1 * TenguNode._min_speed_length])
-            diff_speed = max(TenguNode._min_speed, math.fabs(speed0 - speed1))
-            speed_similarity = TenguNode._min_speed/diff_speed
-            self.logger.debug('speed similarity between {} and {} is {}, diff={}'.format(speed0, speed1, speed_similarity, diff_speed))
+            pos01 = self.tr[-1 * TenguNode._min_length]
+            pos11 = another.tr[-1 * TenguNode._min_length]
+            distance0 = TenguNode.compute_distance(pos0, pos01)
+            distance1 = TenguNode.compute_distance(pos1, pos11)
+            if distance0 > 5:
+                self.logger.debug('distance0 between {} and {} is {}'.format(pos0, pos01, distance0))
+                self.logger.debug('tr = {}'.format(self.tr))
 
-            if len(self.tr) < TenguNode._min_speed_length*2 or len(another.tr) < TenguNode._min_speed_length*2:
+            if distance0 < TenguNode._min_speed:
+                # stationally
+                angle0 = None
+            else:
+                angle0 = TenguNode.get_angle(self.tr)
+            if distance1 < TenguNode._min_speed:
+                # stationally
+                angle1 = None
+            else:
+                angle1 = TenguNode.get_angle(another.tr)
+
+            diff_angle = None
+            if angle0 is None and angle1 is None:
+                # both are stationally
+                orientation_similarity = 1.0
+            elif angle0 is None or angle1 is None:
+                orientation_similarity = 0.0
+            else:
+                diff_angle = max(TenguNode._min_angle, math.fabs(angle0 - angle1))
+                if diff_angle > math.pi:
+                    diff_angle -= math.pi
+                orientation_similarity = TenguNode._min_angle/diff_angle
+            self.logger.debug('orientation_similarity between {} and {} is {}, diff={}'.format(angle0, angle1, orientation_similarity, diff_angle))
+
+            diff_speed = max(TenguNode._min_speed, math.fabs(distance0 - distance1))
+            speed_similarity = TenguNode._min_speed/diff_speed
+            self.logger.debug('speed similarity between {} and {} is {}, diff={}'.format(distance0, distance1, speed_similarity, diff_speed))
+
+            if len(self.tr) < TenguNode._min_length*2 or len(another.tr) < TenguNode._min_length*2:
                 acceleration_similarity = 1.0
                 self.logger.debug('skipping acceleration similarity calculation')
             else:
-                speed00 = TenguNode.compute_distance(self.tr[0], self.tr[TenguNode._min_speed_length])
-                speed10 = TenguNode.compute_distance(another.tr[0], another.tr[TenguNode._min_speed_length])
-                acceleration0 = speed0 - speed00
-                acceleration1 = speed1 - speed10
+                distance00 = TenguNode.compute_distance(self.tr[0], self.tr[TenguNode._min_length])
+                distance10 = TenguNode.compute_distance(another.tr[0], another.tr[TenguNode._min_length])
+                acceleration0 = distance0 - distance00
+                acceleration1 = distance1 - distance10
                 diff_acceleration = max(TenguNode._min_acceleration, math.fabs(acceleration1 - acceleration0))
                 acceleration_similarity = TenguNode._min_acceleration / diff_acceleration
                 self.logger.debug('acceleration similarity between {} and {} is {}, diff={}'.format(acceleration0, acceleration1, acceleration_similarity, diff_acceleration))
@@ -139,12 +165,11 @@ class TenguNode(object):
         # debug
         disable_similarity = False
         if disable_similarity:
-            location_similarity = 1.0
             orientation_similarity = 1.0
             speed_similarity = 1.0
             acceleration_similarity = 1.0
 
-        similarity = min(location_similarity, orientation_similarity, speed_similarity, acceleration_similarity)
+        similarity = [location_similarity, orientation_similarity, speed_similarity, acceleration_similarity]
 
         self.logger.debug('similarity = {} [{}, {}, {}, {}]'.format(similarity, location_similarity, orientation_similarity, speed_similarity, acceleration_similarity))
 
@@ -156,7 +181,7 @@ class TenguNode(object):
 
     @staticmethod
     def get_angle(tr):
-        p_from = tr[0]
+        p_from = tr[-1 * TenguNode._min_length]
         p_to = tr[-1]
         diff_x = p_to[0] - p_from[0]
         diff_y = p_to[1] - p_from[1]
