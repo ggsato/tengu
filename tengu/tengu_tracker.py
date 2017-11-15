@@ -167,15 +167,15 @@ class TenguTracker(object):
         lap1 = time.time()
         self.logger.debug('prepare_updates took {} s'.format(lap1 - start))
 
-        tengu_cost_matrix_list = self.calculate_cost_matrix(detections)
+        tengu_cost_matrix = self.calculate_cost_matrix(detections)
         lap2 = time.time()
         self.logger.debug('calculate_cost_matrix took {} s'.format(lap2 - lap1))
 
-        TenguTracker.optimize_and_assign(tengu_cost_matrix_list)
+        TenguTracker.optimize_and_assign(tengu_cost_matrix)
         lap3 = time.time()
         self.logger.debug('optimize_and_assign took {} s'.format(lap3 - lap2))
 
-        self.update_trackings_with_optimized_assignments(tengu_cost_matrix_list)
+        self.update_trackings_with_optimized_assignments(tengu_cost_matrix)
         lap4 = time.time()
         self.logger.debug('update_trackings_with_optimized_assignments took {} s'.format(lap4 - lap3))
 
@@ -216,7 +216,7 @@ class TenguTracker(object):
                 cost = self.calculate_cost_by_overlap_ratio(tracklet.rect, detection)
                 cost_matrix[t][d] = cost
                 self.logger.debug('cost at [{}][{}] of ({}, {}) = {}'.format(t, d, id(tracklet), id(detection), cost))
-        return [TenguCostMatrix(detections, cost_matrix)]
+        return TenguCostMatrix(detections, cost_matrix)
 
     def create_empty_cost_matrix(self, cols):
         if len(self._tracklets) == 0:
@@ -260,40 +260,38 @@ class TenguTracker(object):
         return ratio
 
     @staticmethod
-    def optimize_and_assign(tengu_cost_matrix_list):
-        for tengu_cost_matrix in tengu_cost_matrix_list:
-            row_ind, col_ind = linear_sum_assignment(tengu_cost_matrix.cost_matrix)
-            tengu_cost_matrix.ind = (row_ind, col_ind)
+    def optimize_and_assign(tengu_cost_matrix):
+        row_ind, col_ind = linear_sum_assignment(tengu_cost_matrix.cost_matrix)
+        tengu_cost_matrix.ind = (row_ind, col_ind)
 
-    def update_trackings_with_optimized_assignments(self, tengu_cost_matrix_list):
-        for m, tengu_cost_matrix in enumerate(tengu_cost_matrix_list):
-            self.logger.debug('updating based on {} cost matrix, ind ={}'.format(m, tengu_cost_matrix.ind))
-            for ix, row in enumerate(tengu_cost_matrix.ind[0]):
-                cost = tengu_cost_matrix.cost_matrix[row][tengu_cost_matrix.ind[1][ix]]
-                tracklet = self._tracklets[row]
-                if cost > TenguTracker._confident_min_cost:
-                    self.logger.debug('{} is not updated due to too high cost {}'.format(tracklet.obj_id, cost))
+    def update_trackings_with_optimized_assignments(self, tengu_cost_matrix):
+        self.logger.debug('updating trackings based on cost matrix, ind ={}'.format(tengu_cost_matrix.ind))
+        for ix, row in enumerate(tengu_cost_matrix.ind[0]):
+            cost = tengu_cost_matrix.cost_matrix[row][tengu_cost_matrix.ind[1][ix]]
+            tracklet = self._tracklets[row]
+            if cost > TenguTracker._confident_min_cost:
+                self.logger.debug('{} is not updated due to too high cost {}'.format(tracklet.obj_id, cost))
+                continue
+            new_assignment = tengu_cost_matrix.assignments[tengu_cost_matrix.ind[1][ix]]
+            self.logger.debug('updating tracked object {} of id={} having {} with {} at {}'.format(id(tracklet), tracklet.obj_id, tracklet.rect, new_assignment, TenguTracker._global_updates))
+            tracklet.update_with_assignment(new_assignment)
+
+        # create new ones
+        for ix, assignment in enumerate(tengu_cost_matrix.assignments):
+            if not ix in tengu_cost_matrix.ind[1]:
+                # this is not assigned, create a new one
+                # but do not create one contains existing tracklets
+                to = self.new_tracklet(assignment)
+                contains = False
+                for tracklet in self._tracklets:
+                    if self.rect_contains(to.rect, tracklet.rect):
+                        contains = True
+                        break
+                if contains:
+                    self.logger.info('skipping creating a new, but disturbing tracklet {}'.format(to))
                     continue
-                new_assignment = tengu_cost_matrix.assignments[tengu_cost_matrix.ind[1][ix]]
-                self.logger.debug('updating tracked object {} of id={} having {} with {} at {}'.format(id(tracklet), tracklet.obj_id, tracklet.rect, new_assignment, TenguTracker._global_updates))
-                tracklet.update_with_assignment(new_assignment)
-
-            # create new ones
-            for ix, assignment in enumerate(tengu_cost_matrix.assignments):
-                if not ix in tengu_cost_matrix.ind[1]:
-                    # this is not assigned, create a new one
-                    # but do not create one contains existing tracklets
-                    to = self.new_tracklet(assignment)
-                    contains = False
-                    for tracklet in self._tracklets:
-                        if self.rect_contains(to.rect, tracklet.rect):
-                            contains = True
-                            break
-                    if contains:
-                        self.logger.info('skipping creating a new, but disturbing tracklet {}'.format(to))
-                        continue
-                    self._tracklets.append(to)
-                    self.logger.debug('created tracked object {} of id={} at {}'.format(to, to.obj_id, TenguTracker._global_updates))
+                self._tracklets.append(to)
+                self.logger.debug('created tracked object {} of id={} at {}'.format(to, to.obj_id, TenguTracker._global_updates))
 
         for tracklet in self._tracklets:
             if not tracklet.updated:
