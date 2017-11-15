@@ -511,7 +511,9 @@ class ClusteredKLTTracker(TenguTracker):
     def find_and_cut_obsolete_edges(self):
 
         for node_cluster in self.current_node_clusters:
-            for node in self.graph:
+            for node in node_cluster.group:
+                if not self.graph.has_node(node):
+                    continue
                 edges = self.graph.edges(node)
                 for edge in edges:
                     another = edge[1]
