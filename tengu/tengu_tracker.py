@@ -29,6 +29,8 @@ class Tracklet(object):
         self._rect = None
         self._recent_updates = ['N/A']
 
+    # Tracklet Properties
+
     @property
     def obj_id(self):
         return self._obj_id
@@ -49,6 +51,10 @@ class Tracklet(object):
     @property
     def rect(self):
         return self._rect
+
+    @property
+    def confidence(self):
+        pass
 
     @property
     def last_updated_at(self):
@@ -274,7 +280,7 @@ class TenguTracker(object):
                 continue
             new_assignment = tengu_cost_matrix.assignments[tengu_cost_matrix.ind[1][ix]]
             self.logger.debug('updating tracked object {} of id={} having {} with {} at {}'.format(id(tracklet), tracklet.obj_id, tracklet.rect, new_assignment, TenguTracker._global_updates))
-            tracklet.update_with_assignment(new_assignment)
+            self.assign_new_to_tracklet(new_assignment, tracklet)
 
         # create new ones
         for ix, assignment in enumerate(tengu_cost_matrix.assignments):
@@ -295,7 +301,13 @@ class TenguTracker(object):
 
         for tracklet in self._tracklets:
             if not tracklet.updated:
-                tracklet.update_without_assignment()
+                self.assign_new_to_tracklet(None, tracklet)
+
+    def assign_new_to_tracklet(self, new_assignment, tracklet):
+        if new_assignment is None:
+            tracklet.update_without_assignment()
+        else:
+            tracklet.update_with_assignment(new_assignment)
 
     @staticmethod
     def rect_contains(rect_a, rect_b):

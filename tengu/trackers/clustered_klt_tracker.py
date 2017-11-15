@@ -32,9 +32,10 @@ a cost matrix is calculated for assignments.
 
 class ClusteredKLTTracklet(Tracklet):
 
-    def __init__(self, tracker):
+    def __init__(self, tracker, nodes):
         super(ClusteredKLTTracklet, self).__init__()
         self.tracker = tracker
+        self._nodes = nodes
         self._rect = None
 
     @property
@@ -118,8 +119,7 @@ class ClusteredKLTTracklet(Tracklet):
                 #    # find from existing nodes matching this detection
                 #    group = self.tracker.find_nodes_inside_detection(assignment)
 
-                empty = NodeCluster(group)
-                empty.detection = assignment
+                empty = NodeCluster(group, assignment)
                 self._assignments.append(empty)
                 self._rect = assignment
                 if len(group) > 0:
@@ -146,7 +146,7 @@ class ClusteredKLTTracklet(Tracklet):
 
         # pattern 4
         if len(valid_group) > 0:
-            empty = NodeCluster(valid_group)
+            empty = NodeCluster(valid_group, None)
             self._assignments.append(empty)
             next_rect = empty.estinamte_next_rect(self._rect)
             if next_rect is None:
@@ -196,11 +196,11 @@ class NodeCluster(object):
 
     _min_rect_length = 10
 
-    def __init__(self, group):
+    def __init__(self, group, detection):
         super(NodeCluster, self).__init__()
         self.logger = logging.getLogger(__name__)
         self.group = group
-        self.detection = None
+        self.detection = detection
 
     def __repr__(self):
         return '{} nodes of {}, detection={}'.format(len(self.group), self.group, self.detection)
@@ -276,7 +276,8 @@ class ClusteredKLTTracker(TenguTracker):
         # TODO: check class?
         self._klt_scene_analyzer = klt_scene_analyzer
         self.graph = nx.Graph()
-        self.current_node_clusters = None
+        self.current_node_clusters = []
+        self.detection_node_map = None
         self.debug = None
 
     def prepare_updates(self, detections):
@@ -293,19 +294,9 @@ class ClusteredKLTTracker(TenguTracker):
         self.logger.debug('udpate_graph took {} s'.format(lap1 - start))
 
         # update weights
-        self.update_weights(detections)
+        self.detection_node_map = self.update_weights(detections)
         lap2 = time.time()
         self.logger.debug('update_weights took {} s'.format(lap2 - lap1))
-
-        # detect communities
-        self.current_node_clusters = self.find_node_clusters()
-        lap3 = time.time()
-        self.logger.debug('find_node_clusters took {} s'.format(lap3 - lap2))
-
-        # assign detections to node_clusters
-        self.assign_detections_to_node_clusters(detections, self.current_node_clusters)
-        lap4 = time.time()
-        self.logger.debug('assign_detections_to_node_clusters took {} s'.format(lap4 - lap3))
 
         end = time.time()
         self.logger.debug('prepare_updates took {} s'.format(end - start))
@@ -321,31 +312,13 @@ class ClusteredKLTTracker(TenguTracker):
         
         self.prepare_updates(detections)
 
-        for node_cluster in self.current_node_clusters:
-            to = self.new_tracklet(node_cluster)
-            self._tracklets.append(to)
-
-        self.logger.debug('initialized {} klt tracked objects'.format(len(self.current_node_clusters)))
+        for detection in detections:
+            self._tracklets.append(self.new_tracklet(detection))
 
     def new_tracklet(self, assignment):
-        to = ClusteredKLTTracklet(self)
-        self.logger.debug('created klt tracked object {} of id {}'.format(to, to.obj_id))
+        to = ClusteredKLTTracklet(self, self.detection_node_map[assignment])
         to.update_with_assignment(assignment)
         return to
-
-    def calculate_cost_matrix(self, detections):        
-
-        # create a cost matrix
-        cost_matrix = self.create_empty_cost_matrix(len(self.current_node_clusters))
-        for t, tracklet in enumerate(self._tracklets):
-            for c, node_cluster in enumerate(self.current_node_clusters):
-                cost = self.calculate_cost(tracklet, node_cluster)
-                cost_matrix[t][c] = cost
-
-        tengu_cost_matrix = TenguCostMatrix(self.current_node_clusters, cost_matrix)
-        overlap_cost_matrix = super(ClusteredKLTTracker, self).calculate_cost_matrix(detections)[0]
-
-        return [tengu_cost_matrix, overlap_cost_matrix]
 
     def update_graph(self):
         
@@ -367,9 +340,9 @@ class ClusteredKLTTracker(TenguTracker):
 
     def update_weights(self, detections):
         
-        in_nodes_dict = {}
+        detection_node_map = {}
         for detection in detections:
-            in_nodes_dict[detection] = []
+            detection_node_map[detection] = []
         nodes = self._klt_scene_analyzer.nodes
         graph_nodes = list(self.graph.nodes())
         for node in nodes:
@@ -379,12 +352,14 @@ class ClusteredKLTTracker(TenguTracker):
                         self.graph.add_node(node)
                     else:
                         node.update_last_detected(detection)
-                    in_nodes_dict[detection].append(node)
+                    detection_node_map[detection].append(node)
 
-        for detection in in_nodes_dict:
-            in_nodes = in_nodes_dict[detection]
+        for detection in detection_node_map:
+            in_nodes = detection_node_map[detection]
             self.update_mutual_edges_weight(in_nodes)
             self.logger.debug('found {} in-nodes in {}'.format(len(in_nodes), detection))
+
+        return detection_node_map
 
     def update_mutual_edges_weight(self, in_nodes):
         """
@@ -441,52 +416,11 @@ class ClusteredKLTTracker(TenguTracker):
     def weight_from_similarity(similarity):
         return int(min(similarity) * 10)
 
-    def find_node_clusters(self):
-
-        #communities = nxcom.girvan_newman(self.graph)
-        #community = next(communities)
-        # TODO: this simply finds connected sets of nodes, so find a way to disconnect
-        community = sorted(nx.connected_components(self.graph), key=len, reverse=True)
-        node_clusters = []
-        for group in community:
-            if len(group) > ClusteredKLTTracker._minimum_community_size:
-                self.logger.debug('found a group of size {}'.format(len(group)))
-                node_clusters.append(NodeCluster(group))
-        self.logger.debug('community groups: {}, large enough groups: {}'.format(len(community), len(node_clusters)))
-
-        return node_clusters
-
-    def assign_detections_to_node_clusters(self, detections, node_clusters):
-        """
-        create a cost matrix Cmn, m is the number of node_clusters, n is of detections
-        then, solve by hungarian algorithm
-        """
-        # create cost matrix
-        shape = (len(node_clusters), len(detections))
-        cost_matrix = np.zeros(shape, dtype=np.float32)
-        if len(shape) == 1:
-            # the dimesion should be forced
-            cost_matrix = np.expand_dims(cost_matrix, axis=1)
-        for c, node_cluster in enumerate(node_clusters):
-            for d, detection in enumerate(detections):
-                covered = 0
-                for graph_node in node_cluster.group:
-                    if graph_node.inside_rect(detection):
-                        covered += 1
-                coverage = 0.
-                if covered > 0:
-                    coverage = covered / len(node_cluster.group)
-                cost_matrix[c][d] = -1 * math.log(max(coverage, TenguTracker._min_value))
-        # solve
-        tengu_cost_matrix = TenguCostMatrix(detections, cost_matrix)
-        TenguTracker.optimize_and_assign([tengu_cost_matrix])
-        for ix, row in enumerate(tengu_cost_matrix.ind[0]):
-            node_clusters[row].detection = detections[tengu_cost_matrix.ind[1][ix]]
-
-        # NOTE that some node clusters may not be assigned detections
-
-    def calculate_cost(self, tracklet, node_cluster):
-        return super(ClusteredKLTTracker, self).calculate_cost_by_overlap_ratio(tracklet.rect, node_cluster.rect_from_group())
+    def assign_new_to_tracklet(self, new_assignment, tracklet):
+        if new_assignment is None:
+            tracklet.update_without_assignment()
+        else:
+            tracklet.update_with_assignment(NodeCluster(self.detection_node_map[new_assignment], new_assignment))
 
     def obsolete_trackings(self):
 
@@ -537,11 +471,3 @@ class ClusteredKLTTracker(TenguTracker):
                 edges = list(self.graph.edges(node))
                 for edge in edges:
                     cv2.line(self.debug, edge[0].tr[-1], edge[1].tr[-1], 256, min(10, self.graph[edge[0]][edge[1]]['weight']))
-
-    def find_nodes_inside_detection(self, detection):
-        nodes = []
-        graph_nodes = list(self.graph.nodes())
-        for graph_node in graph_nodes:
-            if graph_node.inside_rect(detection):
-                nodes.append(graph_node)
-        return nodes
