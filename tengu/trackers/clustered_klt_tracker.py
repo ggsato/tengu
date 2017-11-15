@@ -401,6 +401,19 @@ class ClusteredKLTTracker(TenguTracker):
                 self.logger.debug('skipping making edge, {} is not similar enough to {}, the similarity = {}'.format(node, last_node, similarity))
                 last_node = node
                 continue
+            # choose better edge
+            # here, choose only one
+            make_one = True
+            existing_edges = self.graph.edges(node)
+            for existing_edge in existing_edges:
+                another_node = existing_edge[1]
+                if node == another_node:
+                    another_node = existing_edge[0]
+                another_similarity = node.similarity(another_node)
+                if another_similarity >= similarity:
+                    make_one = False
+            if not make_one:
+                continue
             # make an edge
             if not self.graph.has_edge(node, last_node):
                 # create one
