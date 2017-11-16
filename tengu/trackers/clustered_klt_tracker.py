@@ -36,7 +36,7 @@ class ClusteredKLTTracklet(Tracklet):
         super(ClusteredKLTTracklet, self).__init__()
         self.tracker = tracker
         self._rect = None
-        self._validated_nodes = []
+        self._validated_nodes = set()
 
     @property
     def rect(self):
@@ -137,15 +137,34 @@ class ClusteredKLTTracklet(Tracklet):
         """
         check and merge valid nodes
         """
+        latest_set = set(self._assignments[-1].group)
         if len(self._validated_nodes) == 0:
-            self._validated_nodes = self._assignments[-1].group
+            self._validated_nodes = latest_set
             return True
 
-        # check first
-        for node in self._validated_nodes:
-            pass
+        # merge
+        self._validated_nodes = self._validated_nodes | latest_set
 
-        return True
+        # check
+        validated = set()
+        for node in self._validated_nodes:
+            # in the first place, remove if outdated
+            if node.last_updated_at != TenguTracker._global_updates-1:
+                continue 
+            if node in validated:
+                continue
+            # then, find at least one similar node
+            for another in self._validated_nodes:
+                if node == another:
+                    continue
+                similarity = node.similarity(another)
+                if min(similarity) >=  ClusteredKLTTracker._minimum_node_similarity:
+                    # found one
+                    validated = validated | set([node, another])
+                    break
+        self._validated_nodes = validated
+
+        return len(self._validated_nodes) > 0
 
 class NodeCluster(object):
 
