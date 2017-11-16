@@ -130,10 +130,10 @@ class ClusteredKLTTracklet(Tracklet):
         new_y = self._rect[1] + last_move_y * Tracklet._estimation_decay
         self._rect = (new_x, new_y, self._rect[2], self._rect[3])
         
-        if self.validate_nodes():
+        if self.validate_nodes(check=True):
             self._last_updated_at = TenguTracker._global_updates
 
-    def validate_nodes(self):
+    def validate_nodes(self, check=False):
         """
         check and merge valid nodes
         """
@@ -146,23 +146,24 @@ class ClusteredKLTTracklet(Tracklet):
         self._validated_nodes = self._validated_nodes | latest_set
 
         # check
-        validated = set()
-        for node in self._validated_nodes:
-            # in the first place, remove if outdated
-            if node.last_updated_at != TenguTracker._global_updates-1:
-                continue 
-            if node in validated:
-                continue
-            # then, find at least one similar node
-            for another in self._validated_nodes:
-                if node == another:
+        if check:
+            validated = set()
+            for node in self._validated_nodes:
+                # in the first place, remove if outdated
+                if node.last_updated_at != TenguTracker._global_updates-1:
+                    continue 
+                if node in validated:
                     continue
-                similarity = node.similarity(another)
-                if min(similarity) >=  ClusteredKLTTracker._minimum_node_similarity:
-                    # found one
-                    validated = validated | set([node, another])
-                    break
-        self._validated_nodes = validated
+                # then, find at least one similar node
+                for another in self._validated_nodes:
+                    if node == another:
+                        continue
+                    similarity = node.similarity(another)
+                    if min(similarity) >=  ClusteredKLTTracker._minimum_node_similarity:
+                        # found one
+                        validated = validated | set([node, another])
+                        break
+            self._validated_nodes = validated
 
         return len(self._validated_nodes) > 0
 
