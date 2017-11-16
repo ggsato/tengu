@@ -27,6 +27,8 @@ class Tracklet(object):
         self._last_updated_at = -1
         self._assignments = []
         self._rect = None
+        self._movement = None
+        self._confidence = 0
         self._recent_updates = ['N/A']
 
     # Tracklet Properties
@@ -37,16 +39,8 @@ class Tracklet(object):
     
     # tracklet properties
     @property
-    def position(self):
-        pass
-
-    @property
-    def size(self):
-        pass
-
-    @property
-    def velocity(self):
-        pass
+    def movement(self):
+        return self._movement
 
     @property
     def rect(self):
@@ -54,7 +48,7 @@ class Tracklet(object):
 
     @property
     def confidence(self):
-        pass
+        return self._confidence
 
     @property
     def last_updated_at(self):

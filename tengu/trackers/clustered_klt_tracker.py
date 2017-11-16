@@ -45,16 +45,11 @@ class ClusteredKLTTracklet(Tracklet):
         1. with assignment
             rect <= detection
         2. without assignment
-            2-0: find valid nodes, and update its position
-            2-1: the last update was done without detection either by 3 or 2
-                rect <= avg_movement or NO UPDATE
-            2-2: the last update was done with detecion
-                2-2-1: only one detection is available
-                    rect <= NO UPDATE
-                2-2-2: the second last node cluster is available
-                    rect <= avg_movement or NO UPDATE
-                2-2-3: 2 detections are available
-                    rect <= two previous rects
+            2-0: update its position by valid ndoes
+            2-1: no valid nodes anymore, only one assignment is available
+                rect <= NO UPDATE
+            2-2: 2 detections are available
+                rect <= two previous rects
         """
         return self._rect
 
@@ -64,11 +59,16 @@ class ClusteredKLTTracklet(Tracklet):
         
         # update
         self._assignments.append(assignment)
-        self._rect = assignment.detection
+        self._validated_nodes = set(assignment.group)
+        self.update_properties()
         self.recent_updates_by('1')
 
-        if self.validate_nodes():
-            self._last_updated_at = TenguTracker._global_updates
+        self._last_updated_at = TenguTracker._global_updates
+
+    def update_properties(self):
+        assignment = self._assignments[-1]
+        self._rect = assignment.detection
+        self._position = NodeCluster.center(self._rect)
 
     def update_without_assignment(self):
         if Tracklet._disable_estimation:
@@ -76,64 +76,34 @@ class ClusteredKLTTracklet(Tracklet):
 
         self.logger.debug('updating without {}@{}'.format(id(self), self.obj_id))
 
-        valid_group = []
-        if len(self._assignments) > 0 and self._assignments[-1].group is not None:
-            for node in self._assignments[-1].group:
-                if node.last_updated_at == TenguTracker._global_updates-1:
-                    valid_group.append(node)
-
-        # pattern 2
-        if len(valid_group) > 0:
-            empty = NodeCluster(valid_group, None)
-            self._assignments.append(empty)
+        if len(self._validated_nodes) > 0:
+            empty = NodeCluster(self._validated_nodes, None)
             next_rect = empty.estinamte_next_rect(self._rect)
             if next_rect is None:
                 self.recent_updates_by('2-0x')
             else:
                 self._rect = next_rect
                 self.recent_updates_by('2-0')
-            #self._last_updated_at = TenguTracker._global_updates
-            return
         else:
-            if self._assignments[-1].detection is None:
-                # pattern 2-1
-                # estimate from node cluster
-                last_move_x, last_move_y = self._assignments[-1].avg_movement()
-                if last_move_x is None:
-                    # can't estimate
-                    self.recent_updates_by('2-1x')
-                    return
+            # pattern 2-1
+            if len(self._assignments) == 1:
+                # 2-1
+                # only one detection is available, can't estimate
                 self.recent_updates_by('2-1')
             else:
-                # pattern 2-2
-                if len(self._assignments) == 1:
-                    # 2-2-1
-                    # only one detection is available, can't estimate
-                    self.recent_updates_by('2-2-1')
-                    return
-                elif self._assignments[-2].detection is None:
-                    # 2-2-2
-                    last_move_x, last_move_y = self._assignments[-2].avg_movement()
-                    if last_move_x is None:
-                        # can't estimate
-                        self.recent_updates_by('2-2-2x')
-                        return
-                    self.recent_updates_by('2-2-2')
-                else:
-                    # 2-2-3
-                    prev = self._assignments[-1].detection
-                    prev2 = self._assignments[-2].detection
-                    last_move_x, last_move_y = Tracklet.movement_from_rects(prev, prev2)
-                    self.recent_updates_by('2-2-3')
+                # 2-2
+                prev = self._assignments[-1].detection
+                prev2 = self._assignments[-2].detection
+                last_move_x, last_move_y = Tracklet.movement_from_rects(prev, prev2)
+                self.recent_updates_by('2-2')
 
-        new_x = self._rect[0] + last_move_x * Tracklet._estimation_decay
-        new_y = self._rect[1] + last_move_y * Tracklet._estimation_decay
-        self._rect = (new_x, new_y, self._rect[2], self._rect[3])
+                new_x = self._rect[0] + last_move_x * Tracklet._estimation_decay
+                new_y = self._rect[1] + last_move_y * Tracklet._estimation_decay
+                self._rect = (new_x, new_y, self._rect[2], self._rect[3])
         
-        if self.validate_nodes(check=True):
-            self._last_updated_at = TenguTracker._global_updates
+        self.validate_nodes()
 
-    def validate_nodes(self, check=False):
+    def validate_nodes(self):
         """
         check and merge valid nodes
         """
@@ -142,28 +112,26 @@ class ClusteredKLTTracklet(Tracklet):
             self._validated_nodes = latest_set
             return True
 
-        # merge
-        self._validated_nodes = self._validated_nodes | latest_set
-
         # check
-        if check:
-            validated = set()
-            for node in self._validated_nodes:
-                # in the first place, remove if outdated
-                if node.last_updated_at != TenguTracker._global_updates-1:
-                    continue 
-                if node in validated:
+        validated = set()
+        for node in self._validated_nodes:
+            # in the first place, remove if outdated
+            if node.last_updated_at != TenguTracker._global_updates-1:
+                continue 
+            if node in validated:
+                continue
+            # then, find at least one similar node
+            for another in self._validated_nodes:
+                if node == another:
                     continue
-                # then, find at least one similar node
-                for another in self._validated_nodes:
-                    if node == another:
-                        continue
-                    similarity = node.similarity(another)
-                    if min(similarity) >=  ClusteredKLTTracker._minimum_node_similarity:
-                        # found one
-                        validated = validated | set([node, another])
-                        break
-            self._validated_nodes = validated
+                if another.last_updated_at != TenguTracker._global_updates-1:
+                    continue 
+                similarity = node.similarity(another)
+                if min(similarity) >=  ClusteredKLTTracker._minimum_node_similarity:
+                    # found one
+                    validated = validated | set([node, another])
+                    break
+        self._validated_nodes = validated
 
         return len(self._validated_nodes) > 0
 
@@ -240,6 +208,10 @@ class NodeCluster(object):
         next_rect = (int(total_estimates[0]/len(origin_estimates)), int(total_estimates[1]/len(origin_estimates)), current_rect[2], current_rect[3])
         self.logger.debug('next rect {} was estimated from {}'.format(next_rect, current_rect))
         return next_rect
+
+    @staticmethod
+    def center(rect):
+        return (rect[0]+int(rect[2]/2), rect[1]+int(rect[3]/2))
 
 class ClusteredKLTTracker(TenguTracker):
 
