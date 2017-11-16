@@ -93,11 +93,13 @@ class ClusteredKLTTracklet(Tracklet):
             # update
             self._assignments.append(assignment)
             self._validated_nodes = set(assignment.group)
-            self.update_properties()
+            self.update_properties(lost=False)
             self.recent_updates_by('1')
 
     def update_without_assignment(self):
         """
+        no update was available
+        so create a possible assignment to update
         """
 
         self.logger.debug('updating without {}@{}'.format(id(self), self.obj_id))
@@ -108,24 +110,13 @@ class ClusteredKLTTracklet(Tracklet):
             if next_rect is None:
                 self.recent_updates_by('2-0x')
             else:
-                self._rect = next_rect
+                empty.detection = next_rect
+                self._assignments.append(empty)
+                self.update_properties()
                 self.recent_updates_by('2-0')
         else:
-            # pattern 2-1
-            if len(self._assignments) == 1:
-                # 2-1
-                # only one detection is available, can't estimate
-                self.recent_updates_by('2-1')
-            else:
-                # 2-2
-                prev = self._assignments[-1].detection
-                prev2 = self._assignments[-2].detection
-                last_move_x, last_move_y = Tracklet.movement_from_rects(prev, prev2)
-                self.recent_updates_by('2-2')
-
-                new_x = self._rect[0] + last_move_x * Tracklet._estimation_decay
-                new_y = self._rect[1] + last_move_y * Tracklet._estimation_decay
-                self._rect = (new_x, new_y, self._rect[2], self._rect[3])
+            # pattern 2
+            self.recent_updates_by('2-1')
         
         self.validate_nodes()
 

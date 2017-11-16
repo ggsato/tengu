@@ -123,7 +123,7 @@ class Tracklet(object):
         """
         last_movement = self.last_movement()
         if last_movement is None:
-            return None
+            return
         
         new_x = self._rect[0] + last_movement[0] * Tracklet._estimation_decay
         new_y = self._rect[1] + last_movement[1] * Tracklet._estimation_decay
