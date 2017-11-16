@@ -32,38 +32,28 @@ a cost matrix is calculated for assignments.
 
 class ClusteredKLTTracklet(Tracklet):
 
-    def __init__(self, tracker, nodes):
+    def __init__(self, tracker):
         super(ClusteredKLTTracklet, self).__init__()
         self.tracker = tracker
-        self._nodes = nodes
         self._rect = None
+        self._validated_nodes = []
 
     @property
     def rect(self):
         """
         an internal rect is updated with or without assignment as follows:
-        1. both of node cluster and detection are available
-            1-1: 1st time by detection, and by node cluster 2nd time
-                rect <= 1st time detection
-            1-2: 1st time by node cluster, and by detection 2nd time
-                rect <= 2nd time detection
-        2. only node cluster is available
-            2-1: rect <= rect_from_group
-            2-2: rect <= avg_movement
-        3. only detection is available
-            3-1: reuse last group
-            3-2: reuse not available
-                rect <= detection
-        4. none is available
-            4-0: find valid nodes, and update its position
-            4-1: the last update was done without detection either by 3 or 2
+        1. with assignment
+            rect <= detection
+        2. without assignment
+            2-0: find valid nodes, and update its position
+            2-1: the last update was done without detection either by 3 or 2
                 rect <= avg_movement or NO UPDATE
-            4-2: the last update was done with detecion
-                4-2-1: only one detection is available
+            2-2: the last update was done with detecion
+                2-2-1: only one detection is available
                     rect <= NO UPDATE
-                4-2-2: the second last node cluster is available
+                2-2-2: the second last node cluster is available
                     rect <= avg_movement or NO UPDATE
-                4-2-3: 2 detections are available
+                2-2-3: 2 detections are available
                     rect <= two previous rects
         """
         return self._rect
@@ -72,65 +62,13 @@ class ClusteredKLTTracklet(Tracklet):
         if len(self._assignments) > 0:
             self.logger.debug('{}@{}: updating with {} from {} at {}'.format(id(self), self.obj_id, assignment, self._assignments[-1], self._last_updated_at))
         
-        is_clustered_node = isinstance(assignment, NodeCluster)
-        if self._last_updated_at == TenguTracker._global_updates:
-            # second updte
-            if is_clustered_node:
-                # pattern 1-1
-                self._assignments[-1].group = assignment
-                # detection is already set in the first update
-                self.recent_updates_by('1-1')
-            else:
-                # pattern 1-2
-                self._assignments[-1].detection = assignment
-                # override the first rect
-                self._rect = assignment
-                self.recent_updates_by('1-2')
-        else:
-            # first update
-            if is_clustered_node:
-                # pattern 2
-                self._assignments.append(assignment)
-                last_move_x, last_move_y = self._assignments[-1].avg_movement()
-                if last_move_x is None or self._rect is None:
-                    # pattern 2-1
-                    self._rect = self._assignments[-1].rect_from_group()
-                    self.recent_updates_by('2-1')
-                else:
-                    # pattern 2-2
-                    new_x = self._rect[0] + last_move_x * Tracklet._estimation_decay
-                    new_y = self._rect[1] + last_move_y * Tracklet._estimation_decay
-                    self._rect = (new_x, new_y, self._rect[2], self._rect[3])
-                    self.recent_updates_by('2-2')
-            else:
-                # pattern 3
-                # if any tr of the last node cluster is valid, use the cluster
-                # TODO: but in the first place, if any tr is alive, all this costly operation can be minimized??
-                group = []
-                valid = False
-                if len(self._assignments) > 0 and self._assignments[-1].group is not None:
-                    for node in self._assignments[-1].group:
-                        if node.inside_rect(assignment):
-                            valid = True
-                            break
-                    if valid:
-                        group = self._assignments[-1].group
-                #else:
-                #    # find from existing nodes matching this detection
-                #    group = self.tracker.find_nodes_inside_detection(assignment)
+        # update
+        self._assignments.append(assignment)
+        self._rect = assignment.detection
+        self.recent_updates_by('1')
 
-                empty = NodeCluster(group, assignment)
-                self._assignments.append(empty)
-                self._rect = assignment
-                if len(group) > 0:
-                    if valid:
-                        self.recent_updates_by('3-1')
-                    else:
-                        self.recent_updates_by('3-2')
-                else:
-                    self.recent_updates_by('3-3')
-
-        self._last_updated_at = TenguTracker._global_updates
+        if self.validate_nodes():
+            self._last_updated_at = TenguTracker._global_updates
 
     def update_without_assignment(self):
         if Tracklet._disable_estimation:
@@ -144,53 +82,70 @@ class ClusteredKLTTracklet(Tracklet):
                 if node.last_updated_at == TenguTracker._global_updates-1:
                     valid_group.append(node)
 
-        # pattern 4
+        # pattern 2
         if len(valid_group) > 0:
             empty = NodeCluster(valid_group, None)
             self._assignments.append(empty)
             next_rect = empty.estinamte_next_rect(self._rect)
             if next_rect is None:
-                self.recent_updates_by('4-0x')
+                self.recent_updates_by('2-0x')
             else:
                 self._rect = next_rect
-                self.recent_updates_by('4-0')
+                self.recent_updates_by('2-0')
             #self._last_updated_at = TenguTracker._global_updates
             return
         else:
             if self._assignments[-1].detection is None:
-                # pattern 4-1
+                # pattern 2-1
                 # estimate from node cluster
                 last_move_x, last_move_y = self._assignments[-1].avg_movement()
                 if last_move_x is None:
                     # can't estimate
-                    self.recent_updates_by('4-1x')
+                    self.recent_updates_by('2-1x')
                     return
-                self.recent_updates_by('4-1')
+                self.recent_updates_by('2-1')
             else:
-                # pattern 4-2
+                # pattern 2-2
                 if len(self._assignments) == 1:
-                    # 4-2-1
+                    # 2-2-1
                     # only one detection is available, can't estimate
-                    self.recent_updates_by('4-2-1')
+                    self.recent_updates_by('2-2-1')
                     return
                 elif self._assignments[-2].detection is None:
-                    # 4-2-2
+                    # 2-2-2
                     last_move_x, last_move_y = self._assignments[-2].avg_movement()
                     if last_move_x is None:
                         # can't estimate
-                        self.recent_updates_by('4-2-2x')
+                        self.recent_updates_by('2-2-2x')
                         return
-                    self.recent_updates_by('4-2-2')
+                    self.recent_updates_by('2-2-2')
                 else:
-                    # 4-2-3
+                    # 2-2-3
                     prev = self._assignments[-1].detection
                     prev2 = self._assignments[-2].detection
                     last_move_x, last_move_y = Tracklet.movement_from_rects(prev, prev2)
-                    self.recent_updates_by('4-2-3')
+                    self.recent_updates_by('2-2-3')
 
         new_x = self._rect[0] + last_move_x * Tracklet._estimation_decay
         new_y = self._rect[1] + last_move_y * Tracklet._estimation_decay
         self._rect = (new_x, new_y, self._rect[2], self._rect[3])
+        
+        if self.validate_nodes():
+            self._last_updated_at = TenguTracker._global_updates
+
+    def validate_nodes(self):
+        """
+        check and merge valid nodes
+        """
+        if len(self._validated_nodes) == 0:
+            self._validated_nodes = self._assignments[-1].group
+            return True
+
+        # check first
+        for node in self._validated_nodes:
+            pass
+
+        return True
 
 class NodeCluster(object):
 
@@ -276,7 +231,6 @@ class ClusteredKLTTracker(TenguTracker):
         # TODO: check class?
         self._klt_scene_analyzer = klt_scene_analyzer
         self.graph = nx.Graph()
-        self.current_node_clusters = []
         self.detection_node_map = None
         self.debug = None
 
@@ -316,8 +270,8 @@ class ClusteredKLTTracker(TenguTracker):
             self._tracklets.append(self.new_tracklet(detection))
 
     def new_tracklet(self, assignment):
-        to = ClusteredKLTTracklet(self, self.detection_node_map[assignment])
-        to.update_with_assignment(assignment)
+        to = ClusteredKLTTracklet(self)
+        to.update_with_assignment(NodeCluster(self.detection_node_map[assignment], assignment))
         return to
 
     def update_graph(self):
@@ -439,35 +393,34 @@ class ClusteredKLTTracker(TenguTracker):
                 # remove from sceneanalyzer as well
                 del self._klt_scene_analyzer.nodes[self._klt_scene_analyzer.nodes.index(node)]
                 self.logger.debug('removed obsolete node and its edges due to diff = {}'.format(diff))
+            else:
+                self.cleanup_edge(node)
 
-        self.find_and_cut_obsolete_edges()
+    def cleanup_edge(self, node):
 
-    def find_and_cut_obsolete_edges(self):
-
-        for node_cluster in self.current_node_clusters:
-            for node in node_cluster.group:
-                if not self.graph.has_node(node):
-                    continue
-                edges = self.graph.edges(node)
-                for edge in edges:
-                    another = edge[1]
-                    if node == another:
-                        continue
-                    similarity = node.similarity(another)
-                    # TODO consider better ways to find out this threshold
-                    if min(similarity) <  ClusteredKLTTracker._minimum_node_similarity:
-                        self.graph.remove_edge(node, another)
-                        self.logger.debug('the similarity({}) is too low, removed and edge from {} to {}'.format(similarity, node, another))
+        edges = self.graph.edges(node)
+        for edge in edges:
+            another = edge[1]
+            if node == another:
+                continue
+            similarity = node.similarity(another)
+            # TODO consider better ways to find out this threshold
+            if min(similarity) <  ClusteredKLTTracker._minimum_node_similarity:
+                self.graph.remove_edge(node, another)
+                self.logger.debug('the similarity({}) is too low, removed and edge from {} to {}'.format(similarity, node, another))
 
     def draw_graph(self):
         graph_nodes = list(self.graph.nodes())
         for graph_node in graph_nodes:
             cv2.circle(self.debug, graph_node.tr[-1], 5, 128, -1)
-        for node_cluster in self.current_node_clusters:
+
+        for tracklet in self._tracklets:
+            node_cluster = tracklet.last_assignment
             rect = node_cluster.rect_from_group()
             cv2.rectangle(self.debug, (rect[0], rect[1]), (rect[0]+rect[2], rect[1]+rect[3]), 255, 3)
             for node in node_cluster.group:
                 cv2.circle(self.debug, node.tr[-1], 5, 256, -1)
-                edges = list(self.graph.edges(node))
-                for edge in edges:
-                    cv2.line(self.debug, edge[0].tr[-1], edge[1].tr[-1], 256, min(10, self.graph[edge[0]][edge[1]]['weight']))
+                if self.graph.has_node(node):
+                    edges = list(self.graph.edges(node))
+                    for edge in edges:
+                        cv2.line(self.debug, edge[0].tr[-1], edge[1].tr[-1], 256, min(10, self.graph[edge[0]][edge[1]]['weight']))
