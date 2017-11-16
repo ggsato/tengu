@@ -14,9 +14,8 @@ If the currently tracked object's rectangle overlaps over a threshold is conside
 class Tracklet(object):
 
     _class_obj_id = -1
-    _min_confirmation_updates = 10
+    _min_confidence = 0.5
     _estimation_decay = 0.9
-    _disable_estimation = False
     _recent_updates_length = 10
 
     def __init__(self):
@@ -28,7 +27,7 @@ class Tracklet(object):
         self._assignments = []
         self._rect = None
         self._movement = None
-        self._confidence = 0
+        self._confidence = 0.
         self._recent_updates = ['N/A']
 
     # Tracklet Properties
@@ -60,7 +59,7 @@ class Tracklet(object):
 
     @property
     def is_confirmed(self):
-        return len(self._assignments) > Tracklet._min_confirmation_updates
+        return self._confidence > Tracklet._min_confidence
 
     @property
     def last_assignment(self):
@@ -73,6 +72,24 @@ class Tracklet(object):
     @property
     def observations(self):
         return len(self._assignments)
+
+    def similarity(self, assignment):
+        """
+        calculate similarity of assignment to self
+        """
+        if self._rect is None:
+            return 0
+
+        return TenguTracker.calculate_overlap_ratio(self._rect, assignment)
+
+    def update_properties(self, lost=True):
+        assignment = self._assignments[-1]
+        self._movement = self.last_movement()
+        self._confidence = self.similarity(assignment)
+        # rect has to be updated after similarity calculation
+        self._rect = assignment
+        if not lost:
+            self._last_updated_at = TenguTracker._global_updates
 
     def update_with_assignment(self, assignment):
         """
@@ -87,34 +104,34 @@ class Tracklet(object):
             pass
 
         self._assignments.append(assignment)
-        self._rect = assignment
-        self._last_updated_at = TenguTracker._global_updates
-
+        self.update_properties(lost=False)
         self.recent_updates_by('1')
-
 
     def update_without_assignment(self):
         """
         no update was available
-        so update by an estimation if possible
+        so create a possible assignment to update
         """
-        if Tracklet._disable_estimation:
-            return
+        last_movement = self.last_movement()
+        if last_movement is None:
+            return None
+        
+        new_x = self._rect[0] + last_movement[0] * Tracklet._estimation_decay
+        new_y = self._rect[1] + last_movement[1] * Tracklet._estimation_decay
+        possible_assignment = (new_x, new_y, self._rect[2], self._rect[3])
+        self._assignments.append(possible_assignment)
+        self.update_properties()
+        self.recent_updates_by('2')
 
+    def last_movement(self):
         if len(self._assignments) == 1:
             # no speed calculation possible
-            return
+            return None
 
         prev = self._assignments[-1]
         prev2 = self._assignments[-2]
 
-        last_move_x, last_move_y = Tracklet.movement_from_rects(prev, prev2)
-        
-        new_x = self._rect[0] + last_move_x * Tracklet._estimation_decay
-        new_y = self._rect[1] + last_move_y * Tracklet._estimation_decay
-        self._rect = (new_x, new_y, self._rect[2], self._rect[3])
-
-        self.recent_updates_by('2')
+        return (Tracklet.movement_from_rects(prev, prev2))
 
     def recent_updates_by(self, update_pattern):
         self._recent_updates.append(update_pattern)
@@ -236,11 +253,12 @@ class TenguTracker(object):
     def calculate_cost_by_overlap_ratio(self, rect_a, rect_b):
         """ Calculates a overlap ratio against rect_b with respect to rect_a
         """
-        ratio = self.calculate_overlap_ratio(rect_a, rect_b)
+        ratio = TenguTracker.calculate_overlap_ratio(rect_a, rect_b)
 
         return -1 * math.log(max(ratio, TenguTracker._min_value))
 
-    def calculate_overlap_ratio(self, rect_a, rect_b):
+    @staticmethod
+    def calculate_overlap_ratio(rect_a, rect_b):
         ratio = 0.0
         right_a = rect_a[0] + rect_a[2]
         right_b = rect_b[0] + rect_b[2]
@@ -256,7 +274,6 @@ class TenguTracker(object):
             else:
                 # finally
                 ratio = (dx * dy) / (rect_a[2] * rect_a[3])
-        self.logger.debug('ratio of {} and {} = {}'.format(rect_a, rect_b, ratio))
         return ratio
 
     @staticmethod

@@ -59,6 +59,9 @@ class TenguNode(object):
         self._last_detection = None
         self._last_detected_at = TenguTracker._global_updates
         self._last_updated_at = TenguTracker._global_updates
+        self._movement = None
+        self._angle = None
+        self._property_updated_at = -1
 
     def __repr__(self):
         return 'node at {} detected at {} updated at {}'.format(self.tr[-1], self._last_detected_at, self._last_updated_at)
@@ -78,6 +81,14 @@ class TenguNode(object):
     @property
     def last_updated_at(self):
         return self._last_updated_at
+
+    @property
+    def movement(self):
+        return self._movement
+
+    @property
+    def angle(self):
+        return self._angle
 
     def inside_rect(self, rect):
         x, y = self.tr[-1]
@@ -168,6 +179,11 @@ class TenguNode(object):
                 diff_acceleration = max(TenguNode._min_acceleration, math.fabs(acceleration1 - acceleration0))
                 acceleration_similarity = TenguNode._min_acceleration / diff_acceleration
                 self.logger.debug('acceleration similarity between {} and {} is {}, diff={}'.format(acceleration0, acceleration1, acceleration_similarity, diff_acceleration))
+
+            # update
+            self._movement = [int((pos0[0]-pos01[0])/TenguNode._min_length), int((pos0[1]-pos01[1])/TenguNode._min_length)]
+            self._angle = angle0
+            self._property_updated_at = TenguTracker._global_updates
 
         # debug
         disable_similarity = False

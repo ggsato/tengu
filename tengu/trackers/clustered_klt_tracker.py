@@ -53,6 +53,14 @@ class ClusteredKLTTracklet(Tracklet):
         """
         return self._rect
 
+    def similarity(self, assignment):
+        """
+        calculate similarity of assignment to self
+        """
+        similarity = 1.0
+
+        return similarity
+
     def update_with_assignment(self, assignment):
         if len(self._assignments) > 0:
             self.logger.debug('{}@{}: updating with {} from {} at {}'.format(id(self), self.obj_id, assignment, self._assignments[-1], self._last_updated_at))
@@ -63,16 +71,15 @@ class ClusteredKLTTracklet(Tracklet):
         self.update_properties()
         self.recent_updates_by('1')
 
-        self._last_updated_at = TenguTracker._global_updates
-
     def update_properties(self):
         assignment = self._assignments[-1]
         self._rect = assignment.detection
-        self._position = NodeCluster.center(self._rect)
+        self._confidence = self.similarity(assignment)
+        self._last_updated_at = TenguTracker._global_updates
 
     def update_without_assignment(self):
-        if Tracklet._disable_estimation:
-            return
+        """
+        """
 
         self.logger.debug('updating without {}@{}'.format(id(self), self.obj_id))
 
