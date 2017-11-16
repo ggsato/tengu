@@ -36,6 +36,7 @@ class ClusteredKLTTracklet(Tracklet):
         super(ClusteredKLTTracklet, self).__init__()
         self.tracker = tracker
         self._rect = None
+        self._hist = None
         self._centers = []
         self._validated_nodes = set()
 
@@ -64,14 +65,16 @@ class ClusteredKLTTracklet(Tracklet):
 
         if self._rect is None:
             # this means this is called for the first time
+            assignment.hist = self.histogram(assignment.detection)
             return 1.0
 
         # 1. rect similarity
         rect_similarity = TenguTracker.calculate_overlap_ratio(self._rect, assignment.detection)
 
         # 2. histogram similarity
-        hist0 = self.histogram(self._rect)
+        hist0 = self._hist
         hist1 = self.histogram(assignment.detection)
+        assignment.hist = hist1
         hist_similarity = cv2.compareHist(hist0, hist1, cv2.HISTCMP_CORREL)
 
         disable_similarity = False
@@ -114,6 +117,7 @@ class ClusteredKLTTracklet(Tracklet):
             self._confidence = new_confidence
         # rect has to be updated after similarity calculation
         self._rect = assignment.detection
+        self._hist = assignment.hist
         self._centers.append(NodeCluster.center(self._rect))
         if len(self._centers) > TenguNode._min_length:
             del self._centers[0]
@@ -202,6 +206,7 @@ class NodeCluster(object):
         self.logger = logging.getLogger(__name__)
         self.group = group
         self.detection = detection
+        self.hist = None
 
     def __repr__(self):
         return '{} nodes of {}, detection={}'.format(len(self.group), self.group, self.detection)

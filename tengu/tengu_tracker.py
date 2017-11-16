@@ -16,7 +16,7 @@ class Tracklet(object):
     _class_obj_id = -1
     _min_confidence = 0.5
     _estimation_decay = 0.9
-    _recent_updates_length = 10
+    _recent_updates_length = 2
 
     def __init__(self):
         self.logger = logging.getLogger(__name__)
@@ -24,6 +24,7 @@ class Tracklet(object):
         # incremental unique object id
         self._obj_id = Tracklet._class_obj_id
         self._last_updated_at = -1
+        self._observations = 0
         self._assignments = []
         self._rect = None
         self._movement = None
@@ -71,7 +72,7 @@ class Tracklet(object):
 
     @property
     def observations(self):
-        return len(self._assignments)
+        return self._observations
 
     def similarity(self, assignment):
         """
@@ -95,6 +96,7 @@ class Tracklet(object):
         self._rect = assignment
         if not lost:
             self._last_updated_at = TenguTracker._global_updates
+            self._observations += 1
 
     def update_with_assignment(self, assignment):
         """
