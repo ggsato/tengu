@@ -257,6 +257,8 @@ class KLTSceneAnalyzer(TenguSceneAnalyzer):
         # used for mask
         self.last_detections = None
 
+        self.last_frame = None
+
     @property
     def last_removed_nodes(self):
         removed_nodes = self._last_removed_nodes
@@ -285,6 +287,7 @@ class KLTSceneAnalyzer(TenguSceneAnalyzer):
             if self.draw_flows:
                 cv2.imshow('KLT Debug - Mask', mask)
         # set prev
+        self.last_frame = frame
         self.prev_gray = scene_gray
         self.frame_idx += 1
 

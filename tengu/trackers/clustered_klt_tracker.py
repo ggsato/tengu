@@ -36,6 +36,7 @@ class ClusteredKLTTracklet(Tracklet):
         super(ClusteredKLTTracklet, self).__init__()
         self.tracker = tracker
         self._rect = None
+        self._centers = []
         self._validated_nodes = set()
 
     @property
@@ -57,20 +58,46 @@ class ClusteredKLTTracklet(Tracklet):
         """
         calculate similarity of assignment to self
         1. rect similarity(position, size similrity)
+        2. histogram similarity
         """
 
         if self._rect is None:
-            rect_similarity = 0
-        else:
-            rect_similarity = TenguTracker.calculate_overlap_ratio(self._rect, assignment.detection)
+            # this means this is called for the first time
+            return 1.0
 
-        similarity = [rect_similarity]
+        # 1. rect similarity
+        rect_similarity = TenguTracker.calculate_overlap_ratio(self._rect, assignment.detection)
+
+        # 2. histogram similarity
+        hist0 = self.histogram(self._rect)
+        hist1 = self.histogram(assignment.detection)
+        hist_similarity = cv2.compareHist(hist0, hist1, cv2.HISTCMP_CORREL)
+
+        similarity = [rect_similarity, hist_similarity]
         
         return min(similarity)
 
+    def histogram(self, rect):
+        frame = self.tracker._klt_scene_analyzer.last_frame
+        img = frame[int(rect[1]):int(rect[1]+rect[3]), int(rect[0]):int(rect[0]+rect[3]), :]
+        hist = cv2.calcHist([img], [0, 1, 2], None, [32, 32, 32], [0, 256, 0, 256, 0, 256])
+        cv2.normalize(hist, hist)
+        flattened = hist.flatten()
+        return flattened
+
+    def last_movement(self):
+        if len(self._centers) < TenguNode._min_length:
+            # no speed calculation possible
+            return None
+
+        pos_last = self._centers[-1]
+        pos_first = self._centers[0]
+
+        return [(pos_last[0]-pos_first[0])/TenguNode._min_length, (pos_last[1]-pos_first[1])/TenguNode._min_length]
+
     def update_properties(self, lost=True):
         assignment = self._assignments[-1]
-        #self._movement = self.last_movement()
+        self._movement = self.last_movement()
         new_confidence = self.similarity(assignment)
         if new_confidence < self._confidence:
             # instead of directly replacing the value, use decay
@@ -79,6 +106,9 @@ class ClusteredKLTTracklet(Tracklet):
             self._confidence = new_confidence
         # rect has to be updated after similarity calculation
         self._rect = assignment.detection
+        self._centers.append(NodeCluster.center(self._rect))
+        if len(self._centers) > TenguNode._min_length:
+            del self._centers[0]
         if not lost:
             self._last_updated_at = TenguTracker._global_updates
 
