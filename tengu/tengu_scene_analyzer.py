@@ -83,6 +83,13 @@ class TenguNode(object):
         return self._last_updated_at
 
     @property
+    def position(self):
+        if self._rect is None:
+            return None
+
+        return [int(self._rect[0]+self._rect[2]/2), int(self._rect[1]+self._rect[3]/2)]
+
+    @property
     def movement(self):
         return self._movement
 
@@ -118,7 +125,7 @@ class TenguNode(object):
         pos0 = self.tr[-1]
         pos1 = another.tr[-1]
         distance = TenguNode.compute_distance(pos0, pos1)
-        if self._last_detection is not None and (TenguTracker._global_updates-self._last_detected_at)<Tracklet._min_confirmation_updates:
+        if self._last_detection is not None and (TenguTracker._global_updates-self._last_detected_at)<Tracklet._min_confidence:
             # use detection
             half_rect = min(self._last_detection[2:])/2
             location_similarity = half_rect/max(half_rect, distance)
@@ -213,12 +220,15 @@ class TenguNode(object):
         angle = math.atan2(diff_y, diff_x)
         return angle
 
-    def last_move(self, min_length):
+    def last_move(self):
+        if len(self.tr) < TenguNode._min_length:
+            return None
+
         prev = self.tr[-1]
-        prev2 = self.tr[-1 * min_length]
+        prev2 = self.tr[-1 * TenguNode._min_length]
         move_x = prev[0]-prev2[0]
         move_y = prev[1]-prev2[1]
-        return int(move_x/min_length), int(move_y/min_length) 
+        return [int(move_x/min_length), int(move_y/min_length)] 
 
 class KLTSceneAnalyzer(TenguSceneAnalyzer):
 

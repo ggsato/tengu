@@ -56,26 +56,40 @@ class ClusteredKLTTracklet(Tracklet):
     def similarity(self, assignment):
         """
         calculate similarity of assignment to self
+        1. rect similarity(position, size similrity)
         """
-        similarity = 1.0
 
-        return similarity
+        if self._rect is None:
+            rect_similarity = 0
+        else:
+            rect_similarity = TenguTracker.calculate_overlap_ratio(self._rect, assignment.detection)
+
+        similarity = [rect_similarity]
+        
+        return min(similarity)
+
+    def update_properties(self, lost=True):
+        assignment = self._assignments[-1]
+        #self._movement = self.last_movement()
+        self._confidence = self.similarity(assignment)
+        # rect has to be updated after similarity calculation
+        self._rect = assignment.detection
+        if not lost:
+            self._last_updated_at = TenguTracker._global_updates
 
     def update_with_assignment(self, assignment):
         if len(self._assignments) > 0:
             self.logger.debug('{}@{}: updating with {} from {} at {}'.format(id(self), self.obj_id, assignment, self._assignments[-1], self._last_updated_at))
         
-        # update
-        self._assignments.append(assignment)
-        self._validated_nodes = set(assignment.group)
-        self.update_properties()
-        self.recent_updates_by('1')
-
-    def update_properties(self):
-        assignment = self._assignments[-1]
-        self._rect = assignment.detection
-        self._confidence = self.similarity(assignment)
-        self._last_updated_at = TenguTracker._global_updates
+        if len(self._assignments) > 0 and self.similarity(assignment) < Tracklet._min_confidence:
+            # do not accept this
+            self.update_without_assignment()
+        else:
+            # update
+            self._assignments.append(assignment)
+            self._validated_nodes = set(assignment.group)
+            self.update_properties()
+            self.recent_updates_by('1')
 
     def update_without_assignment(self):
         """
@@ -142,6 +156,9 @@ class ClusteredKLTTracklet(Tracklet):
 
         return len(self._validated_nodes) > 0
 
+    def last_movement(self):
+        return None
+
 class NodeCluster(object):
 
     _min_rect_length = 10
@@ -175,23 +192,23 @@ class NodeCluster(object):
                 bottom = y
         return (int(left), int(top), int(right-left), int(bottom-top))
 
-    def avg_movement(self, min_length=25):
+    def avg_movement(self):
         total_move_x = 0
         total_move_y = 0
         valid = 0
-        longest = 0
-        avg_node = None
         for node in self.group:
-            if len(node.tr) < min_length:
+            movement = node.last_move()
+            if movement is None:
                 continue
 
-            if len(node.tr) > longest:
-                longest = len(node.tr)
-                avg_node = node
-        if avg_node is None:
-            return None, None
+            total_move_x += movement[0]
+            total_move_y += movement[1]
+            valid += 1
 
-        return avg_node.last_move(min_length)
+        if valid == 0:
+            return None
+
+        return [total_move_x/valid, total_move_y/valid]
 
     def estinamte_next_rect(self, current_rect):
         origin_estimates = []

@@ -103,9 +103,13 @@ class Tracklet(object):
             # nothing to do here
             pass
 
-        self._assignments.append(assignment)
-        self.update_properties(lost=False)
-        self.recent_updates_by('1')
+        if len(self._assignments) > 0 and self.similarity(assignment) < Tracklet._min_confidence:
+            # do not accept this
+            self.update_without_assignment()
+        else:
+            self._assignments.append(assignment)
+            self.update_properties(lost=False)
+            self.recent_updates_by('1')
 
     def update_without_assignment(self):
         """
