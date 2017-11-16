@@ -61,6 +61,7 @@ class ClusteredKLTTracklet(Tracklet):
         2. histogram similarity
         """
 
+
         if self._rect is None:
             # this means this is called for the first time
             return 1.0
@@ -73,8 +74,15 @@ class ClusteredKLTTracklet(Tracklet):
         hist1 = self.histogram(assignment.detection)
         hist_similarity = cv2.compareHist(hist0, hist1, cv2.HISTCMP_CORREL)
 
+        disable_similarity = False
+        if disable_similarity:
+            rect_similarity = 1.0
+            hist_similarity = 1.0
+
         similarity = [rect_similarity, hist_similarity]
         
+        self.logger.debug('similarity = {}'.format(similarity))
+
         return min(similarity)
 
     def histogram(self, rect):
@@ -115,7 +123,7 @@ class ClusteredKLTTracklet(Tracklet):
     def update_with_assignment(self, assignment):
         if len(self._assignments) > 0:
             self.logger.debug('{}@{}: updating with {} from {} at {}'.format(id(self), self.obj_id, assignment, self._assignments[-1], self._last_updated_at))
-        
+
         if len(self._assignments) > 0 and self.similarity(assignment) < Tracklet._min_confidence:
             # do not accept this
             self.update_without_assignment()
@@ -352,65 +360,9 @@ class ClusteredKLTTracker(TenguTracker):
 
         for detection in detection_node_map:
             in_nodes = detection_node_map[detection]
-            self.update_mutual_edges_weight(in_nodes)
             self.logger.debug('found {} in-nodes in {}'.format(len(in_nodes), detection))
 
         return detection_node_map
-
-    def update_mutual_edges_weight(self, in_nodes):
-        """
-        check if a node is similar enough to another.
-        if similar, create or update their edge, otherwise, ignore.
-        """
-        last_node = None
-        for node in in_nodes:
-            if last_node is None:
-                last_node = in_nodes[-1]
-            similarity = node.similarity(last_node)
-            if min(similarity) < ClusteredKLTTracker._minimum_node_similarity:
-                self.logger.debug('skipping making edge, {} is not similar enough to {}, the similarity = {}'.format(node, last_node, similarity))
-                last_node = node
-                continue
-            # choose better edge
-            # here, choose only one
-            make_one = True
-            existing_edges = self.graph.edges(node)
-            for existing_edge in existing_edges:
-                another_node = existing_edge[1]
-                if node == another_node:
-                    another_node = existing_edge[0]
-                another_similarity = node.similarity(another_node)
-                if another_similarity >= similarity:
-                    make_one = False
-            if not make_one:
-                continue
-            # make an edge
-            if not self.graph.has_edge(node, last_node):
-                # create one
-                self.logger.debug('creating an edge from {} to {}, similarity={}'.format(node, last_node, similarity))
-                edge = (node, last_node, {'weight': ClusteredKLTTracker.weight_from_similarity(similarity), 'last_update': TenguTracker._global_updates})
-                self.graph.add_edges_from([edge])
-                # # check
-                # if not self.graph.has_edge(last_node, node):
-                #     self.logger.error('edge is directed!')
-                # last_edges = self.graph.edges(last_node)
-                # found = False
-                # for last_edge in last_edges:
-                #     if last_edge[0] == node or last_edge[1] == node:
-                #         found = True
-                #         break
-                # if not found:
-                #     self.logger.error('edge is not found in edges!')
-            edge = self.graph[node][last_node]
-            if edge['last_update'] != TenguTracker._global_updates:
-                edge['weight'] = ClusteredKLTTracker.weight_from_similarity(similarity)
-                edge['last_update'] = TenguTracker._global_updates
-                self.logger.debug('updating an edge, {}, from {} to {}'.format(edge, current_weight, edge['weight']))
-            last_node = node
-
-    @staticmethod
-    def weight_from_similarity(similarity):
-        return int(min(similarity) * 10)
 
     def assign_new_to_tracklet(self, new_assignment, tracklet):
         if new_assignment is None:
@@ -429,27 +381,10 @@ class ClusteredKLTTracker(TenguTracker):
             diff = TenguTracker._global_updates - node.last_detected_at
             if diff > self._obsoletion:
                 # node is obsolete
-                removed_edges = self.graph.edges(node)
-                self.graph.remove_edges_from(removed_edges)
                 self.graph.remove_node(node)
                 # remove from sceneanalyzer as well
                 del self._klt_scene_analyzer.nodes[self._klt_scene_analyzer.nodes.index(node)]
                 self.logger.debug('removed obsolete node and its edges due to diff = {}'.format(diff))
-            else:
-                self.cleanup_edge(node)
-
-    def cleanup_edge(self, node):
-
-        edges = self.graph.edges(node)
-        for edge in edges:
-            another = edge[1]
-            if node == another:
-                continue
-            similarity = node.similarity(another)
-            # TODO consider better ways to find out this threshold
-            if min(similarity) <  ClusteredKLTTracker._minimum_node_similarity:
-                self.graph.remove_edge(node, another)
-                self.logger.debug('the similarity({}) is too low, removed and edge from {} to {}'.format(similarity, node, another))
 
     def draw_graph(self):
         graph_nodes = list(self.graph.nodes())
@@ -462,7 +397,3 @@ class ClusteredKLTTracker(TenguTracker):
             cv2.rectangle(self.debug, (rect[0], rect[1]), (rect[0]+rect[2], rect[1]+rect[3]), 255, 3)
             for node in node_cluster.group:
                 cv2.circle(self.debug, node.tr[-1], 5, 256, -1)
-                if self.graph.has_node(node):
-                    edges = list(self.graph.edges(node))
-                    for edge in edges:
-                        cv2.line(self.debug, edge[0].tr[-1], edge[1].tr[-1], 256, min(10, self.graph[edge[0]][edge[1]]['weight']))
