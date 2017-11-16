@@ -85,7 +85,12 @@ class Tracklet(object):
     def update_properties(self, lost=True):
         assignment = self._assignments[-1]
         self._movement = self.last_movement()
-        self._confidence = self.similarity(assignment)
+        new_confidence = self.similarity(assignment)
+        if new_confidence < self._confidence:
+            # instead of directly replacing the value, use decay
+            self._confidence = self._confidence * Tracklet._estimation_decay
+        else:
+            self._confidence = new_confidence
         # rect has to be updated after similarity calculation
         self._rect = assignment
         if not lost:
