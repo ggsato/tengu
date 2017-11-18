@@ -2,13 +2,12 @@
 # -*- coding: utf-8 -*-
 
 import logging, math, time
+from sets import Set
 from operator import attrgetter
 
 import cv2
 import numpy as np
 
-import networkx as nx
-from networkx.algorithms import community as nxcom
 from scipy.optimize import linear_sum_assignment
 
 from ..tengu_scene_analyzer import KLTSceneAnalyzer, TenguNode
@@ -285,7 +284,7 @@ class ClusteredKLTTracker(TenguTracker):
         super(ClusteredKLTTracker, self).__init__(**kwargs)
         # TODO: check class?
         self._klt_scene_analyzer = klt_scene_analyzer
-        self.graph = nx.Graph()
+        self.graph = Set([])
         self.detection_node_map = None
         self.debug = None
 
@@ -332,20 +331,14 @@ class ClusteredKLTTracker(TenguTracker):
     def update_graph(self):
         
         nodes = self._klt_scene_analyzer.nodes
-        graph_nodes = list(self.graph.nodes())
-        self.logger.debug('updating graph with {} nodes, and {} graph nodes, {} edges'.format(len(nodes), len(graph_nodes), len(self.graph.edges())))
+        self.logger.debug('updating graph with {} nodes, and {} graph nodes'.format(len(nodes), len(self.graph)))
 
         # remove
         removed_nodes = self._klt_scene_analyzer.last_removed_nodes
         removed_graph_nodes = []
         for removed_node in removed_nodes:
-            if removed_node in graph_nodes:
-                removed_edges = self.graph.edges(removed_node)
-                self.logger.debug('removing {} edges'.format(len(removed_edges)))
-                self.graph.remove_edges_from(removed_edges)
-                removed_graph_nodes.append(removed_node)
+            self.graph.discard(removed_node)
         self.logger.debug('removing {} nodes'.format(len(removed_graph_nodes)))
-        self.graph.remove_nodes_from(removed_graph_nodes)
 
     def update_weights(self, detections):
         
@@ -353,12 +346,11 @@ class ClusteredKLTTracker(TenguTracker):
         for detection in detections:
             detection_node_map[detection] = []
         nodes = self._klt_scene_analyzer.nodes
-        graph_nodes = list(self.graph.nodes())
         for node in nodes:
             for detection in detections:
                 if node.inside_rect(detection):
-                    if not node in graph_nodes:
-                        self.graph.add_node(node)
+                    if not node in self.graph:
+                        self.graph.add(node)
                     else:
                         node.update_last_detected(detection)
                     detection_node_map[detection].append(node)
@@ -381,19 +373,20 @@ class ClusteredKLTTracker(TenguTracker):
         super(ClusteredKLTTracker, self).obsolete_trackings()
 
         # obsolete nodes
-        graph_nodes = list(self.graph.nodes())
-        for node in graph_nodes:
+        obsolete_nodes = Set([])
+        for node in self.graph:
             diff = TenguTracker._global_updates - node.last_detected_at
             if diff > self._obsoletion:
                 # node is obsolete
-                self.graph.remove_node(node)
+                obsolete_nodes.add(node)
                 # remove from sceneanalyzer as well
                 del self._klt_scene_analyzer.nodes[self._klt_scene_analyzer.nodes.index(node)]
                 self.logger.debug('removed obsolete node and its edges due to diff = {}'.format(diff))
 
+        self.graph = self.graph - obsolete_nodes
+
     def draw_graph(self):
-        graph_nodes = list(self.graph.nodes())
-        for graph_node in graph_nodes:
+        for graph_node in self.graph:
             cv2.circle(self.debug, graph_node.tr[-1], 5, 128, -1)
 
         for tracklet in self._tracklets:
