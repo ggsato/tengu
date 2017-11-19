@@ -7,7 +7,6 @@ import networkx as nx
 import numpy as np
 import cv2
 from operator import attrgetter
-from networkx.algorithms.flow import shortest_augmenting_path
 
 class TenguCounter(object):
 
@@ -227,12 +226,26 @@ class TenguFlowCounter(TenguObsoleteCounter):
                 cv2.arrowedLine(img, out_edge[0].position , out_edge[1].position, color, thickness=2, tipLength=0.5)
         # finally show top N src=>sink
         major_sinks = sorted(self._flow_graph, key=attrgetter('sink_count'), reverse=True)
-        majority = int(len(self._flow_graph)/100*2)
+        majority = int(len(self._flow_graph)/100*3)
         for major_sink in major_sinks[:majority]:
             if major_sink.sink_count < 10:
                 continue
             source_nodes = major_sink._sources.keys()
             source_nodes = sorted(source_nodes, key=major_sink._sources.__getitem__, reverse=True)
             major_source = source_nodes[0]
-            cv2.arrowedLine(img, major_source.position , major_sink.position, 192, thickness=3, tipLength=0.1)
+            # path
+            path = nx.dijkstra_path(self._flow_graph, major_source, major_sink, weight=TenguFlowCounter.weight_func)
+            lines = []
+            for n, node in enumerate(path):
+                lines.append(node.position)
+                 
+            cv2.polylines(img, [np.int32(lines)], False, 192, thickness=2)
+            # arrow
+            cv2.arrowedLine(img, major_source.position , major_sink.position, 255, thickness=3, tipLength=0.1)
+
         return img
+
+    @staticmethod
+    def weight_func(u, v, dict):
+
+        return 1.0 / dict['capacity']
