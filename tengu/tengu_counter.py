@@ -4,6 +4,8 @@
 import logging
 from sets import Set
 import networkx as nx
+import numpy as np
+import cv2
 
 class TenguCounter(object):
 
@@ -53,15 +55,16 @@ class TenguFlow(object):
 
 class TenguFlowNode(object):
 
-    def __init__(self, y_blk, x_blk):
+    def __init__(self, y_blk, x_blk, position):
         super(TenguFlowNode, self).__init__()
         self._y_blk = y_blk
         self._x_blk = x_blk
+        self._position = position
         self._source_count = 0
         self._sink_count = 0
 
     def __repr__(self):
-        return 'y_blk={}, x_blk={}, source_count={}, sink_count={}'.format(self._y_blk, self._x_blk, self._source_count, self._sink_count)
+        return 'y_blk={}, x_blk={}, position={}, source_count={}, sink_count={}'.format(self._y_blk, self._x_blk, self._position, self._source_count, self._sink_count)
 
     @property
     def source_count(self):
@@ -77,14 +80,20 @@ class TenguFlowNode(object):
     def mark_sink(self):
         self._sink_count += 1
 
+    @property
+    def position(self):
+        return self._position
+
 class TenguFlowCounter(TenguObsoleteCounter):
 
-    def __init__(self, frame_shape=(480, 640), flow_blocks=(20, 20), **kwargs):
+    def __init__(self, frame_shape=(480, 640), flow_blocks=(20, 20), show_graph=True, **kwargs):
         super(TenguFlowCounter, self).__init__(**kwargs)
         self._frame_shape = frame_shape
         self._flow_blocks = flow_blocks
         self._flow_graph = nx.DiGraph()
         self._blk_node_map = {}
+        self._show_graph = show_graph
+        self._blok_size = 0
 
     def count(self, tracklets):
         """
@@ -112,6 +121,12 @@ class TenguFlowCounter(TenguObsoleteCounter):
         removed_tracklets = self._last_tracklets - current_tracklets
         self.finish_removed_tracklets(removed_tracklets)
 
+        if self._show_graph:
+            # show
+            img = self.draw_graph()
+            cv2.imshow('TenguFlowCounter Graph', img)
+            ch = 0xFF & cv2.waitKey(1)
+
         # update reporter
         counts = super(TenguFlowCounter, self).count(tracklets)
         self._reporter.update_counts(counts)
@@ -120,12 +135,20 @@ class TenguFlowCounter(TenguObsoleteCounter):
 
     def initialize_flow_graph(self):
 
-        for y_blk in xrange(self.get_y_blk(self._frame_shape[0])):
+        blk_size_y = self.get_y_blk(self._frame_shape[0]) + 1
+        blk_size_x = self.get_x_blk(self._frame_shape[1]) + 1
+        self.logger.info('blk_size_y, blk_size_x = {}, {}'.format(blk_size_y, blk_size_x))
+        for y_blk in xrange(blk_size_y):
             self._blk_node_map[y_blk] = {}
-            for x_blk in xrange(self.get_x_blk(self._frame_shape[1])):
-                flow_node = TenguFlowNode(y_blk, x_blk)
+            for x_blk in xrange(blk_size_x):
+                pos_x = int(self._flow_blocks[1]*x_blk + self._flow_blocks[1]/2)
+                pos_y = int(self._flow_blocks[0]*y_blk + self._flow_blocks[0]/2)
+                flow_node = TenguFlowNode(y_blk, x_blk, (pos_x, pos_y))
+                self.logger.info('created at y_blk,x_blk = {}, {} = {}'.format(y_blk, x_blk, (pos_x, pos_y)))
                 self._flow_graph.add_node(flow_node)
                 self._blk_node_map[y_blk][x_blk] = flow_node
+
+        self._block_size = (blk_size_y, blk_size_x)
 
     def flow_node_at(self, x, y):
         y_blk = self.get_y_blk(y)
@@ -133,11 +156,11 @@ class TenguFlowCounter(TenguObsoleteCounter):
         return self._blk_node_map[y_blk][x_blk]
 
     def get_x_blk(self, x):
-        x = min(max(0., x), self._frame_shape[1])
+        x = min(max(0., x), self._frame_shape[1]-1)
         return int(x / self._flow_blocks[1])
 
     def get_y_blk(self, y):
-        y = min(max(0., y), self._frame_shape[0])
+        y = min(max(0., y), self._frame_shape[0]-1)
         return int(y / self._flow_blocks[0])
 
     def add_new_tracklets(self, new_tracklets):
@@ -171,3 +194,24 @@ class TenguFlowCounter(TenguObsoleteCounter):
             flow_node = self.flow_node_at(*removed_tracklet.center)
             flow_node.mark_sink()
             self.logger.info('sink at {}'.format(flow_node))
+
+    def draw_graph(self):
+        img = np.ones(self._frame_shape, dtype=np.uint8) * 128
+        diameter = min(*self._block_size)
+        for y_blk in xrange(self._block_size[0]):
+            for x_blk in xrange(self._block_size[1]):
+                flow_node = self._blk_node_map[y_blk][x_blk]
+                is_source = flow_node.source_count > flow_node.sink_count
+                if is_source:
+                    source_count = flow_node.source_count
+                    if source_count == 0:
+                        continue
+                    color = min(255, 128+source_count)
+                else:
+                    sink_count = flow_node.sink_count
+                    if sink_count == 0:
+                        continue
+                    color = max(0, 128-sink_count)
+                
+                cv2.circle(img, flow_node.position, int(diameter/2), color, -1)
+        return img
