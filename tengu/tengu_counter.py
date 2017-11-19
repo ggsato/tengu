@@ -7,6 +7,7 @@ import networkx as nx
 import numpy as np
 import cv2
 from operator import attrgetter
+from networkx.algorithms.flow import shortest_augmenting_path
 
 class TenguCounter(object):
 
@@ -182,12 +183,12 @@ class TenguFlowCounter(TenguObsoleteCounter):
                 continue
             # update edge
             if not self._flow_graph.has_edge(prev_flow_node, flow_node):
-                self._flow_graph.add_edge(prev_flow_node, flow_node, weight=0)
+                self._flow_graph.add_edge(prev_flow_node, flow_node, capacity=0)
             edge = self._flow_graph[prev_flow_node][flow_node]
-            edge['weight'] = edge['weight'] + 1
+            edge['capacity'] = edge['capacity'] + 1
             # add
             existing_tracklet.flows.append(flow_node)
-            self.logger.info('updating weight at {}'.format(edge))
+            self.logger.info('updating capacity at {}'.format(edge))
 
 
     def finish_removed_tracklets(self, removed_tracklets):
@@ -222,7 +223,7 @@ class TenguFlowCounter(TenguObsoleteCounter):
                 out_edges_list.append(out_edges)
         for out_edges in out_edges_list:
             for out_edge in out_edges:
-                color = min(255, 128+self._flow_graph[out_edge[0]][out_edge[1]]['weight'])
+                color = min(255, 128+self._flow_graph[out_edge[0]][out_edge[1]]['capacity'])
                 cv2.arrowedLine(img, out_edge[0].position , out_edge[1].position, color, thickness=2, tipLength=0.5)
         # finally show top N src=>sink
         major_sinks = sorted(self._flow_graph, key=attrgetter('sink_count'), reverse=True)
@@ -233,5 +234,5 @@ class TenguFlowCounter(TenguObsoleteCounter):
             source_nodes = major_sink._sources.keys()
             source_nodes = sorted(source_nodes, key=major_sink._sources.__getitem__, reverse=True)
             major_source = source_nodes[0]
-            cv2.arrowedLine(img, major_source.position , major_sink.position, 255, thickness=5, tipLength=0.1)
+            cv2.arrowedLine(img, major_source.position , major_sink.position, 192, thickness=3, tipLength=0.1)
         return img
