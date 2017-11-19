@@ -9,7 +9,6 @@ import math
 import Queue
 import logging
 
-from flow import SceneFlow, FlowBlock
 from weakref import WeakValueDictionary
 
 from tengu_observer import *
