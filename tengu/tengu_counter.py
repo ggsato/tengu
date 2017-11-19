@@ -7,16 +7,17 @@ import networkx as nx
 
 class TenguCounter(object):
 
-    def __init__(self):
+    def __init__(self, reporter=None):
         self.logger = logging.getLogger(__name__)
+        self._reporter = reporter
     
     def count(self, tracklets):
         pass
 
 class TenguObsoleteCounter(TenguCounter):
 
-    def __init__(self):
-        super(TenguObsoleteCounter, self).__init__()
+    def __init__(self, **kwargs):
+        super(TenguObsoleteCounter, self).__init__(**kwargs)
         self._last_tracklets = Set([])
 
     def count(self, tracklets):
@@ -24,7 +25,7 @@ class TenguObsoleteCounter(TenguCounter):
 
         if len(self._last_tracklets) == 0:
             self._last_tracklets = current_tracklets
-            return count
+            return 0
 
         obsolete_count = self._last_tracklets - current_tracklets
         
@@ -59,8 +60,8 @@ class TenguFlowNode(object):
 
 class TenguFlowCounter(TenguObsoleteCounter):
 
-    def __init__(self, frame_shape=(640, 480), flow_blocks=(20, 20)):
-        super(TenguFlowCounter, self).__init__()
+    def __init__(self, frame_shape=(640, 480), flow_blocks=(20, 20), **kwargs):
+        super(TenguFlowCounter, self).__init__(**kwargs)
         self._frame_shape = frame_shape
         self._flow_blocks = flow_blocks
         self._flow_graph = nx.DiGraph()
@@ -69,6 +70,12 @@ class TenguFlowCounter(TenguObsoleteCounter):
     def count(self, tracklets):
         """
         """
+        if tracklets is None:
+            # this means finish report
+            if self._reporter is not None:
+                self._reporter.report()
+            return
+
         if len(self._flow_graph):
             self.initialize_flow_graph()
 
@@ -85,6 +92,10 @@ class TenguFlowCounter(TenguObsoleteCounter):
         # removed tracklets
         removed_tracklets = self._last_tracklets - current_tracklets
         self.finish_removed_tracklets(removed_tracklets)
+
+        # update reporter
+        count = super(TenguFlowCounter, self).count(tracklets)
+        self._reporter.update_counts(count)
 
     def initialize_flow_graph(self):
 
