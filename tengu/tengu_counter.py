@@ -53,14 +53,33 @@ class TenguFlow(object):
 
 class TenguFlowNode(object):
 
-    def __init__(self, x_blk, y_blk):
+    def __init__(self, y_blk, x_blk):
         super(TenguFlowNode, self).__init__()
-        self._x_blk = x_blk
         self._y_blk = y_blk
+        self._x_blk = x_blk
+        self._source_count = 0
+        self._sink_count = 0
+
+    def __repr__(self):
+        return 'y_blk={}, x_blk={}, source_count={}, sink_count={}'.format(self._y_blk, self._x_blk, self._source_count, self._sink_count)
+
+    @property
+    def source_count(self):
+        return self._source_count
+
+    def mark_source(self):
+        self._source_count += 1
+
+    @property
+    def sink_count(self):
+        return self._sink_count
+
+    def mark_sink(self):
+        self._sink_count += 1
 
 class TenguFlowCounter(TenguObsoleteCounter):
 
-    def __init__(self, frame_shape=(640, 480), flow_blocks=(20, 20), **kwargs):
+    def __init__(self, frame_shape=(480, 640), flow_blocks=(20, 20), **kwargs):
         super(TenguFlowCounter, self).__init__(**kwargs)
         self._frame_shape = frame_shape
         self._flow_blocks = flow_blocks
@@ -76,7 +95,7 @@ class TenguFlowCounter(TenguObsoleteCounter):
                 self._reporter.report()
             return
 
-        if len(self._flow_graph):
+        if len(self._flow_graph) == 0:
             self.initialize_flow_graph()
 
         current_tracklets = Set(tracklets)
@@ -94,36 +113,61 @@ class TenguFlowCounter(TenguObsoleteCounter):
         self.finish_removed_tracklets(removed_tracklets)
 
         # update reporter
-        count = super(TenguFlowCounter, self).count(tracklets)
-        self._reporter.update_counts(count)
+        counts = super(TenguFlowCounter, self).count(tracklets)
+        self._reporter.update_counts(counts)
+
+        return counts
 
     def initialize_flow_graph(self):
 
-        for x_blk in xrange(self._flow_blocks[0]):
-            self._blk_node_map[x_blk] = {}
-            for y_blk in xrange(self._flow_blocks[1]):
-                flow_node = TenguFlowNode(x_blk, y_blk)
+        for y_blk in xrange(self.get_y_blk(self._frame_shape[0])):
+            self._blk_node_map[y_blk] = {}
+            for x_blk in xrange(self.get_x_blk(self._frame_shape[1])):
+                flow_node = TenguFlowNode(y_blk, x_blk)
                 self._flow_graph.add_node(flow_node)
-                self._blk_node_map[x_blk][y_blk] = flow_node
+                self._blk_node_map[y_blk][x_blk] = flow_node
 
     def flow_node_at(self, x, y):
-        x_blk = self.get_x_blk(x)
         y_blk = self.get_y_blk(y)
-        return self._blk_node_map[x_blk][y_blk]
+        x_blk = self.get_x_blk(x)
+        return self._blk_node_map[y_blk][x_blk]
 
     def get_x_blk(self, x):
-        x = min(max(0., x), self._flows.shape[0])
-        return int(x / self._flow_blocks[0])
+        x = min(max(0., x), self._frame_shape[1])
+        return int(x / self._flow_blocks[1])
 
     def get_y_blk(self, y):
-        y = min(max(0., y), self._flows.shape[1])
-        return int(y / self._flow_blocks[1])
+        y = min(max(0., y), self._frame_shape[0])
+        return int(y / self._flow_blocks[0])
 
     def add_new_tracklets(self, new_tracklets):
-        pass
+        
+        for new_tracklet in new_tracklets:
+            flow_node = self.flow_node_at(*new_tracklet.center)
+            flow_node.mark_source()
+            new_tracklet.flows.append(flow_node)
+            self.logger.info('source at {}'.format(flow_node))
 
     def update_existing_tracklets(self, existing_tracklets):
-        pass
+        
+        for existing_tracklet in existing_tracklets:
+            prev_flow_node = existing_tracklet.flows[-1]
+            flow_node = self.flow_node_at(*existing_tracklet.center)
+            if prev_flow_node == flow_node:
+                continue
+            # update edge
+            if not self._flow_graph.has_edge(prev_flow_node, flow_node):
+                self._flow_graph.add_edge(prev_flow_node, flow_node, weight=0)
+            edge = self._flow_graph[prev_flow_node][flow_node]
+            edge['weight'] = edge['weight'] + 1
+            # add
+            existing_tracklet.flows.append(flow_node)
+            self.logger.info('updating weight at {}'.format(edge))
+
 
     def finish_removed_tracklets(self, removed_tracklets):
-        pass
+        
+        for removed_tracklet in removed_tracklets:
+            flow_node = self.flow_node_at(*removed_tracklet.center)
+            flow_node.mark_sink()
+            self.logger.info('sink at {}'.format(flow_node))

@@ -30,6 +30,8 @@ class Tracklet(object):
         self._movement = None
         self._confidence = 0.
         self._recent_updates = ['N/A']
+        # used by counter
+        self._flows = []
 
     # Tracklet Properties
 
@@ -45,6 +47,10 @@ class Tracklet(object):
     @property
     def rect(self):
         return self._rect
+
+    @property
+    def center(self):
+        return (int(self._rect[0]+self._rect[2]/2), int(self._rect[1]+self._rect[3]/2))
 
     @property
     def confidence(self):
@@ -73,6 +79,10 @@ class Tracklet(object):
     @property
     def observations(self):
         return self._observations
+
+    @property
+    def flows(self):
+        return self._flows
 
     def similarity(self, assignment):
         """
