@@ -10,7 +10,7 @@ import numpy as np
 
 from scipy.optimize import linear_sum_assignment
 
-from ..tengu_scene_analyzer import KLTSceneAnalyzer, TenguNode
+from ..tengu_flow_analyzer import KLTAnalyzer, TenguNode
 from ..tengu_tracker import TenguTracker, Tracklet, TenguCostMatrix
 
 """
@@ -88,7 +88,7 @@ class ClusteredKLTTracklet(Tracklet):
         return min(similarity)
 
     def histogram(self, rect):
-        frame = self.tracker._klt_scene_analyzer.last_frame
+        frame = self.tracker._tengu_flow_analyer._klt_analyzer.last_frame
         img = frame[int(rect[1]):int(rect[1]+rect[3]), int(rect[0]):int(rect[0]+rect[3]), :]
         hist = cv2.calcHist([img], [0, 1, 2], None, [32, 32, 32], [0, 256, 0, 256, 0, 256])
         cv2.normalize(hist, hist)
@@ -280,19 +280,18 @@ class ClusteredKLTTracker(TenguTracker):
     _minimum_community_size = 2
     _minimum_node_similarity = 0.5
     
-    def __init__(self, klt_scene_analyzer, **kwargs):
+    def __init__(self, **kwargs):
         super(ClusteredKLTTracker, self).__init__(**kwargs)
-        # TODO: check class?
-        self._klt_scene_analyzer = klt_scene_analyzer
+        self._tengu_flow_analyer = None
         self.graph = Set([])
         self.detection_node_map = None
         self.debug = None
 
     def prepare_updates(self, detections):
 
-        if self._klt_scene_analyzer.draw_flows:
+        if self._tengu_flow_analyer._klt_analyzer.draw_flows:
             # this is a debug mode
-            self.debug = self._klt_scene_analyzer.prev_gray.copy()
+            self.debug = self._tengu_flow_analyer._klt_analyzer.prev_gray.copy()
 
         start = time.time()
 
@@ -310,9 +309,9 @@ class ClusteredKLTTracker(TenguTracker):
         self.logger.debug('prepare_updates took {} s'.format(end - start))
 
         # update
-        self._klt_scene_analyzer.last_detections = detections
+        self._tengu_flow_analyer._klt_analyzer.last_detections = detections
 
-        if self._klt_scene_analyzer.draw_flows:
+        if self._tengu_flow_analyer._klt_analyzer.draw_flows:
             self.draw_graph()
             cv2.imshow('Clustered KLT Debug', self.debug)
 
@@ -330,11 +329,11 @@ class ClusteredKLTTracker(TenguTracker):
 
     def update_graph(self):
         
-        nodes = self._klt_scene_analyzer.nodes
+        nodes = self._tengu_flow_analyer._klt_analyzer.nodes
         self.logger.debug('updating graph with {} nodes, and {} graph nodes'.format(len(nodes), len(self.graph)))
 
         # remove
-        removed_nodes = self._klt_scene_analyzer.last_removed_nodes
+        removed_nodes = self._tengu_flow_analyer._klt_analyzer.last_removed_nodes
         removed_graph_nodes = []
         for removed_node in removed_nodes:
             self.graph.discard(removed_node)
@@ -345,7 +344,7 @@ class ClusteredKLTTracker(TenguTracker):
         detection_node_map = {}
         for detection in detections:
             detection_node_map[detection] = []
-        nodes = self._klt_scene_analyzer.nodes
+        nodes = self._tengu_flow_analyer._klt_analyzer.nodes
         for node in nodes:
             for detection in detections:
                 if node.inside_rect(detection):
@@ -380,7 +379,7 @@ class ClusteredKLTTracker(TenguTracker):
                 # node is obsolete
                 obsolete_nodes.add(node)
                 # remove from sceneanalyzer as well
-                del self._klt_scene_analyzer.nodes[self._klt_scene_analyzer.nodes.index(node)]
+                del self._tengu_flow_analyer._klt_analyzer.nodes[self._tengu_flow_analyer._klt_analyzer.nodes.index(node)]
                 self.logger.debug('removed obsolete node and its edges due to diff = {}'.format(diff))
 
         self.graph = self.graph - obsolete_nodes

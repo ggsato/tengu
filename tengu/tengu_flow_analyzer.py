@@ -1,0 +1,334 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+import logging, math
+import cv2
+import numpy as np
+
+from .tengu_tracker import TenguTracker, Tracklet
+
+class TenguNode(object):
+
+    # location, orientation, acceleration, speed
+    _min_length = 25
+    # if threshold is 0.5, the lowest similarity Smin:
+    # Smin = 100
+    _min_distance = 50
+    # Smin = 10 degrees
+    _min_angle = math.pi / 180 * 10
+    # Smin = 5 per 10 frames
+    _min_speed = 5
+    # Smin = 1
+    _min_acceleration = _min_speed / 5
+
+    def __init__(self, tr, *argv):
+        super(TenguNode, self).__init__(*argv)
+        self.logger = logging.getLogger(__name__)
+        self.tr = tr
+        self._last_detection = None
+        self._last_detected_at = TenguTracker._global_updates
+        self._last_updated_at = TenguTracker._global_updates
+        self._movement = None
+        self._angle = None
+        self._property_updated_at = -1
+
+    def __repr__(self):
+        return 'node at {} detected at {} updated at {}'.format(self.tr[-1], self._last_detected_at, self._last_updated_at)
+
+    def update_last_detected(self, detection):
+        self._last_detection = detection
+        self._last_detected_at = TenguTracker._global_updates
+
+    @property
+    def last_detected_at(self):
+        return self._last_detected_at
+
+    def update_tr(self, x, y):
+        self.tr.append((x, y))
+        self._last_updated_at = TenguTracker._global_updates
+
+    @property
+    def last_updated_at(self):
+        return self._last_updated_at
+
+    @property
+    def position(self):
+        if self._rect is None:
+            return None
+
+        return [int(self._rect[0]+self._rect[2]/2), int(self._rect[1]+self._rect[3]/2)]
+
+    @property
+    def movement(self):
+        return self._movement
+
+    @property
+    def angle(self):
+        return self._angle
+
+    def inside_rect(self, rect):
+        x, y = self.tr[-1]
+        return (x > rect[0] and x < (rect[0]+rect[2])) and (y > rect[1] and y < (rect[1]+rect[3]))
+
+    def similarity(self, another):
+        """
+        similarity is measured as a weighed average of the followings
+        1. location (x, y)
+        this is useful to detect a node that gets stuck and stays somewhere
+        location_similarity = ??
+        2. orientation
+        this is useful when an object moves to a different direction passes in front, and steals some nodes
+        orientation_similarity = ??
+        3. accelaration
+        this is useful when an object moves to a similar direction passes in front, and steals some nodes
+        accelaration_similarity = ??
+        4. speed
+        this is useful when an object moves to a similar direction at faster but constant speed passes in front, and steals some nodes
+        speed_similarity = ??
+        """
+
+        if self == another:
+            self.logger.debug('similarity is 1.0, the same node')
+            return [1.0, 1.0, 1.0, 1.0]
+
+        pos0 = self.tr[-1]
+        pos1 = another.tr[-1]
+        distance = TenguNode.compute_distance(pos0, pos1)
+        if self._last_detection is not None and (TenguTracker._global_updates-self._last_detected_at)<Tracklet._min_confidence:
+            # use detection
+            half_rect = min(self._last_detection[2:])/2
+            location_similarity = half_rect/max(half_rect, distance)
+        else:
+            location_similarity = TenguNode._min_distance/max(TenguNode._min_distance, distance)
+        self.logger.debug('location_similarity between {} and {} is {}, distance={}'.format(pos0, pos1, location_similarity, distance))
+
+        if len(self.tr) < TenguNode._min_length or len(another.tr) < TenguNode._min_length:
+            # not reliable
+            orientation_similarity = 0
+            speed_similarity = 0
+            acceleration_similarity = 0
+        else:
+            pos01 = self.tr[-1 * TenguNode._min_length]
+            pos11 = another.tr[-1 * TenguNode._min_length]
+            distance0 = TenguNode.compute_distance(pos0, pos01)
+            distance1 = TenguNode.compute_distance(pos1, pos11)
+            if distance0 > 5:
+                self.logger.debug('distance0 between {} and {} is {}'.format(pos0, pos01, distance0))
+                self.logger.debug('tr = {}'.format(self.tr))
+
+            if distance0 < TenguNode._min_speed:
+                # stationally
+                angle0 = None
+            else:
+                angle0 = TenguNode.get_angle(self.tr)
+            if distance1 < TenguNode._min_speed:
+                # stationally
+                angle1 = None
+            else:
+                angle1 = TenguNode.get_angle(another.tr)
+
+            diff_angle = None
+            if angle0 is None and angle1 is None:
+                # both are stationally
+                orientation_similarity = 1.0
+            elif angle0 is None or angle1 is None:
+                orientation_similarity = 0.0
+            else:
+                diff_angle = max(TenguNode._min_angle, math.fabs(angle0 - angle1))
+                if diff_angle > math.pi:
+                    diff_angle -= math.pi
+                orientation_similarity = TenguNode._min_angle/diff_angle
+            self.logger.debug('orientation_similarity between {} and {} is {}, diff={}'.format(angle0, angle1, orientation_similarity, diff_angle))
+
+            diff_speed = max(TenguNode._min_speed, math.fabs(distance0 - distance1))
+            speed_similarity = TenguNode._min_speed/diff_speed
+            self.logger.debug('speed similarity between {} and {} is {}, diff={}'.format(distance0, distance1, speed_similarity, diff_speed))
+
+            if len(self.tr) < TenguNode._min_length*2 or len(another.tr) < TenguNode._min_length*2:
+                acceleration_similarity = 1.0
+                self.logger.debug('skipping acceleration similarity calculation')
+            else:
+                distance00 = TenguNode.compute_distance(self.tr[0], self.tr[TenguNode._min_length])
+                distance10 = TenguNode.compute_distance(another.tr[0], another.tr[TenguNode._min_length])
+                acceleration0 = distance0 - distance00
+                acceleration1 = distance1 - distance10
+                diff_acceleration = max(TenguNode._min_acceleration, math.fabs(acceleration1 - acceleration0))
+                acceleration_similarity = TenguNode._min_acceleration / diff_acceleration
+                self.logger.debug('acceleration similarity between {} and {} is {}, diff={}'.format(acceleration0, acceleration1, acceleration_similarity, diff_acceleration))
+
+            # update
+            self._movement = [int((pos0[0]-pos01[0])/TenguNode._min_length), int((pos0[1]-pos01[1])/TenguNode._min_length)]
+            self._angle = angle0
+            self._property_updated_at = TenguTracker._global_updates
+
+        # debug
+        disable_similarity = False
+        if disable_similarity:
+            location_similarity = 1.0
+            orientation_similarity = 1.0
+            speed_similarity = 1.0
+            acceleration_similarity = 1.0
+
+        similarity = [location_similarity, orientation_similarity, speed_similarity, acceleration_similarity]
+
+        self.logger.debug('similarity = {} [{}, {}, {}, {}]'.format(similarity, location_similarity, orientation_similarity, speed_similarity, acceleration_similarity))
+
+        return similarity
+
+    @staticmethod
+    def compute_distance(pos0, pos1):
+        return math.sqrt((pos1[0]-pos0[0])**2+(pos1[1]-pos0[1])**2)
+
+    @staticmethod
+    def get_angle(tr):
+        p_from = tr[-1 * TenguNode._min_length]
+        p_to = tr[-1]
+        diff_x = p_to[0] - p_from[0]
+        diff_y = p_to[1] - p_from[1]
+        # angle = (-pi, pi)
+        angle = math.atan2(diff_y, diff_x)
+        return angle
+
+    def last_move(self):
+        if len(self.tr) < TenguNode._min_length:
+            return None
+
+        prev = self.tr[-1]
+        prev2 = self.tr[-1 * TenguNode._min_length]
+        move_x = prev[0]-prev2[0]
+        move_y = prev[1]-prev2[1]
+        return [int(move_x/min_length), int(move_y/min_length)] 
+
+class KLTAnalyzer(object):
+
+    _max_nodes = 1000
+    
+    def __init__(self, draw_flows=False, lk_params=None, feature_params=None, count_lines=None, **kwargs):
+        super(KLTAnalyzer, self).__init__(**kwargs)
+
+        self.logger= logging.getLogger(__name__)
+        self.draw_flows = draw_flows
+        self.lk_params = lk_params
+        self.feature_params = feature_params
+        self.count_lines = count_lines
+
+        self.frame_idx = 0
+        self.update_interval = 10
+        self.nodes = [] 
+        self.max_track_length = 100
+        self.prev_gray = None
+        self._last_removed_nodes = []
+        self.debug = None
+
+        # used for mask
+        self.last_detections = None
+
+        self.last_frame = None
+
+    @property
+    def last_removed_nodes(self):
+        removed_nodes = self._last_removed_nodes
+        self._last_removed_nodes = []
+        return removed_nodes
+
+    def analyze_frame(self, frame):
+        frame_gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        if self.draw_flows:
+            self.debug = frame_gray.copy()
+        # calculate optical flow
+        if len(self.nodes) > 0:
+            self.nodes = self.calculate_flow(self.prev_gray, frame_gray)
+            self.logger.debug('{} nodes are currently tracked'.format(len(self.nodes)))
+        # update tracking points
+        if self.frame_idx % self.update_interval == 0:
+            mask = self.find_corners_to_track(frame_gray)
+            if self.draw_flows:
+                cv2.imshow('KLT Debug - Mask', mask)
+        # set prev
+        self.last_frame = frame
+        self.prev_gray = frame_gray
+        self.frame_idx += 1
+
+        if self.draw_flows:
+            cv2.imshow('KLT Debug - Flows', self.debug)
+            ch = 0xFF & cv2.waitKey(1)
+
+    def calculate_flow(self, img0, img1):
+        self.logger.debug('calculating flow')
+        p0 = np.float32([node.tr[-1] for node in self.nodes]).reshape(-1, 1, 2)
+        p1, st, err = cv2.calcOpticalFlowPyrLK(img0, img1, p0, None, **self.lk_params)
+        p0r, st, err = cv2.calcOpticalFlowPyrLK(img1, img0, p1, None, **self.lk_params)
+        d = abs(p0-p0r).reshape(-1, 2).max(-1)
+        good = d < 1
+        new_nodes = []
+        for node, (x, y), good_flag in zip(self.nodes, p1.reshape(-1, 2), good):
+            if not good_flag:
+                self._last_removed_nodes.append(node)
+                continue
+
+            if len(node.tr) > self.max_track_length:
+                del node.tr[0]
+
+            node.update_tr(x, y)
+            new_nodes.append(node)
+
+            if self.draw_flows:
+                cv2.circle(self.debug, (x, y), 3, (255, 255, 255), -1)
+
+        if self.draw_flows:
+            cv2.polylines(self.debug, [np.int32(node.tr) for node in new_nodes], False, (192, 192, 192))
+
+        return new_nodes
+
+    def find_corners_to_track(self, frame_gray):
+        self.logger.debug('finding corners')
+
+        # every pixel is not tracked by default
+        mask = np.zeros_like(frame_gray)
+        use_detections = True
+        if use_detections and self.last_detections is not None:
+            for detection in self.last_detections:
+                cv2.rectangle(mask, (int(detection[0]), int(detection[1])), (int(detection[0]+detection[2]), int(detection[1]+detection[3])), 255, -1)
+        # don't pick up existing pixels
+        for x, y in [np.int32(node.tr[-1]) for node in self.nodes]:
+            cv2.circle(mask, (x, y), 20, 0, -1)
+        # find good points
+        p = cv2.goodFeaturesToTrack(frame_gray, mask = mask, **self.feature_params)
+        if p is None:
+            self.logger.debug('No good features')
+        else:
+            for x, y in np.float32(p).reshape(-1, 2):
+                new_node = TenguNode([(x, y)])
+                self.nodes.append(new_node)
+                if len(self.nodes) > KLTAnalyzer._max_nodes:
+                    self._last_removed_nodes.append(self.nodes[0])
+                    del self.nodes[0]
+
+        return mask
+
+class TenguFlowAnalyzer(object):
+
+    def __init__(self, detector, tracker, **kwargs):
+        super(TenguFlowAnalyzer, self).__init__()
+
+        self.logger= logging.getLogger(__name__)
+        self._klt_analyzer = KLTAnalyzer(**kwargs)
+        self._detector = detector
+        self._tracker = tracker
+        if self._tracker is not None:
+            self._tracker.set_flow_analyzer(self)
+
+    def analyze_flow(self, frame):
+
+        detections = []
+        tracklets = []
+
+        self._klt_analyzer.analyze_frame(frame)
+        
+        if self._detector is not None:
+            detections = self._detector.detect(frame)
+
+            if self._tracker is not None:
+                tracklets = self._tracker.resolve_tracklets(detections)
+
+        return detections, tracklets
+

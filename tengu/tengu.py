@@ -15,41 +15,12 @@ from tengu_observer import *
 
 class Tengu(object):
 
-    def __init__(self, every_x_frame=1, rotation=0):
+    def __init__(self):
         self.logger= logging.getLogger(__name__)
 
         self._observers = WeakValueDictionary()
-        self._src = None
         self._current_frame = -1
-        self._every_x_frame = every_x_frame
-        self._rotation = rotation
-
         self._stopped = False
-
-    @property
-    def src(self):
-        return self._src
-
-    @src.setter
-    def src(self, src):
-        if src == None:
-            self.logger.debug('src should not be None')
-            return
-
-        if src == self._src:
-            self.logger.debug('{} is already set')
-            return
-
-        if self._current_frame >= 0:
-            self.logger.warning('stop running before changing src')
-            return
-        
-        self.logger.debug('src changed from {} to {}'.format(self._src, src))
-        self._src = src
-        self._stopped = False
-
-        # notifiy observers
-        self._notify_src_changed()
 
     @property
     def frame_no(self):
@@ -112,17 +83,21 @@ class Tengu(object):
             if isinstance(observer, TenguAnalysisObserver):
                 observer.analysis_finished()
 
-    def run(self, tengu_scene_analyzer=None, tengu_detector=None, tengu_tracker=None, tengu_counter=None, queue=None, max_queue_wait=10):
+    def run(self, src=None, roi=None, scale=None, every_x_frame=1, rotation=0, tengu_flow_analyzer=None, tengu_counter=None, queue=None, max_queue_wait=10):
         """
         the caller should register by add_observer before calling run if it needs updates during analysis
         this should return quicky for the caller to do its own tasks especially showing progress graphically
         """
-        self.logger.debug('running with scene_analyzer:{}, detector:{}, tracker:{}, counter:{}'.format(tengu_scene_analyzer, tengu_detector, tengu_tracker, tengu_counter))
+        self.logger.debug('running with flow_analyzer:{}, counter:{}'.format(tengu_flow_analyzer, tengu_counter))
         
+        if src is None:
+            self.logger.error('src has to be set')
+            return
+
         try:
-            cam = cv2.VideoCapture(int(self._src))
+            cam = cv2.VideoCapture(int(src))
         except:
-            cam = cv2.VideoCapture(self._src)        
+            cam = cv2.VideoCapture(src)        
         if cam is None or not cam.isOpened():
             self.logger.debug(self._src + ' is not available')
             return
@@ -138,9 +113,9 @@ class Tengu(object):
             self._current_frame += 1
 
             # rotate
-            if self._rotation != 0:
+            if rotation != 0:
                 rows, cols, channels = frame.shape
-                M = cv2.getRotationMatrix2D((cols/2, rows/2), self._rotation, 1)
+                M = cv2.getRotationMatrix2D((cols/2, rows/2), rotation, 1)
                 frame = cv2.warpAffine(frame, M, (cols, rows))
 
             # block for a client if necessary to synchronize
@@ -155,40 +130,30 @@ class Tengu(object):
             # use copy for gui use, which is done asynchronously, meaning may corrupt buffer during camera updates
             copy = frame.copy()
 
-            # notify
-            self._notify_frame_changed(copy)
-
-            # analyze scene
-            if tengu_scene_analyzer is not None:
-                scene = tengu_scene_analyzer.analyze_scene(frame)
-                self._notify_scene_changed(scene)
-            else:
-                scene = frame
+            # preprocess
+            cropped = self.preprocess(frame, roi, scale)
+            self._notify_frame_changed(cropped)
 
             # skip if necessary
-            if self._every_x_frame > 1 and self._current_frame % self._every_x_frame != 0:
+            if every_x_frame > 1 and self._current_frame % every_x_frame != 0:
                 self._current_frame += 1
                 self.logger.debug('skipping frame at {}'.format(self._current_frame))
                 continue
 
             # detect
-            if tengu_detector is not None:
-                detections = tengu_detector.detect(scene)
+            if tengu_flow_analyzer is not None:
+                detections, tracklets = tengu_flow_analyzer.analyze_flow(cropped)
                 self._notify_objects_detected(detections)
+                self._notify_tracklets_updated(tracklets)
 
-                # tracking-by-detection
-                if tengu_tracker is not None:
-                    tracklets = tengu_tracker.resolve_trackings(detections)
-                    self._notify_tracklets_updated(tracklets)
+                # count trackings
+                if tengu_counter is not None:
+                    self.logger.debug('calling counter')
+                    counts = tengu_counter.count(tracklets)
+                    self._notify_objects_counted(counts)
 
-                    # count trackings
-                    if tengu_counter is not None:
-                        self.logger.debug('calling counter')
-                        counts = tengu_counter.count(tracklets)
-                        self._notify_objects_counted(counts)
-
-                    else:
-                        self.logger.debug('skip calling counter')
+                else:
+                    self.logger.debug('skip calling counter')
 
             # only for debugging
             #time.sleep(1)
@@ -198,6 +163,21 @@ class Tengu(object):
             tengu_counter.count(None)
         self._notify_analysis_finished()
         self._stopped = True
+
+    def preprocess(self, frame, roi, scale):
+
+        cropped = None
+        
+        if scale == 1.0:
+            cropped = frame
+        else:
+            cropped = cv2.resize(frame, None, fx=scale, fy=scale, interpolation=cv2.INTER_AREA)
+
+        if roi is not None:
+            # crop
+            cropped = cropped[roi[1]:roi[1]+roi[3], roi[0]:roi[0]+roi[2]]
+        
+        return cropped
 
     def save(self, model_folder):
         self.logger.debug('saving current models in {}...'.format(model_folder))

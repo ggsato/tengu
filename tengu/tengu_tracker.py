@@ -184,12 +184,16 @@ class TenguTracker(object):
         self.logger = logging.getLogger(__name__)
         self._tracklets = []
         self._obsoletion = obsoletion
+        self._tengu_flow_analyer = None
+
+    def set_flow_analyzer(self, tengu_flow_analyzer):
+        self._tengu_flow_analyer = tengu_flow_analyzer
 
     @property
     def tracklets(self):
         return copy.copy(self._tracklets)
 
-    def resolve_trackings(self, detections):
+    def resolve_tracklets(self, detections):
         TenguTracker._global_updates += 1
 
         if len(self._tracklets) == 0:
