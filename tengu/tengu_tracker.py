@@ -30,8 +30,11 @@ class Tracklet(object):
         self._movement = None
         self._confidence = 0.
         self._recent_updates = ['N/A']
-        # used by counter
+        # used by flow analyzer for building flow graph
         self._flows = []
+        # used by flow analyzer for updating a scene
+        self._current_flow = None
+        self._current_path_index = None
 
     # Tracklet Properties
 
@@ -252,7 +255,7 @@ class TenguTracker(object):
         Then, such a cost matrix is optimized to produce a combination of minimum cost assignments.
         For more information, see Hungarian algorithm(Wikipedia), scipy.optimize.linear_sum_assignment
         """
-        cost_matrix = self.create_empty_cost_matrix(len(detections))
+        cost_matrix = TenguTracker.create_empty_cost_matrix(len(self._tracklets), len(detections))
         for t, tracklet in enumerate(self._tracklets):
             for d, detection in enumerate(detections):
                 cost = self.calculate_cost_by_overlap_ratio(tracklet.rect, detection)
@@ -260,19 +263,16 @@ class TenguTracker(object):
                 self.logger.debug('cost at [{}][{}] of ({}, {}) = {}'.format(t, d, id(tracklet), id(detection), cost))
         return TenguCostMatrix(detections, cost_matrix)
 
-    def create_empty_cost_matrix(self, cols):
-        if len(self._tracklets) == 0:
+    @staticmethod
+    def create_empty_cost_matrix(self, rows, cols):
+        if rows == 0:
             return None
 
-        shape = (len(self._tracklets), cols)
-        self.logger.debug('shape: {}'.format(shape))
+        shape = (rows, cols)
         cost_matrix = np.zeros(shape, dtype=np.float32)
         if len(shape) == 1:
             # the dimesion should be forced
             cost_matrix = np.expand_dims(cost_matrix, axis=1)
-
-        self.logger.debug('shape of cost_matrix: {}'.format(cost_matrix.shape))
-
         return cost_matrix
 
     def calculate_cost_by_overlap_ratio(self, rect_a, rect_b):
