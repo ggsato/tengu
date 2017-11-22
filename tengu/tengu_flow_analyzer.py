@@ -326,16 +326,26 @@ class TenguScene(object):
                 self._flow_map[flow.name] = []
             self._flow_map[flow.name].append(flow)
 
+    @property
+    def flow_names(self):
+        return self._flow_map.keys()
+
+    def named_flows(self, name):
+        return self._flow_map[name]
+
     def serialize(self):
-        js = []
+        js = {}
+        flows_js = []
         for name in self._flow_map:
             flows = self._flow_map[name]
             for flow in flows:
-                json.append(flow.serialize())
+                flows_js.append(flow.serialize())
+        fs['flows'] = flows_js
         return js
 
     @staticmethod
     def deserialize(js):
+        flows_js = js['flows']
         flows = []
         for flow_js in js:
             flows.append(TenguFlow.deserialize(flow_js))
@@ -392,21 +402,21 @@ class TenguFlow(object):
 
     def serialize(self):
         js = {}
-        js.source = self._source
-        js.sink = self._sink
+        js['source'] = self._source
+        js['sink'] = self._sink
         js_path = []
         for node in self._path:
             js_path.append(node.serialize())
-        js.path = js_path
-        js.name = self._name
+        js['path'] = js_path
+        js['name'] = self._name
         return js
 
     @staticmethod
-    def deserialize(js)
+    def deserialize(js):
         path = []
-        for js_node in js.path:
+        for js_node in js['path']:
             path.append(TenguFlowNode.deserialize(js_node))
-        return TenguFlow(js.source, js.sink, path, js.name)
+        return TenguFlow(js['source'], js['sink'], path, js['name'])
 
     @property
     def source(self):
@@ -441,14 +451,14 @@ class TenguFlowNode(object):
 
     def serialize(self):
         js = {}
-        js.y_blk = self._y_blk
-        js.x_blk = self._x_blk
-        js.position = self._position
+        js['y_blk'] = self._y_blk
+        js['x_blk'] = self._x_blk
+        js['position'] = self._position
         return js
 
     @staticmethod
     def deserialize(js):
-        return TenguFlowNode(js.y_blk, js.x_blk, js.position)
+        return TenguFlowNode(js['y_blk'], js['x_blk'], js['position'])
 
     @property
     def source_count(self):
@@ -521,6 +531,7 @@ class TenguFlowAnalyzer(object):
 
             if self._tracker is not None:
                 tracklets = self._tracker.resolve_tracklets(detections)
+                self.build_scene()
                 self.build_flow_graph(tracklets)
 
         return detections, tracklets
@@ -558,6 +569,7 @@ class TenguFlowAnalyzer(object):
     def initialize_flow_graph(self, frame_shape):
 
         # gray scale
+        self._scene = TenguScene()
         self._frame_shape = (frame_shape[0], frame_shape[1], 1)
         self._flow_graph = nx.DiGraph()
         self._flow_blocks_size = (int(self._frame_shape[0]/self._flow_blocks[0]), int(self._frame_shape[1]/self._flow_blocks[1]))
@@ -650,9 +662,26 @@ class TenguFlowAnalyzer(object):
             for out_edge in out_edges:
                 color = min(255, 128+self._flow_graph[out_edge[0]][out_edge[1]]['capacity'])
                 cv2.arrowedLine(img, out_edge[0].position , out_edge[1].position, color, thickness=2, tipLength=0.5)
+
         # finally show top N src=>sink
+        names = self._scene.flow_names
+        for name in names:
+            flows = self._scene.named_flows(name)
+            for flow in flows:
+                lines = []
+                for n, node in enumerate(flow.path):
+                    lines.append(node.position)
+                     
+                cv2.polylines(img, [np.int32(lines)], False, 192, thickness=2)
+                # arrow
+                cv2.arrowedLine(img, flow.source.position , flow.sink.position, 255, thickness=3, tipLength=0.1)
+
+        return img
+
+    def build_scene(self):
         major_sinks = sorted(self._flow_graph, key=attrgetter('sink_count'), reverse=True)
         majority = int(len(self._flow_graph)/100*3)
+        flows = []
         for major_sink in major_sinks[:majority]:
             if major_sink.sink_count < 10:
                 continue
@@ -661,15 +690,10 @@ class TenguFlowAnalyzer(object):
             major_source = source_nodes[0]
             # path
             path = nx.dijkstra_path(self._flow_graph, major_source, major_sink, weight=TenguFlowCounter.weight_func)
-            lines = []
-            for n, node in enumerate(path):
-                lines.append(node.position)
-                 
-            cv2.polylines(img, [np.int32(lines)], False, 192, thickness=2)
-            # arrow
-            cv2.arrowedLine(img, major_source.position , major_sink.position, 255, thickness=3, tipLength=0.1)
-
-        return img
+            # build
+            tengu_flow = TenguFlow(major_source, major_sink, path)
+            flows.append(tengu_flow)
+        self._scene.set_flows(flows)
 
     @staticmethod
     def weight_func(u, v, dict):
