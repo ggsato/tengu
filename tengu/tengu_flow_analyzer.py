@@ -1,13 +1,14 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-import logging, math, json
+import logging, math, json, sys
 import cv2
 import numpy as np
 import networkx as nx
 from operator import attrgetter
 from sets import Set
+import StringIO
 
-from .tengu_tracker import TenguTracker, Tracklet
+from .tengu_tracker import TenguTracker, Tracklet, TenguCostMatrix
 
 class TenguNode(object):
 
@@ -345,21 +346,22 @@ class TenguScene(object):
 
     def serialize(self):
         js = {}
-        js['frame_shape'] = [self._frame_shape[0], self._frame_shape[1], self._frame_shape[2]]
-        js['flow_blocks'] = [self._flow_blocks[0], self._flow_blocks[1]]
+        js['frame_shape'] = self._frame_shape
+        js['flow_blocks'] = self._flow_blocks
         flows_js = []
         for name in self._flow_map:
             flows = self._flow_map[name]
             for flow in flows:
                 flows_js.append(flow.serialize())
-        fs['flows'] = flows_js
+        js['flows'] = flows_js
         return js
 
     @staticmethod
     def deserialize(js):
+        logging.debug('deserializing {}'.format(js))
         flows_js = js['flows']
         flows = []
-        for flow_js in js:
+        for flow_js in flows_js:
             flows.append(TenguFlow.deserialize(flow_js))
         frame_shape = (js['frame_shape'][0], js['frame_shape'][1], js['frame_shape'][2])
         flow_blocks = (js['flow_blocks'][0], js['flow_blocks'][1])
@@ -368,18 +370,19 @@ class TenguScene(object):
         return tengu_scene
 
     @staticmethod
-    def load(self, file):
+    def load(file):
         """
         load flow_map from folder
         """
         f = open(file, 'r')
         try:
-            js_string = f.readline()
+            buf = StringIO.StringIO()
+            for line in f:
+                buf.write(line)
+            js_string = buf.getvalue()
+            buf.close()
             tengu_scene = TenguScene.deserialize(json.loads(js_string))
             return tengu_scene
-        except:
-            exctype, value = sys.exc_info()[:2] 
-            print('failed to save due to {} of {}'.format(value, exctype))
         finally:
             f.close()
 
@@ -389,11 +392,8 @@ class TenguScene(object):
         """
         f = open(file, 'w')
         try:
-            js_string = json.dumps(self.serialize())
+            js_string = json.dumps(self.serialize(), sort_keys=True, indent=4, separators=(',', ': '))
             f.write(js_string)
-        except:
-            exctype, value = sys.exc_info()[:2] 
-            print('failed to save due to {} of {}'.format(value, exctype))
         finally:
             f.close()
 
@@ -416,8 +416,8 @@ class TenguFlow(object):
 
     def serialize(self):
         js = {}
-        js['source'] = self._source
-        js['sink'] = self._sink
+        js['source'] = self._source.serialize()
+        js['sink'] = self._sink.serialize()
         js_path = []
         for node in self._path:
             js_path.append(node.serialize())
@@ -427,10 +427,11 @@ class TenguFlow(object):
 
     @staticmethod
     def deserialize(js):
+        logging.debug('deserializing {}'.format(js))
         path = []
         for js_node in js['path']:
             path.append(TenguFlowNode.deserialize(js_node))
-        return TenguFlow(js['source'], js['sink'], path, js['name'])
+        return TenguFlow(TenguFlowNode.deserialize(js['source']), TenguFlowNode.deserialize(js['sink']), path, js['name'])
 
     @property
     def source(self):
@@ -457,6 +458,7 @@ class TenguFlowNode(object):
         super(TenguFlowNode, self).__init__()
         self._y_blk = y_blk
         self._x_blk = x_blk
+        # position has to be tuple
         self._position = position
         self._source_count = 0
         self._sink_count = 0
@@ -475,7 +477,7 @@ class TenguFlowNode(object):
 
     @staticmethod
     def deserialize(js):
-        return TenguFlowNode(js['y_blk'], js['x_blk'], js['position'])
+        return TenguFlowNode(js['y_blk'], js['x_blk'], (js['position'][0], js['position'][1]))
 
     @property
     def source_count(self):
@@ -686,7 +688,7 @@ class TenguFlowAnalyzer(object):
             source_nodes = sorted(source_nodes, key=major_sink._sources.__getitem__, reverse=True)
             major_source = source_nodes[0]
             # path
-            path = nx.dijkstra_path(self._flow_graph, major_source, major_sink, weight=TenguFlowCounter.weight_func)
+            path = nx.dijkstra_path(self._flow_graph, major_source, major_sink, weight=TenguFlowAnalyzer.weight_func)
             # build
             tengu_flow = TenguFlow(major_source, major_sink, path)
             flows.append(tengu_flow)
@@ -696,8 +698,10 @@ class TenguFlowAnalyzer(object):
     def weight_func(u, v, dict):
         return 1.0 / dict['capacity']
 
-    def build_scene_from_file(self, scene_file):
-        self._scene = TenguScene.deserialize(scene_file)
+    def build_scene_from_file(self):
+        scene = TenguScene.load(self._scene_file)
+        self.logger.info('build scene {} from file {}'.format(scene, self._scene_file))
+        self._scene = scene
 
     def build_default_scene(self):
         self._scene.set_flows([TenguFlow()])
@@ -713,8 +717,9 @@ class TenguFlowAnalyzer(object):
         """
         # 1
         flows = self._scene.flows
-        cost_matrix = TenguTracker.create_empty_cost_matrix(len(self._last_tracklets), len(flows))
-        for t, tracklet in enumerate(self._last_tracklets):
+        tracklets = sorted(self._last_tracklets, key=attrgetter('obj_id'))
+        cost_matrix = TenguTracker.create_empty_cost_matrix(len(tracklets), len(flows))
+        for t, tracklet in enumerate(tracklets):
             for f, flow in enumerate(flows):
                 similarity = flow.similarity(tracklet)
                 cost_matrix[t][f] = -1 * math.log(max(similarity, TenguTracker._min_value))
@@ -723,7 +728,7 @@ class TenguFlowAnalyzer(object):
         # 2
         for ix, row in enumerate(tengu_cost_matrix.ind[0]):
             cost = tengu_cost_matrix.cost_matrix[row][tengu_cost_matrix.ind[1][ix]]
-            tracklet = self._last_tracklets[row]
+            tracklet = tracklets[row]
             if cost > TenguTracker._confident_min_cost:
                 self.logger.debug('{} is not evaluated for a flow due to too low cost {}'.format(tracklet.obj_id, cost))
                 continue

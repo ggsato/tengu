@@ -112,6 +112,10 @@ class Tengu(object):
             # increment
             self._current_frame += 1
 
+            # debug
+            if self._current_frame > 10000:
+                break
+
             # rotate
             if rotation != 0:
                 rows, cols, channels = frame.shape
