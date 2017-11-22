@@ -315,8 +315,8 @@ class TenguScene(object):
     A named TenguFlow is a set of TengFlows sharing the same name.
     """
 
-    def __inti__(self, frame_shape, flow_blocks):
-        super(Scene).__init__()
+    def __init__(self, frame_shape, flow_blocks):
+        super(TenguScene, self).__init__()
         self._frame_shape = frame_shape
         self._flow_blocks = flow_blocks
         self._flow_map = {}
@@ -498,6 +498,9 @@ class TenguFlowNode(object):
     @property
     def position(self):
         return self._position
+
+    def similarity(self, another_flow_node):
+        pass
 
 class TenguFlowAnalyzer(object):
 
@@ -726,14 +729,25 @@ class TenguFlowAnalyzer(object):
                 continue
             new_assignment = tengu_cost_matrix.assignments[tengu_cost_matrix.ind[1][ix]]
             self.logger.debug('assigning tracked object of id= {} to {} at {}'.format(tracklet.obj_id, new_assignment, TenguTracker._global_updates))
-            self.assign_flow_to_tracklet(new_assignment, tracklet)
+            path_index = self.find_path_index_from_flow(new_assignment, tracklet)
+            tracklet.update_current_flow(new_assignment, path_index)
             
-    def assign_flow_to_tracklet(self, flow, tracklet):
+    def find_path_index_from_flow(self, flow, tracklet):
         """
-        1. match tracklets to a node in the matched flow path
-        2. update tracklets
+        find a closest node in a path of the given flow to the recent node of the given tracklet
         """
-        pass
+        recent_node = tracklet.flows[-1]
+        best_similarity = 0
+        closest_node = None
+        for node_in_path in flow.path:
+            similarity = recent_node.similarity(node_in_path)
+            if similarity > best_similarity:
+                best_similarity = similarity
+                closest_node = node_in_path
+        if closest_node is None:
+            return -1
+
+        return flow.path.index(closest_node)
 
     def draw_graph(self):
         img = np.ones(self._frame_shape, dtype=np.uint8) * 128
