@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-import logging, math
+import logging, math, json
 import cv2
 import numpy as np
 import networkx as nx
@@ -308,24 +308,121 @@ class KLTAnalyzer(object):
 
         return mask
 
-"""
-TenguFlowCounter collects a set of flows, identify similar types of flows,
-then assign each tracklet to one of such types of flows.
-A flow is characterized by its source and sink.
+class TenguScene(object):
 
-TenguFlowCounter holds a directed weighed graph, 
-and which has nodes in the shape of flow_blocks.
-Each flow_block is assigned its dedicated region of frame_shape respectively.
+    """
+    TenguScene is a set of named TenguFlows.
+    A named TenguFlow is a set of TengFlows sharing the same name.
+    """
 
-For example, given a set of flow_blocks F = {fb0, fb1, ..., fbn},
-fbn =
-"""
+    def __inti__(self):
+        super(Scene).__init__()
+        self._flow_map = {}
+
+    def set_flows(self, flows):
+        self._flow_map = {}
+        for flow in flows:
+            if not self._flow_map.has_key(flow.name):
+                self._flow_map[flow.name] = []
+            self._flow_map[flow.name].append(flow)
+
+    def serialize(self):
+        js = []
+        for name in self._flow_map:
+            flows = self._flow_map[name]
+            for flow in flows:
+                json.append(flow.serialize())
+        return js
+
+    @staticmethod
+    def deserialize(js):
+        flows = []
+        for flow_js in js:
+            flows.append(TenguFlow.deserialize(flow_js))
+        tengu_scene = TenguScene()
+        tengu_scene.set_flows(flows)
+        return tengu_scene
+
+    @staticmethod
+    def load(self, file):
+        """
+        load flow_map from folder
+        """
+        f = open(file, 'r')
+        try:
+            js_string = f.readline()
+            tengu_scene = TenguScene.deserialize(json.loads(js_string))
+            return tengu_scene
+        except:
+            exctype, value = sys.exc_info()[:2] 
+            print('failed to save due to {} of {}'.format(value, exctype))
+        finally:
+            f.close()
+
+    def save(self, file):
+        """
+        save flow_map to folder
+        """
+        f = open(file, 'w')
+        try:
+            js_string = json.dumps(self.serialize())
+            f.write(js_string)
+        except:
+            exctype, value = sys.exc_info()[:2] 
+            print('failed to save due to {} of {}'.format(value, exctype))
+        finally:
+            f.close()
+
 class TenguFlow(object):
 
-    def __init__(self, source):
+    """
+    TenguFlow represents a flow of typical movments by a particular type of objects,
+    and whichi is characterized by its source, path, and sink.
+    """
+
+    def __init__(self, source=None, sink=None, path=None, name='default'):
         super(TenguFlow, self).__init__()
         self._source = source
         self._sink = sink
+        self._path = path
+        self._name = name
+
+    def __repr__(self):
+        return json.dumps(self.serialize())
+
+    def serialize(self):
+        js = {}
+        js.source = self._source
+        js.sink = self._sink
+        js_path = []
+        for node in self._path:
+            js_path.append(node.serialize())
+        js.path = js_path
+        js.name = self._name
+        return js
+
+    @staticmethod
+    def deserialize(js)
+        path = []
+        for js_node in js.path:
+            path.append(TenguFlowNode.deserialize(js_node))
+        return TenguFlow(js.source, js.sink, path, js.name)
+
+    @property
+    def source(self):
+        return self._source
+
+    @property
+    def sink(self):
+        return self._sink
+
+    @property
+    def path(self):
+        return self._path
+
+    @property
+    def name(self):
+        return self._name
 
 class TenguFlowNode(object):
 
@@ -340,7 +437,18 @@ class TenguFlowNode(object):
         self._sources = {}
 
     def __repr__(self):
-        return 'y_blk={}, x_blk={}, position={}, source_count={}, sink_count={}'.format(self._y_blk, self._x_blk, self._position, self._source_count, self._sink_count)
+        return json.dumps(self.serialize())
+
+    def serialize(self):
+        js = {}
+        js.y_blk = self._y_blk
+        js.x_blk = self._x_blk
+        js.position = self._position
+        return js
+
+    @staticmethod
+    def deserialize(js):
+        return TenguFlowNode(js.y_blk, js.x_blk, js.position)
 
     @property
     def source_count(self):
@@ -366,7 +474,20 @@ class TenguFlowNode(object):
 
 class TenguFlowAnalyzer(object):
 
-    def __init__(self, detector, tracker, analyze=True, frame_shape=(480, 640), flow_blocks=(20, 20), show_graph=True, **kwargs):
+    """
+    TenguFlowAnalyzer collects a set of flows, identify similar types of flows,
+    then assign each tracklet to one of such types of flows.
+    A flow is characterized by its source and sink.
+
+    TenguFlowAnalyzer holds a directed weighed graph, 
+    and which has nodes in the shape of flow_blocks.
+    Each flow_block is assigned its dedicated region of frame_shape respectively.
+
+    For example, given a set of flow_blocks F = {fb0, fb1, ..., fbn},
+    fbn =
+    """
+
+    def __init__(self, detector, tracker, flow_blocks=(20, 20), show_graph=True, **kwargs):
         super(TenguFlowAnalyzer, self).__init__()
         self.logger= logging.getLogger(__name__)
         self._last_tracklets = Set([])
@@ -375,15 +496,20 @@ class TenguFlowAnalyzer(object):
         self._tracker = tracker
         if self._tracker is not None:
             self._tracker.set_flow_analyzer(self)
-        self._analyze = analyze
-        self._frame_shape = frame_shape
         self._flow_blocks = flow_blocks
-        self._flow_blocks_size = (int(self._frame_shape[0]/self._flow_blocks[0]), int(self._frame_shape[1]/self._flow_blocks[1]))
-        self._flow_graph = nx.DiGraph()
-        self._blk_node_map = {}
         self._show_graph = show_graph
+        # the folowings will be initialized
+        self._scene = None
+        self._frame_shape = None
+        self._flow_graph = None
+        self._flow_blocks_size = None
+        self._blk_node_map = None
 
-    def analyze_flow(self, frame):
+    def analyze_flow(self, frame, frame_no):
+
+        if frame_no == 0:
+            # this means new src came in
+            self.initialize_flow_graph(frame.shape)
 
         detections = []
         tracklets = []
@@ -395,18 +521,14 @@ class TenguFlowAnalyzer(object):
 
             if self._tracker is not None:
                 tracklets = self._tracker.resolve_tracklets(detections)
-                if self._analyze:
-                    self.build_flow_map(tracklets)
+                self.build_flow_graph(tracklets)
 
         return detections, tracklets
 
 
-    def build_flow_map(self, tracklets):
+    def build_flow_graph(self, tracklets):
         """
         """
-        if len(self._flow_graph) == 0:
-            self.initialize_flow_graph()
-
         current_tracklets = Set(tracklets)
 
         if len(self._last_tracklets) == 0:
@@ -433,7 +555,13 @@ class TenguFlowAnalyzer(object):
             cv2.imshow('TenguFlowAnalyzer Graph', img)
             ch = 0xFF & cv2.waitKey(1)
 
-    def initialize_flow_graph(self):
+    def initialize_flow_graph(self, frame_shape):
+
+        # gray scale
+        self._frame_shape = (frame_shape[0], frame_shape[1], 1)
+        self._flow_graph = nx.DiGraph()
+        self._flow_blocks_size = (int(self._frame_shape[0]/self._flow_blocks[0]), int(self._frame_shape[1]/self._flow_blocks[1]))
+        self._blk_node_map = {}
 
         for y_blk in xrange(self._flow_blocks[0]):
             self._blk_node_map[y_blk] = {}

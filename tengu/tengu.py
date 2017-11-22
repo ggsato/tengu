@@ -142,7 +142,7 @@ class Tengu(object):
 
             # detect
             if tengu_flow_analyzer is not None:
-                detections, tracklets = tengu_flow_analyzer.analyze_flow(cropped)
+                detections, tracklets = tengu_flow_analyzer.analyze_flow(cropped, self._current_frame)
                 self._notify_objects_detected(detections)
                 self._notify_tracklets_updated(tracklets)
 
