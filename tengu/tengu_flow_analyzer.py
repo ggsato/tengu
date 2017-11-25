@@ -467,6 +467,7 @@ class TenguFlowNode(object):
         self._sources = {}
         # flow this node belongs to
         # the shortest sink from this node
+        # TODO: flownode would represent multiple flows, use out edges instead
         self._flow = None
 
     def __repr__(self):
@@ -568,7 +569,8 @@ class TenguFlowAnalyzer(object):
                 if self._scene_file is None:
                     if self._analyze_scene:
                         # actively build scene
-                        self.build_scene()
+                        if frame_no % self._initial_weight == 0:
+                            self.build_scene()
                 else:
                     self.update_scene()
                     scene = self._scene
@@ -701,11 +703,15 @@ class TenguFlowAnalyzer(object):
             # build
             tengu_flow = TenguFlow(major_source, major_sink, path)
             flows.append(tengu_flow)
+
+        # flow is not yet available
         if len(flows) == 0:
             return
 
+        # ste flows
         self._scene.set_flows(flows)
-        # assign each flow node to a flow
+
+        # assign each flow *edge* to a flow
         for flow_node in self._flow_graph:
             # check if outedges exist
             if len(self._flow_graph.out_edges(flow_node)) == 0:
@@ -760,39 +766,22 @@ class TenguFlowAnalyzer(object):
         self.logger.info('build scene {} from file {}'.format(scene, self._scene_file))
         self._scene = scene
 
-    def build_default_scene(self):
-        self._scene.set_flows([TenguFlow()])
-
     def save_scene(self, scene_file):
+        self.build_scene()
         self._scene.save(scene_file)
 
     def update_scene(self):
         """
         update scene with last_tracklets
-        1. match tracklets to flows
+        1. build cost matrix
+            1-1: create a cost matrix TxF, where T is a set of Tracklets and F is a set of Flows
+            cost calculation: sum of weights with regard to a Flow of edges a Tracklet passed through
         2. assign a flow to a tracklet
+            2-1: find the best match by hungarian algorithm
         """
         # 1
         flows = self._scene.flows
         tracklets = sorted(self._last_tracklets, key=attrgetter('obj_id'))
-        
-            
-    def find_path_index_from_flow(self, flow, tracklet):
-        """
-        find a closest node in a path of the given flow to the recent node of the given tracklet
-        """
-        recent_node = tracklet.flows[-1]
-        best_similarity = 0
-        closest_node = None
-        for node_in_path in flow.path:
-            similarity = recent_node.similarity(node_in_path)
-            if similarity > best_similarity:
-                best_similarity = similarity
-                closest_node = node_in_path
-        if closest_node is None:
-            return -1
-
-        return flow.path.index(closest_node)
 
     def draw_graph(self):
         img = np.ones(self._frame_shape, dtype=np.uint8) * 128
@@ -839,9 +828,13 @@ class TenguFlowAnalyzer(object):
             lines = []
             for n, node in enumerate(flow.path):
                 lines.append(node.position)
-                 
-            cv2.polylines(img, [np.int32(lines)], False, (0, 192, 0), thickness=2)
+
+            # color
+            p_color = palette[flows.index(flow_node._flow)]
+            color = (int(p_color[0]*192), int(p_color[1]*192), int(p_color[2]*192))
+            cv2.polylines(img, [np.int32(lines)], False, color, thickness=2)
             # arrow
-            cv2.arrowedLine(img, flow.source.position , flow.sink.position, (0, 255, 0), thickness=3, tipLength=0.1)
+            color = (int(p_color[0]*255), int(p_color[1]*255), int(p_color[2]*255))
+            cv2.arrowedLine(img, flow.source.position , flow.sink.position, color, thickness=3, tipLength=0.1)
 
         return img
