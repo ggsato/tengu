@@ -34,7 +34,6 @@ class Tracklet(object):
         self._flows = []
         # used by flow analyzer for updating a scene
         self._current_flow = None
-        self._current_path_index = None
 
     # Tracklet Properties
 
@@ -87,20 +86,17 @@ class Tracklet(object):
     def flows(self):
         return self._flows
 
-    def update_current_flow(self, flow, path_index):
+    @property
+    def last_flow(self):
+        if len(self._flows) < 1:
+            return None
+        return self._flows[-1]
+
+    @property
+    def current_flow_name(self):
         if self._current_flow is None:
-            self._current_flow = flow
-            self._current_path_index = path_index
-        elif self._current_flow == flow:
-            if self._current_path_index > path_index:
-                # this is weird, going backward
-                self.logger.info('{} looks like going backward from {} to {} on flow {}'.format(self.obj_id, self._current_path_index, path_index, flow))
-            self._current_path_index = path_index
-        else:
-            # this means flow changed
-            self.logger.info('{} moved from prev flow {} to {}'.format(self.obj_id, self._current_flow, flow))
-            self._current_flow = flow
-            self._current_path_index = path_index
+            return '-'
+        return self._current_flow.name
 
     def similarity(self, assignment):
         """

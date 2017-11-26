@@ -10,6 +10,7 @@ import StringIO
 import seaborn as sns
 
 from .tengu_tracker import TenguTracker, Tracklet, TenguCostMatrix
+from .common import draw_str
 
 class TenguNode(object):
 
@@ -450,9 +451,6 @@ class TenguFlow(object):
     def name(self):
         return self._name
 
-    def similarity(self, tracklet):
-        pass
-
 class TenguFlowNode(object):
 
     def __init__(self, y_blk, x_blk, position):
@@ -465,10 +463,6 @@ class TenguFlowNode(object):
         self._sink_count = 0
         # pair of source, count
         self._sources = {}
-        # flow this node belongs to
-        # the shortest sink from this node
-        # TODO: flownode would represent multiple flows, use out edges instead
-        self._flow = None
 
     def __repr__(self):
         return json.dumps(self.serialize())
@@ -507,9 +501,6 @@ class TenguFlowNode(object):
     def position(self):
         return self._position
 
-    def similarity(self, another_flow_node):
-        pass
-
 class TenguFlowAnalyzer(object):
 
     """
@@ -525,7 +516,7 @@ class TenguFlowAnalyzer(object):
     fbn =
     """
 
-    def __init__(self, detector, tracker, scene_file=None, analyze_scene=True, flow_blocks=(20, 20), show_graph=True, majority_in_percent=5, initial_weight=100, **kwargs):
+    def __init__(self, detector, tracker, scene_file=None, analyze_scene=True, flow_blocks=(20, 20), show_graph=True, majority_in_percent=5, initial_weight=100, min_sink_count_for_flow=10, **kwargs):
         super(TenguFlowAnalyzer, self).__init__()
         self.logger= logging.getLogger(__name__)
         self._last_tracklets = Set([])
@@ -540,6 +531,8 @@ class TenguFlowAnalyzer(object):
         self._show_graph = show_graph
         self._majority_in_percent = majority_in_percent
         self._initial_weight = initial_weight
+        self._weight_func = lambda u, v, d, s=self: s.calculate_weight(u, v, d)
+        self._min_sink_count_for_flow = min_sink_count_for_flow
         # the folowings will be initialized
         self._scene = None
         self._frame_shape = None
@@ -564,7 +557,7 @@ class TenguFlowAnalyzer(object):
 
             if self._tracker is not None:
                 tracklets = self._tracker.resolve_tracklets(detections)
-                self.build_flow_graph(tracklets)
+                self.update_flow_graph(tracklets)
 
                 if self._scene_file is None:
                     if self._analyze_scene:
@@ -583,8 +576,12 @@ class TenguFlowAnalyzer(object):
 
         return detections, tracklets, scene
 
-    def initialize(self, frame_shape):
+    def print_graph(self):
+        self.logger.info('flow_graph is not None? {}'.format(self._flow_graph is not None))
+        for flow_node in self._flow_graph:
+            self.logger.info('{}'.format(flow_node))
 
+    def initialize(self, frame_shape):
         # flow graph
         # gray scale
         self._frame_shape = frame_shape
@@ -607,29 +604,31 @@ class TenguFlowAnalyzer(object):
             self.build_scene_from_file()
         else:
             self._scene = TenguScene(self._frame_shape, self._flow_blocks)
-            if not self._analyze_scene:
-                # one default flow is created
-                self.build_default_scene()
+        self.print_graph()
 
-    def build_flow_graph(self, tracklets):
+    def update_flow_graph(self, tracklets):
         """
         """
         current_tracklets = Set(tracklets)
 
         if len(self._last_tracklets) == 0:
+            self.add_new_tracklets(current_tracklets)
             self._last_tracklets = current_tracklets
             return
 
         # new tracklets
         new_tracklets = current_tracklets - self._last_tracklets
+        self.logger.debug('adding {} tracklets out of {}'.format(len(new_tracklets), len(current_tracklets)))
         self.add_new_tracklets(new_tracklets)
 
         # existing tracklets
         existing_tracklets = current_tracklets & self._last_tracklets
+        self.logger.debug('updating {} tracklets out of {}'.format(len(existing_tracklets), len(current_tracklets)))
         self.update_existing_tracklets(existing_tracklets)
 
         # removed tracklets
         removed_tracklets = self._last_tracklets - current_tracklets
+        self.logger.debug('removing {} tracklets out of {}'.format(len(removed_tracklets), len(current_tracklets)))
         self.finish_removed_tracklets(removed_tracklets)
 
         self._last_tracklets = current_tracklets
@@ -658,22 +657,54 @@ class TenguFlowAnalyzer(object):
     def update_existing_tracklets(self, existing_tracklets):
         
         for existing_tracklet in existing_tracklets:
-            last_index = len(existing_tracklet.flows)-1
-            if last_index < 0:
+            if len(existing_tracklet.flows) < 2:
+                # prev prev is not available
                 continue
-            prev_flow_node = existing_tracklet.flows[last_index]
+            prev_flow_node = existing_tracklet.flows[-1]
             flow_node = self.flow_node_at(*existing_tracklet.center)
             if prev_flow_node == flow_node:
+                # no change
                 continue
             # update edge
+            if prev_flow_node is None:
+                self.logger.error('no last flow exists on {}'.format(existing_tracklet))
+                raise
+            prev_prev_flow_node = existing_tracklet.flows[-2]
             if not self._flow_graph.has_edge(prev_flow_node, flow_node):
-                self._flow_graph.add_edge(prev_flow_node, flow_node, weight=self._initial_weight)
+                self._flow_graph.add_edge(prev_flow_node, flow_node, weight={})
             edge = self._flow_graph[prev_flow_node][flow_node]
-            edge['weight'] = max(0, edge['weight'] - 1)
+            if not edge['weight'].has_key(prev_prev_flow_node):
+                edge['weight'][prev_prev_flow_node] = 0
+            edge['weight'][prev_prev_flow_node] += 1
             # add
             existing_tracklet.flows.append(flow_node)
-            self.logger.info('updating weight at {}'.format(edge))
-
+            self.logger.debug('updating weight at {}'.format(edge))
+            # check if this tracklet is on a flow
+            # total cost of a shortest path tends to point to a closer sink
+            # so, check the cost of the next edge on each shortest path,
+            # which is correctly weighted by prev prev node
+            lowest_cost = None
+            lowest_flow = None
+            for flow in self._scene.flows:
+                path = self.find_shortest_path(flow_node, flow.sink)
+                if path is None:
+                    # no such path
+                    continue
+                next_edge = self._flow_graph[flow_node][path[1]]
+                next_cost = self.calculate_weight(None, None, next_edge, prev_prev_node=prev_flow_node)
+                if next_cost is None:
+                    # this means no such path
+                    continue
+                if lowest_cost is None:
+                    lowest_cost = next_cost
+                    lowest_flow = flow
+                    continue
+                if next_cost < lowest_cost:
+                    lowest_cost = next_cost
+                    lowest_flow = flow
+            if lowest_flow is not None:
+                # TODO: filter by a threshold by lowest cost
+                existing_tracklet._current_flow = lowest_flow
 
     def finish_removed_tracklets(self, removed_tracklets):
         
@@ -681,7 +712,11 @@ class TenguFlowAnalyzer(object):
             if len(removed_tracklet.flows) == 0:
                 continue
             flow_node = self.flow_node_at(*removed_tracklet.center)
-            flow_node.mark_sink(removed_tracklet.flows[0])
+            source_node = removed_tracklet.flows[0]
+            if flow_node == source_node:
+                self.logger.info('same source {} and sink {}, skipped'.format(source_node, flow_node))
+                return
+            flow_node.mark_sink(source_node)
             self.logger.info('sink at {}'.format(flow_node))
 
     def build_scene(self):
@@ -689,19 +724,29 @@ class TenguFlowAnalyzer(object):
         builds a scene from the current flow_graph
         """
         # flows
-        major_sinks = sorted(self._flow_graph, key=attrgetter('sink_count'), reverse=True)
+        try:
+            major_sinks = sorted(self._flow_graph, key=attrgetter('sink_count'), reverse=True)
+        except:
+            self.print_graph()
+            raise
+
         majority = int(len(self._flow_graph)/100*self._majority_in_percent)
         flows = []
         for major_sink in major_sinks[:majority]:
-            if major_sink.sink_count < 10:
+            if major_sink.sink_count < self._min_sink_count_for_flow:
                 continue
             source_nodes = major_sink._sources.keys()
             source_nodes = sorted(source_nodes, key=major_sink._sources.__getitem__, reverse=True)
             major_source = source_nodes[0]
             # path
-            path = nx.dijkstra_path(self._flow_graph, major_source, major_sink)
+            if major_source == major_sink:
+                self.logger.error('major source {} should not be the same as sink node {}'.format(major_source, major_sink))
+                return
+            path = self.find_shortest_path(major_source, major_sink)
+            if path is None:
+                continue
             # build
-            tengu_flow = TenguFlow(major_source, major_sink, path)
+            tengu_flow = TenguFlow(major_source, major_sink, path, name='{:02d}'.format(len(flows)))
             flows.append(tengu_flow)
 
         # flow is not yet available
@@ -711,54 +756,29 @@ class TenguFlowAnalyzer(object):
         # ste flows
         self._scene.set_flows(flows)
 
-        # assign each flow *edge* to a flow
-        for flow_node in self._flow_graph:
-            # check if outedges exist
-            if len(self._flow_graph.out_edges(flow_node)) == 0:
-                continue
-            # check if this node belongs to either of sink or source of any flows
-            skip = False
-            for flow in flows:
-                if flow_node == flow.source or flow_node == flow.sink:
-                    flow_node._flow = flow
-                    skip = True
-                    break
-            if skip:
-                continue
-            shortest_flow = None
-            min_cost = -1
-            for flow in flows:
-                cost = self.calculate_cost_of_shortest_path(flow_node, flow._sink)
-                if shortest_flow is None:
-                    if cost is None:
-                        continue
-                    shortest_flow = flow
-                    min_cost = cost
-                    continue
-                if cost is None:
-                    continue
-                if cost < min_cost:
-                    min_cost = cost
-                    shortest_flow = flow
-            flow_node._flow = shortest_flow
-
-    def calculate_cost_of_shortest_path(self, flow_node, sink_node):
-        cost = None
+    def find_shortest_path(self, flow_node, sink_node):
+        """
+        find a shortest path from flow_node to sink_node
+        a candidate of such a shortest path is first found by Dijstra,
+        """
+        path = None
         try:
-            path = nx.dijkstra_path(self._flow_graph, flow_node, sink_node)
-        except:
-            return cost
-        prev_node = None
-        # path contains a copy of node, so don't use directly, but look it up
-        for node in path:
-            if prev_node is None:
-                prev_node = node
-                continue
-            out_edge = self._flow_graph[prev_node][node]
-            if cost is None:
-                cost = 0
-            cost += out_edge['weight']
-            prev_node = node
+            path = nx.dijkstra_path(self._flow_graph, flow_node, sink_node, weight=self._weight_func)
+        except nx.NetworkXNoPath:
+            self.logger.info('no path from {} to {}'.format(flow_node, sink_node))
+            return path
+        # too short
+        if len(path) < 3:
+            return None
+        return path
+
+    def calculate_weight(self, u, v, d, prev_prev_node=None):
+        cost = None
+        if prev_prev_node is None:
+            cost = max(0, self._initial_weight - sum(d['weight'].values()))
+        elif d['weight'].has_key(prev_prev_node):
+            cost = max(0, self._initial_weight - d['weight'][prev_prev_node])
+        self.logger.debug('calculating weight for {} with prev_prev_node {}, total cost = {}'.format(d, prev_prev_node, cost))
         return cost
 
     def build_scene_from_file(self):
@@ -792,49 +812,40 @@ class TenguFlowAnalyzer(object):
         for y_blk in xrange(self._flow_blocks[0]):
             for x_blk in xrange(self._flow_blocks[1]):
                 flow_node = self._blk_node_map[y_blk][x_blk]
-                # 1. flow_node is either of sink or source of flows
-                # 2. flow_node belongs to a flow
-                # 3. flow_node is isolated from any flows
-                if flow_node._flow is None:
-                    # 3
-                    is_source = flow_node.source_count > flow_node.sink_count
-                    if is_source:
-                        source_count = flow_node.source_count
-                        if source_count == 0:
-                            continue
-                        grayness = min(255, 128+source_count)
-                    else:
-                        sink_count = flow_node.sink_count
-                        if sink_count == 0:
-                            continue
-                        grayness = max(0, 128-sink_count)
-                    color = (grayness, grayness, grayness)
-                    r = int(diameter/2)
-                elif flow_node == flow_node._flow.source or flow_node == flow_node._flow.sink:
-                    # 1
-                    p_color = palette[flows.index(flow_node._flow)]
-                    color = (int(p_color[0]*255), int(p_color[1]*255), int(p_color[2]*255))
-                    r = int(diameter/2)
+                is_source = flow_node.source_count > flow_node.sink_count
+                if is_source:
+                    source_count = flow_node.source_count
+                    if source_count == 0:
+                        continue
+                    grayness = min(255, 128+source_count)
                 else:
-                    # 2
-                    p_color = palette[flows.index(flow_node._flow)]
-                    color = (int(p_color[0]*255), int(p_color[1]*255), int(p_color[2]*255))
-                    r = int(diameter/4)
+                    sink_count = flow_node.sink_count
+                    if sink_count == 0:
+                        continue
+                    grayness = max(0, 128-sink_count)
+                color = (grayness, grayness, grayness)
+                r = int(diameter/4)
 
                 cv2.circle(img, flow_node.position, r, color, -1)
 
-        # finally show top N src=>sink
+        # finally show flows
         for flow in flows:
             lines = []
             for n, node in enumerate(flow.path):
+                if node == flow.path[-1]:
+                    break
                 lines.append(node.position)
 
+            self.logger.debug('drawing {}th flow {} with {} lines'.format(n, flow, len(flow.path)))
+
             # color
-            p_color = palette[flows.index(flow_node._flow)]
+            p_color = palette[flows.index(flow)]
             color = (int(p_color[0]*192), int(p_color[1]*192), int(p_color[2]*192))
             cv2.polylines(img, [np.int32(lines)], False, color, thickness=2)
             # arrow
             color = (int(p_color[0]*255), int(p_color[1]*255), int(p_color[2]*255))
-            cv2.arrowedLine(img, flow.source.position , flow.sink.position, color, thickness=3, tipLength=0.1)
+            cv2.arrowedLine(img, flow.path[-2].position , flow.sink.position, color, thickness=2, tipLength=0.5)
+            # number
+            draw_str(img, flow.path[-2].position, 'F{}'.format(flow.name))
 
         return img
