@@ -341,7 +341,7 @@ class TenguTracker(object):
                         contains = True
                         break
                 if contains:
-                    self.logger.info('skipping creating a new, but disturbing tracklet {}'.format(to))
+                    self.logger.debug('skipping creating a new, but disturbing tracklet {}'.format(to))
                     continue
                 self._tracklets.append(to)
                 self.logger.debug('created tracked object {} of id={} at {}'.format(to, to.obj_id, TenguTracker._global_updates))
