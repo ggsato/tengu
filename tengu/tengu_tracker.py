@@ -31,9 +31,10 @@ class Tracklet(object):
         self._confidence = 0.
         self._recent_updates = ['N/A']
         # used by flow analyzer for building flow graph
-        self._flows = []
+        self._path = []
         # used by flow analyzer for updating a scene
         self._current_flow = None
+        self._dist_to_sink = None
 
     # Tracklet Properties
 
@@ -81,16 +82,6 @@ class Tracklet(object):
     @property
     def observations(self):
         return self._observations
-
-    @property
-    def flows(self):
-        return self._flows
-
-    @property
-    def last_flow(self):
-        if len(self._flows) < 1:
-            return None
-        return self._flows[-1]
 
     @property
     def current_flow_name(self):
@@ -178,6 +169,26 @@ class Tracklet(object):
         move_x = int((prev[0]+prev[2]/2) - (prev2[0]+prev2[2]/2))
         move_y = int((prev[1]+prev[3]/2) - (prev2[1]+prev2[3]/2))
         return move_x, move_y
+
+    @property
+    def path(self):
+        return self._path
+
+    @property
+    def last_flow(self):
+        if len(self._path) < 1:
+            return None
+        return self._path[-1]
+
+    @property
+    def dist_to_sink(self):
+        if self._dist_to_sink is None:
+            return '-'
+        return self._dist_to_sink
+
+    def set_flow(self, flow, distance_to_sink):
+        self._current_flow = flow
+        self._dist_to_sink = distance_to_sink
 
 class TenguCostMatrix(object):
 
