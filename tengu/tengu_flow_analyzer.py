@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-import logging, math, json, sys
+import logging, math, json, sys, traceback
 import cv2
 import numpy as np
 import networkx as nx
@@ -358,12 +358,12 @@ class TenguScene(object):
         return js
 
     @staticmethod
-    def deserialize(js):
+    def deserialize(js, blk_node_map):
         logging.debug('deserializing {}'.format(js))
         flows_js = js['flows']
         flows = []
         for flow_js in flows_js:
-            flows.append(TenguFlow.deserialize(flow_js))
+            flows.append(TenguFlow.deserialize(flow_js, blk_node_map))
         tengu_scene = TenguScene()
         tengu_scene.set_flows(flows)
         return tengu_scene
@@ -402,12 +402,14 @@ class TenguFlow(object):
         return js
 
     @staticmethod
-    def deserialize(js):
+    def deserialize(js, blk_node_map):
         logging.debug('deserializing {}'.format(js))
         path = []
         for js_node in js['path']:
-            path.append(TenguFlowNode.deserialize(js_node))
-        return TenguFlow(TenguFlowNode.deserialize(js['source']), TenguFlowNode.deserialize(js['sink']), path, js['name'])
+            path.append(blk_node_map[js_node['y_blk']][js_node['x_blk']])
+        js_source = js['source']
+        js_sink = js['sink']
+        return TenguFlow(blk_node_map[js_source['y_blk']][js_source['x_blk']], blk_node_map[js_sink['y_blk']][js_sink['x_blk']], path, js['name'])
 
     @property
     def source(self):
@@ -484,10 +486,6 @@ class TenguFlowNode(object):
         js['position'] = self._position
         return js
 
-    @staticmethod
-    def deserialize(js):
-        return TenguFlowNode(js['y_blk'], js['x_blk'], (js['position'][0], js['position'][1]))
-
     @property
     def source_count(self):
         return self._source_count
@@ -528,7 +526,7 @@ class TenguFlowAnalyzer(object):
     fbn =
     """
 
-    def __init__(self, detector, tracker, scene_file=None, analyze_scene=True, flow_blocks=(20, 30), show_graph=True, majority_in_percent=5, initial_weight=200, min_sink_count_for_flow=10, **kwargs):
+    def __init__(self, detector, tracker, scene_file=None, flow_blocks=(20, 30), show_graph=True, majority_in_percent=5, initial_weight=200, min_sink_count_for_flow=10, **kwargs):
         super(TenguFlowAnalyzer, self).__init__()
         self.logger= logging.getLogger(__name__)
         self._last_tracklets = Set([])
@@ -538,7 +536,6 @@ class TenguFlowAnalyzer(object):
         if self._tracker is not None:
             self._tracker.set_flow_analyzer(self)
         self._scene_file = scene_file
-        self._analyze_scene = analyze_scene
         self._flow_blocks = flow_blocks
         self._show_graph = show_graph
         self._majority_in_percent = majority_in_percent
@@ -560,7 +557,6 @@ class TenguFlowAnalyzer(object):
 
         detections = []
         tracklets = []
-        scene = None
 
         self._klt_analyzer.analyze_frame(frame)
         
@@ -572,13 +568,9 @@ class TenguFlowAnalyzer(object):
                 self.update_flow_graph(tracklets)
 
                 if self._scene_file is None:
-                    if self._analyze_scene:
-                        # actively build scene
-                        if frame_no % self._initial_weight == 0:
-                            self.build_scene()
-                else:
-                    self.update_scene()
-                    scene = self._scene
+                    # actively build scene
+                    if frame_no % self._initial_weight == 0:
+                        self.build_scene()
 
                 if self._show_graph:
                     # show
@@ -587,7 +579,7 @@ class TenguFlowAnalyzer(object):
                     cv2.imwrite('scene.jpg', img)
                     ch = 0xFF & cv2.waitKey(1)
 
-        return detections, tracklets, scene
+        return detections, tracklets, self._scene
 
     def print_graph(self):
         self.logger.info('flow_graph is not None? {}'.format(self._flow_graph is not None))
@@ -608,7 +600,7 @@ class TenguFlowAnalyzer(object):
                 pos_x = int(self._flow_blocks_size[1]*x_blk + self._flow_blocks_size[1]/2)
                 pos_y = int(self._flow_blocks_size[0]*y_blk + self._flow_blocks_size[0]/2)
                 flow_node = TenguFlowNode(y_blk, x_blk, (pos_x, pos_y))
-                self.logger.info('created at y_blk,x_blk = {}, {} = {}'.format(y_blk, x_blk, (pos_x, pos_y)))
+                self.logger.debug('created at y_blk,x_blk = {}, {} = {}'.format(y_blk, x_blk, (pos_x, pos_y)))
                 self._flow_graph.add_node(flow_node)
                 self._blk_node_map[y_blk][x_blk] = flow_node
 
@@ -617,7 +609,7 @@ class TenguFlowAnalyzer(object):
             self.build_scene_from_file()
         else:
             self._scene = TenguScene()
-        self.print_graph()
+        #self.print_graph()
 
     def update_flow_graph(self, tracklets):
         """
@@ -709,11 +701,13 @@ class TenguFlowAnalyzer(object):
                 if similarity > best_similarity:
                     most_similar_flow = flow
                     best_similarity = similarity
+            self.logger.debug('the most similar flow of {} is {} at {}'.format(existing_tracklet, most_similar_flow, best_similarity))
             if most_similar_flow is not None:
                 # TODO: filter by a threshold by lowest cost
                 path, dist_to_sink = self.find_shortest_path_and_cost(flow_node, most_similar_flow.sink)
                 if path is None:
-                    # no such path exists
+                    # no such path exist
+                    self.logger.debug('but no such path from {} to {}'.format(flow_node, most_similar_flow.sink))
                     return
                 most_similar_flow.put_tracklet(existing_tracklet, dist_to_sink, best_similarity)
 
@@ -793,7 +787,7 @@ class TenguFlowAnalyzer(object):
             path = paths[sink_node]
             cost = dist[sink_node]
         except KeyError:
-            self.logger.debug('no path from {} to {}'.format(flow_node, sink_node))
+            self.logger.info('no path from {} to {}'.format(flow_node, sink_node))
             return None, None
         # too short
         if len(path) < 5:
@@ -894,7 +888,7 @@ class TenguFlowAnalyzer(object):
         for edge in self._flow_graph.edges(data=True):
             from_node = edge[0]
             to_node = edge[1]
-            weight_map = edge[2]
+            weight_map = edge[2]['weight']
             weights = []
             for key_node in weight_map:
                 weights.append([key_node._y_blk, key_node._x_blk, weight_map[key_node]])
@@ -903,12 +897,13 @@ class TenguFlowAnalyzer(object):
         js['edges'] = edges_js
         return js
 
-    def deserialize(js):
+    def deserialize(self, js):
         frame_shape = (js['frame_shape'][0], js['frame_shape'][1], js['frame_shape'][2])
         flow_blocks = (js['flow_blocks'][0], js['flow_blocks'][1])
         if frame_shape != self._frame_shape or flow_blocks != self._flow_blocks:
             raise
-        self._scene = TenguScene.deserialize(js['scene'])
+        self._scene = TenguScene.deserialize(js['scene'], self._blk_node_map)
+        self.logger.info('deserialized scene {}'.format(self._scene))
         edges_js = js['edges']
         for edge_js in edges_js:
             from_js = edge_js['from']
@@ -920,41 +915,37 @@ class TenguFlowAnalyzer(object):
             for weight in weights:
                 key_node = self._blk_node_map[weight[0]][weight[1]]
                 weight_map[key_node] = weight[2]
+            self.logger.info('adding an edge from {} to {} with {}'.format(from_node, to_node, weight_map))
             self._flow_graph.add_edge(from_node, to_node, weight=weight_map)
+        # check shortest path exist
+        for flow in self._scene.flows:
+            path, _ = self.find_shortest_path_and_cost(flow.source, flow.sink)
+            if path is None:
+                self.logger.error('no path exists between source {} and sink of {}'.format(flow.source, flow.sink))
 
-    def load(file):
+    def load(self):
         """
         load flow_map from folder
         """
-        f = open(file, 'r')
+        f = open(self._scene_file, 'r')
         try:
             buf = StringIO.StringIO()
             for line in f:
                 buf.write(line)
             js_string = buf.getvalue()
             buf.close()
-            TenguFlowAnalyzer.deserialize(json.loads(js_string))
+            self.deserialize(json.loads(js_string))
         except:
-            self.logger.error('failed to load from {}'.format(file))
+            self.logger.error('failed to load from {}'.format(self._scene_file))
+            exc_type, exc_value, exc_traceback = sys.exc_info()
+            logging.error('unexpected error: {}'.format(exc_value))
+            traceback.print_tb(exc_traceback, limit=100, file=sys.stdout)
         finally:
             f.close()
 
     def build_scene_from_file(self):
-        self.load(self._scene_file)
-        self.logger.info('build scene {} from file {}'.format(scene, self._scene_file))
-
-    def update_scene(self):
-        """
-        update scene with last_tracklets
-        1. build cost matrix
-            1-1: create a cost matrix TxF, where T is a set of Tracklets and F is a set of Flows
-            cost calculation: sum of weights with regard to a Flow of edges a Tracklet passed through
-        2. assign a flow to a tracklet
-            2-1: find the best match by hungarian algorithm
-        """
-        # 1
-        flows = self._scene.flows
-        tracklets = sorted(self._last_tracklets, key=attrgetter('obj_id'))
+        self.load()
+        self.logger.info('build from file {}'.format(self._scene_file))
 
     def draw_graph(self):
         img = np.ones(self._frame_shape, dtype=np.uint8) * 128
@@ -965,26 +956,29 @@ class TenguFlowAnalyzer(object):
         for y_blk in xrange(self._flow_blocks[0]):
             for x_blk in xrange(self._flow_blocks[1]):
                 flow_node = self._blk_node_map[y_blk][x_blk]
-                is_source = flow_node.source_count > flow_node.sink_count
-                if is_source:
-                    source_count = flow_node.source_count
-                    if source_count == 0:
-                        continue
-                    grayness = min(255, 128+source_count)
+                if self._scene_file is None:
+                    is_source = flow_node.source_count > flow_node.sink_count
+                    if is_source:
+                        source_count = flow_node.source_count
+                        if source_count == 0:
+                            continue
+                        grayness = min(255, 128+source_count)
+                    else:
+                        sink_count = flow_node.sink_count
+                        if sink_count == 0:
+                            continue
+                        grayness = max(0, 128-sink_count)
+                    color = (grayness, grayness, grayness)
                 else:
-                    sink_count = flow_node.sink_count
-                    if sink_count == 0:
-                        continue
-                    grayness = max(0, 128-sink_count)
-                color = (grayness, grayness, grayness)
-                r = int(diameter/4)
+                    color = (0, 0, 0)
+                r = int(diameter/8)
 
                 cv2.circle(img, flow_node.position, r, color, -1)
 
                 # out edges
                 out_edges = self._flow_graph.out_edges(flow_node)
                 for out_edge in out_edges:
-                    cv2.arrowedLine(img, out_edge[0].position , out_edge[1].position, color, thickness=1, tipLength=0.2)
+                    cv2.arrowedLine(img, out_edge[0].position , out_edge[1].position, color, thickness=1, tipLength=0.3)
 
         # flows
         for flow in flows:

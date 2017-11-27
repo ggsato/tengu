@@ -83,12 +83,12 @@ class Tengu(object):
             if isinstance(observer, TenguAnalysisObserver):
                 observer.analysis_finished()
 
-    def run(self, src=None, roi=None, scale=None, every_x_frame=1, rotation=0, tengu_flow_analyzer=None, tengu_counter=None, queue=None, max_queue_wait=10):
+    def run(self, src=None, roi=None, scale=None, every_x_frame=1, rotation=0, tengu_flow_analyzer=None, tengu_scene_analyzer=None, queue=None, max_queue_wait=10):
         """
         the caller should register by add_observer before calling run if it needs updates during analysis
         this should return quicky for the caller to do its own tasks especially showing progress graphically
         """
-        self.logger.debug('running with flow_analyzer:{}, counter:{}'.format(tengu_flow_analyzer, tengu_counter))
+        self.logger.debug('running with flow_analyzer:{}, scene_analyzer:{}'.format(tengu_flow_analyzer, tengu_scene_analyzer))
         
         if src is None:
             self.logger.error('src has to be set')
@@ -113,8 +113,8 @@ class Tengu(object):
             self._current_frame += 1
 
             # debug
-            if self._current_frame > 10000:
-                break
+            #if self._current_frame > 10000:
+            #    break
 
             # rotate
             if rotation != 0:
@@ -151,20 +151,17 @@ class Tengu(object):
                 self._notify_tracklets_updated(tracklets)
 
                 # count trackings
-                if tengu_counter is not None:
-                    self.logger.debug('calling counter')
-                    counts = tengu_counter.count(tracklets)
-                    self._notify_objects_counted(counts)
+                if tengu_scene_analyzer is not None:
+                    self.logger.debug('calling scene analyzer')
+                    tengu_scene_analyzer.analyze_scene(scene)
 
                 else:
-                    self.logger.debug('skip calling counter')
+                    self.logger.debug('skip calling scene analyzer')
 
             # only for debugging
             #time.sleep(1)
 
         self.logger.info('exitted run loop, exitting...')
-        if tengu_counter is not None:
-            tengu_counter.count(None)
         self._notify_analysis_finished()
         self._stopped = True
 

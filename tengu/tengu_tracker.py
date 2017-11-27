@@ -43,7 +43,6 @@ class Tracklet(object):
     def obj_id(self):
         return self._obj_id
     
-    # tracklet properties
     @property
     def movement(self):
         return self._movement
