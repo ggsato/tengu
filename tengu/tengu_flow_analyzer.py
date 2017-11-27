@@ -321,10 +321,8 @@ class TenguScene(object):
     A named TenguFlow is a set of TengFlows sharing the same name.
     """
 
-    def __init__(self, frame_shape, flow_blocks):
+    def __init__(self):
         super(TenguScene, self).__init__()
-        self._frame_shape = frame_shape
-        self._flow_blocks = flow_blocks
         self._flow_map = {}
 
     def set_flows(self, flows):
@@ -351,8 +349,6 @@ class TenguScene(object):
 
     def serialize(self):
         js = {}
-        js['frame_shape'] = self._frame_shape
-        js['flow_blocks'] = self._flow_blocks
         flows_js = []
         for name in self._flow_map:
             flows = self._flow_map[name]
@@ -368,39 +364,9 @@ class TenguScene(object):
         flows = []
         for flow_js in flows_js:
             flows.append(TenguFlow.deserialize(flow_js))
-        frame_shape = (js['frame_shape'][0], js['frame_shape'][1], js['frame_shape'][2])
-        flow_blocks = (js['flow_blocks'][0], js['flow_blocks'][1])
-        tengu_scene = TenguScene(frame_shape, flow_blocks)
+        tengu_scene = TenguScene()
         tengu_scene.set_flows(flows)
         return tengu_scene
-
-    @staticmethod
-    def load(file):
-        """
-        load flow_map from folder
-        """
-        f = open(file, 'r')
-        try:
-            buf = StringIO.StringIO()
-            for line in f:
-                buf.write(line)
-            js_string = buf.getvalue()
-            buf.close()
-            tengu_scene = TenguScene.deserialize(json.loads(js_string))
-            return tengu_scene
-        finally:
-            f.close()
-
-    def save(self, file):
-        """
-        save flow_map to folder
-        """
-        f = open(file, 'w')
-        try:
-            js_string = json.dumps(self.serialize(), sort_keys=True, indent=4, separators=(',', ': '))
-            f.write(js_string)
-        finally:
-            f.close()
 
 class TenguFlow(object):
 
@@ -474,9 +440,20 @@ class TenguFlow(object):
         return float(duplicates) / len(shorter.path)
 
     def put_tracklet(self, tracklet, dist_to_sink, similarity):
+        if tracklet._current_flow is not None and tracklet._current_flow != self:
+            # move to a different flow
+            tracklet._current_flow._tracklets.remove(tracklet)
         if not tracklet in self._tracklets:
             self._tracklets.add(tracklet)
+        # set flow
         tracklet.set_flow(self, dist_to_sink, similarity)
+
+        # TODO: DO THIS IN SCENE ANALYZER
+        # TEMPORALY REMOVE IF MORE THAN A THRESHOLD
+        if len(self._tracklets) > 10:
+            sorted_tracklets = self.tracklets_by_dist()
+            logging.info('removing the most closer tracklet {}'.format(sorted_tracklets[0]))
+            self._tracklets.remove(sorted_tracklets[0])
 
     def tracklets_by_dist(self):
         """ return tracklets ordered by distance to sink in an ascending order
@@ -639,7 +616,7 @@ class TenguFlowAnalyzer(object):
         if self._scene_file is not None:
             self.build_scene_from_file()
         else:
-            self._scene = TenguScene(self._frame_shape, self._flow_blocks)
+            self._scene = TenguScene()
         self.print_graph()
 
     def update_flow_graph(self, tracklets):
@@ -892,14 +869,79 @@ class TenguFlowAnalyzer(object):
         self.logger.debug('calculating weight for {} with prev_prev_node {}, total cost = {}'.format(d, prev_prev_node, cost))
         return cost
 
-    def build_scene_from_file(self):
-        scene = TenguScene.load(self._scene_file)
-        self.logger.info('build scene {} from file {}'.format(scene, self._scene_file))
-        self._scene = scene
-
-    def save_scene(self, scene_file):
+    def save(self, file):
+        """
+        save
+        """
         self.build_scene()
-        self._scene.save(scene_file)
+        scene_js = self._scene.serialize()
+        # and, save edges
+        js = self.serialize()
+        js['scene'] = scene_js
+        # write
+        f = open(file, 'w')
+        try:
+            js_string = json.dumps(js, sort_keys=True, indent=4, separators=(',', ': '))
+            f.write(js_string)
+        finally:
+            f.close()
+
+    def serialize(self):
+        js = {}
+        js['frame_shape'] = self._frame_shape
+        js['flow_blocks'] = self._flow_blocks
+        edges_js = []
+        for edge in self._flow_graph.edges(data=True):
+            from_node = edge[0]
+            to_node = edge[1]
+            weight_map = edge[2]
+            weights = []
+            for key_node in weight_map:
+                weights.append([key_node._y_blk, key_node._x_blk, weight_map[key_node]])
+            edge_js = {'from': [from_node._y_blk, from_node._x_blk], 'to': [to_node._y_blk, to_node._x_blk], 'weights': weights}
+            edges_js.append(edge_js)
+        js['edges'] = edges_js
+        return js
+
+    def deserialize(js):
+        frame_shape = (js['frame_shape'][0], js['frame_shape'][1], js['frame_shape'][2])
+        flow_blocks = (js['flow_blocks'][0], js['flow_blocks'][1])
+        if frame_shape != self._frame_shape or flow_blocks != self._flow_blocks:
+            raise
+        self._scene = TenguScene.deserialize(js['scene'])
+        edges_js = js['edges']
+        for edge_js in edges_js:
+            from_js = edge_js['from']
+            to_js = edge_js['to']
+            weights = edge_js['weights']
+            from_node = self._blk_node_map[from_js[0]][from_js[1]]
+            to_node = self._blk_node_map[to_js[0]][to_js[1]]
+            weight_map = {}
+            for weight in weights:
+                key_node = self._blk_node_map[weight[0]][weight[1]]
+                weight_map[key_node] = weight[2]
+            self._flow_graph.add_edge(from_node, to_node, weight=weight_map)
+
+    def load(file):
+        """
+        load flow_map from folder
+        """
+        f = open(file, 'r')
+        try:
+            buf = StringIO.StringIO()
+            for line in f:
+                buf.write(line)
+            js_string = buf.getvalue()
+            buf.close()
+            TenguFlowAnalyzer.deserialize(json.loads(js_string))
+        except:
+            self.logger.error('failed to load from {}'.format(file))
+        finally:
+            f.close()
+
+    def build_scene_from_file(self):
+        self.load(self._scene_file)
+        self.logger.info('build scene {} from file {}'.format(scene, self._scene_file))
 
     def update_scene(self):
         """

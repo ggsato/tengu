@@ -84,12 +84,6 @@ class Tracklet(object):
     def observations(self):
         return self._observations
 
-    @property
-    def current_flow_name(self):
-        if self._current_flow is None:
-            return '-'
-        return self._current_flow.name
-
     def similarity(self, assignment):
         """
         calculate similarity of assignment to self
@@ -170,6 +164,12 @@ class Tracklet(object):
         move_x = int((prev[0]+prev[2]/2) - (prev2[0]+prev2[2]/2))
         move_y = int((prev[1]+prev[3]/2) - (prev2[1]+prev2[3]/2))
         return move_x, move_y
+
+    @property
+    def current_flow_name(self):
+        if self._current_flow is None:
+            return '-'
+        return self._current_flow.name
 
     @property
     def path(self):
