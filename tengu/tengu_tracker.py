@@ -34,7 +34,8 @@ class Tracklet(object):
         self._path = []
         # used by flow analyzer for updating a scene
         self._current_flow = None
-        self._dist_to_sink = None
+        self._dist_to_sink = 0
+        self._flow_similarity = 0
 
     # Tracklet Properties
 
@@ -186,9 +187,14 @@ class Tracklet(object):
             return '-'
         return self._dist_to_sink
 
-    def set_flow(self, flow, distance_to_sink):
+    @property
+    def flow_similarity(self):
+        return self._flow_similarity
+
+    def set_flow(self, flow, distance_to_sink, similarity):
         self._current_flow = flow
         self._dist_to_sink = distance_to_sink
+        self._flow_similarity = similarity
 
 class TenguCostMatrix(object):
 

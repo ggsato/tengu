@@ -416,6 +416,11 @@ class TenguFlow(object):
         self._path = path
         self._name = name
 
+        # transient attributes
+        # a set of tracklets currently on this flow
+        # can be sorted by Tracklet#dist_to_sink
+        self._tracklets = Set([])
+
     def __repr__(self):
         return json.dumps(self.serialize())
 
@@ -456,11 +461,27 @@ class TenguFlow(object):
 
     def similarity(self, another_flow):
         shorter = self if len(self.path) < len(another_flow.path) else another_flow
+        longer = self if another_flow == shorter else another_flow
         duplicates = 0
         for flow_node in shorter.path:
-            if flow_node in another_flow.path:
+            if flow_node in longer.path:
                 duplicates += 1
+            else:
+                for another_node in longer.path:
+                    if flow_node.adjacent(another_node):
+                        duplicates += 0.5
+                        break
         return float(duplicates) / len(shorter.path)
+
+    def put_tracklet(self, tracklet, dist_to_sink, similarity):
+        if not tracklet in self._tracklets:
+            self._tracklets.add(tracklet)
+        tracklet.set_flow(self, dist_to_sink, similarity)
+
+    def tracklets_by_dist(self):
+        """ return tracklets ordered by distance to sink in an ascending order
+        """
+        return sorted(self._tracklets, key=attrgetter('dist_to_sink'))
 
 class TenguFlowNode(object):
 
@@ -512,6 +533,9 @@ class TenguFlowNode(object):
     def position(self):
         return self._position
 
+    def adjacent(self, another_flow):
+        return abs(self._y_blk - another_flow._y_blk) <= 1 and abs(self._x_blk - another_flow._x_blk) <= 1
+
 class TenguFlowAnalyzer(object):
 
     """
@@ -527,7 +551,7 @@ class TenguFlowAnalyzer(object):
     fbn =
     """
 
-    def __init__(self, detector, tracker, scene_file=None, analyze_scene=True, flow_blocks=(30, 40), show_graph=True, majority_in_percent=5, initial_weight=200, min_sink_count_for_flow=10, **kwargs):
+    def __init__(self, detector, tracker, scene_file=None, analyze_scene=True, flow_blocks=(20, 30), show_graph=True, majority_in_percent=5, initial_weight=200, min_sink_count_for_flow=10, **kwargs):
         super(TenguFlowAnalyzer, self).__init__()
         self.logger= logging.getLogger(__name__)
         self._last_tracklets = Set([])
@@ -651,12 +675,12 @@ class TenguFlowAnalyzer(object):
         return self._blk_node_map[y_blk][x_blk]
 
     def get_x_blk(self, x):
-        x = min(max(0., x), self._frame_shape[1]-1)
-        return int(x / self._flow_blocks_size[1])
+        x = min(max(0., x), self._frame_shape[1])
+        return min(int(x / self._flow_blocks_size[1]), self._flow_blocks[1]-1)
 
     def get_y_blk(self, y):
-        y = min(max(0., y), self._frame_shape[0]-1)
-        return int(y / self._flow_blocks_size[0])
+        y = min(max(0., y), self._frame_shape[0])
+        return min(int(y / self._flow_blocks_size[0]), self._flow_blocks[0]-1)
 
     def add_new_tracklets(self, new_tracklets):
         
@@ -678,6 +702,10 @@ class TenguFlowAnalyzer(object):
             if prev_flow_node is None:
                 self.logger.error('no last flow exists on {}'.format(existing_tracklet))
                 raise
+            # if flow_node is not adjacent of prev, skip it
+            if not flow_node.adjacent(prev_flow_node):
+                self.logger.debug('{} is not adjacent of {}'.format(flow_node, prev_flow_node))
+                continue
             if not self._flow_graph.has_edge(prev_flow_node, flow_node):
                 self.logger.debug('making an edge from {} to {}'.format(prev_flow_node, flow_node))
                 self._flow_graph.add_edge(prev_flow_node, flow_node, weight={})
@@ -685,7 +713,7 @@ class TenguFlowAnalyzer(object):
             # add flow
             existing_tracklet.path.append(flow_node)
             # min_set = [source, prev_flow_node, flow_node]
-            if not len(existing_tracklet.path) < 3:
+            if not len(existing_tracklet.path) < 5:
                 # prev prev is not available
                 continue
             prev_prev_flow_node = existing_tracklet.path[-2]
@@ -698,20 +726,19 @@ class TenguFlowAnalyzer(object):
             # so, check the cost of the next edge on each shortest path,
             # which is correctly weighted by prev prev node
             most_similar_flow = None
-            best_similarity = None
+            best_similarity = 0
             for flow in self._scene.flows:
                 similarity = flow.similarity(existing_tracklet)
-                if most_similar_flow is None:
-                    most_similar_flow = flow
-                    best_similarity = similarity
-                    continue
                 if similarity > best_similarity:
                     most_similar_flow = flow
                     best_similarity = similarity
-            if most_similar_flow is not None and best_similarity > Tracklet._min_confidence:
+            if most_similar_flow is not None:
                 # TODO: filter by a threshold by lowest cost
-                _, dist_to_sink = self.find_shortest_path_and_cost(flow_node, most_similar_flow.sink)
-                existing_tracklet.set_flow(most_similar_flow, dist_to_sink)
+                path, dist_to_sink = self.find_shortest_path_and_cost(flow_node, most_similar_flow.sink)
+                if path is None:
+                    # no such path exists
+                    return
+                most_similar_flow.put_tracklet(existing_tracklet, dist_to_sink, best_similarity)
 
     def finish_removed_tracklets(self, removed_tracklets):
         
@@ -721,7 +748,7 @@ class TenguFlowAnalyzer(object):
             flow_node = self.flow_node_at(*removed_tracklet.center)
             source_node = removed_tracklet.path[0]
             if flow_node == source_node:
-                self.logger.info('same source {} and sink {}, skipped'.format(source_node, flow_node))
+                self.logger.debug('same source {} and sink {}, skipped'.format(source_node, flow_node))
                 return
             flow_node.mark_sink(source_node)
             self.logger.debug('sink at {}'.format(flow_node))
@@ -760,7 +787,7 @@ class TenguFlowAnalyzer(object):
                 similarity = flow.similarity(tengu_flow)
                 self.logger.debug('similarity between {} and {} = {}'.format(flow, tengu_flow, similarity)) 
                 if similarity > Tracklet._min_confidence:
-                    self.logger.info('a flow from {} to {} is too similar to {}, being skipped...'.format(major_source, major_sink, flow))
+                    self.logger.debug('a flow from {} to {} is too similar to {}, being skipped...'.format(major_source, major_sink, flow))
                     unique = False
                     break
             if not unique:
@@ -917,7 +944,7 @@ class TenguFlowAnalyzer(object):
                 for out_edge in out_edges:
                     cv2.arrowedLine(img, out_edge[0].position , out_edge[1].position, color, thickness=1, tipLength=0.2)
 
-        # finally show flows
+        # flows
         for flow in flows:
             self.logger.debug('drawing flow {} with {} lines'.format(flow, len(flow.path)))
 
@@ -942,5 +969,13 @@ class TenguFlowAnalyzer(object):
 
             # number
             draw_str(img, flow.path[-2].position, 'F{}'.format(flow.name))
+
+        # tracklets
+        for tracklet in self._last_tracklets:
+            lines = []
+            for node in tracklet.path:
+                lines.append(node.position)
+            color = (192, 192, 192)
+            cv2.polylines(img, [np.int32(lines)], False, color, thickness=1)
 
         return img
