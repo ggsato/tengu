@@ -1,2 +1,0 @@
-networkx==2.0
-seaborn==0.8

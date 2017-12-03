@@ -10,7 +10,7 @@ $ pip install -e .
 
 $ pip install networkx==2.0   
 
-$ pip install seaborn==0.8   
+$ conda install seaborn   
 
 # if opencv is not available   
 
