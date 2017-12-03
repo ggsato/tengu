@@ -41,17 +41,17 @@ class Tengu(object):
         if self._observers.has_key(observer_id):
             del self._observers[observer_id]
 
-    def _notify_src_changed(self):
+    def _notify_frame_changed(self, frame):
         for observer_id in self._observers:
             observer = self._observers[observer_id]
-            if isinstance(observer, TenguSrcChangeObserver):
-                observer.src_changed(self.src)
+            if isinstance(observer, TenguFrameChangeObserver):
+                observer.frame_changed(frame, self._current_frame)
 
-    def _notify_scene_changed(self, scene):
+    def _notify_frame_preprocessed(self, preprocessed):
         for observer_id in self._observers:
             observer = self._observers[observer_id]
-            if isinstance(observer, TenguSceneChangeObserver):
-                observer.scene_changed(scene)
+            if isinstance(observer, TenguFrameChangeObserver):
+                observer.frame_preprocessed(preprocessed)
 
     def _notify_tracklets_updated(self, tracklets):
         for observer_id in self._observers:
@@ -59,23 +59,11 @@ class Tengu(object):
             if isinstance(observer, TenguTrackletsUpdateObserver):
                 observer.tracklets_updated(tracklets)
 
-    def _notify_frame_changed(self, frame):
-        for observer_id in self._observers:
-            observer = self._observers[observer_id]
-            if isinstance(observer, TenguFrameChangeObserver):
-                observer.frame_changed(frame, self._current_frame)
-
     def _notify_objects_detected(self, detections):
         for observer_id in self._observers:
             observer = self._observers[observer_id]
             if isinstance(observer, TenguObjectsDetectionObserver):
                 observer.objects_detected(detections)
-
-    def _notify_objects_counted(self, count):
-        for observer_id in self._observers:
-            observer = self._observers[observer_id]
-            if isinstance(observer, TenguObjectsCountObserver):
-                observer.objects_counted(count)
 
     def _notify_analysis_finished(self):
         for observer_id in self._observers:
@@ -133,10 +121,11 @@ class Tengu(object):
 
             # use copy for gui use, which is done asynchronously, meaning may corrupt buffer during camera updates
             copy = frame.copy()
+            self._notify_frame_changed(frame)
 
             # preprocess
             cropped = self.preprocess(frame, roi, scale)
-            self._notify_frame_changed(cropped)
+            self._notify_frame_preprocessed(cropped.copy())
 
             # skip if necessary
             if every_x_frame > 1 and self._current_frame % every_x_frame != 0:
@@ -170,13 +159,15 @@ class Tengu(object):
         cropped = None
         
         if scale == 1.0:
-            cropped = frame
+            resized = frame
         else:
-            cropped = cv2.resize(frame, None, fx=scale, fy=scale, interpolation=cv2.INTER_AREA)
+            resized = cv2.resize(frame, None, fx=scale, fy=scale, interpolation=cv2.INTER_AREA)
 
         if roi is not None:
             # crop
-            cropped = cropped[roi[1]:roi[1]+roi[3], roi[0]:roi[0]+roi[2]]
+            cropped = resized[roi[1]:roi[1]+roi[3], roi[0]:roi[0]+roi[2]]
+        else:
+            cropped = resized
         
         return cropped
 

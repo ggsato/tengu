@@ -53,7 +53,12 @@ class Tracklet(object):
 
     @property
     def center(self):
-        return (int(self._rect[0]+self._rect[2]/2), int(self._rect[1]+self._rect[3]/2))
+        """ calculate the center of this tracklet
+        the true location of this object is lower than the simple center of this rectangle
+        center = (int(self._rect[0]+self._rect[2]/2), int(self._rect[1]+self._rect[3]/2))
+        location is a bit lower than the center y by 1/4 of the hight
+        """
+        return (int(self._rect[0]+self._rect[2]/2), int(self._rect[1]+self._rect[3]/2-self._rect[3]/4))
 
     @property
     def confidence(self):

@@ -170,10 +170,10 @@ class TenguNode(object):
             self._property_updated_at = TenguTracker._global_updates
 
         # debug
-        disable_similarity = False
+        disable_similarity = True
         if disable_similarity:
-            location_similarity = 1.0
-            orientation_similarity = 1.0
+            #location_similarity = 1.0
+            #orientation_similarity = 1.0
             speed_similarity = 1.0
             acceleration_similarity = 1.0
 
@@ -375,12 +375,13 @@ class TenguFlow(object):
     and whichi is characterized by its source, path, and sink.
     """
 
-    def __init__(self, source=None, sink=None, path=[], name='default'):
+    def __init__(self, source=None, sink=None, path=[], name='default', group='default'):
         super(TenguFlow, self).__init__()
         self._source = source
         self._sink = sink
         self._path = path
         self._name = name
+        self._group = group
 
         # transient attributes
         # a set of tracklets currently on this flow
@@ -399,6 +400,7 @@ class TenguFlow(object):
             js_path.append(node.serialize())
         js['path'] = js_path
         js['name'] = self._name
+        js['group'] = self._group
         return js
 
     @staticmethod
@@ -409,7 +411,7 @@ class TenguFlow(object):
             path.append(blk_node_map[js_node['y_blk']][js_node['x_blk']])
         js_source = js['source']
         js_sink = js['sink']
-        return TenguFlow(blk_node_map[js_source['y_blk']][js_source['x_blk']], blk_node_map[js_sink['y_blk']][js_sink['x_blk']], path, js['name'])
+        return TenguFlow(blk_node_map[js_source['y_blk']][js_source['x_blk']], blk_node_map[js_sink['y_blk']][js_sink['x_blk']], path, js['name'], js['group'])
 
     @property
     def source(self):
