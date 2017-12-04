@@ -571,12 +571,13 @@ class TenguFlowAnalyzer(object):
             self._initialized = True
 
         detections = []
+        class_names = []
         tracklets = []
 
         self._klt_analyzer.analyze_frame(frame)
         
         if self._detector is not None:
-            detections = self._detector.detect(frame)
+            detections, class_names = self._detector.detect(frame)
 
             if self._tracker is not None:
                 tracklets = self._tracker.resolve_tracklets(detections)
@@ -595,7 +596,7 @@ class TenguFlowAnalyzer(object):
                     cv2.imshow('TenguFlowAnalyzer Graph', img)
                     ch = 0xFF & cv2.waitKey(1)
 
-        return detections, tracklets, self._scene
+        return detections, class_names, tracklets, self._scene
 
     def print_graph(self):
         self.logger.debug('flow_graph is not None? {}'.format(self._flow_graph is not None))

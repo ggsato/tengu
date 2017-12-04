@@ -12,11 +12,21 @@ As a reference, yet sometimes useful enough, background subtraction based detect
 
 class TenguDetector(object):
 
+    DETECTION_CLASS_ANY = 'any'
+
     def __init__(self):
         self.logger= logging.getLogger(__name__)
+
+    def class_names(self):
+        return [TenguDetector.DETECTION_CLASS_ANY]
     
     def detect(self, frame):
-        pass
+        """ detect objects in a frame, then retrun their detections as rectangle by their class
+        when there are one or more classes are supported, such detections should include all the classes with an empty array for not found classes
+        """
+        detections = []
+        class_names = []
+        return detections, class_names
 
 class TenguBackgroundSubtractionDetector(TenguDetector):
 
@@ -62,9 +72,11 @@ class TenguBackgroundSubtractionDetector(TenguDetector):
 
         # rectangles
         detections = []
+        class_names = []
         for c in cnts:
             x,y,w,h = cv2.boundingRect(c)
             detections.append((x, y, w, h))
+            class_names.append(TenguDetector.DETECTION_CLASS_ANY)
 
         end = cv2.getTickCount()
         time = (end - start)/ cv2.getTickFrequency()
@@ -72,9 +84,9 @@ class TenguBackgroundSubtractionDetector(TenguDetector):
 
         if self.debug:
             # show opencv window
-            for rect in detections:
+            for rect in detections[TenguDetector.DETECTION_CLASS_ANY]:
                 cv2.rectangle(thresh, (rect[0], rect[1]), (rect[0] + rect[2], rect[1] + rect[3]), (255, 255, 255), 3)
             cv2.imshow('TenguDetector', thresh)
             cv2.waitKey(1)
 
-        return detections
+        return detections, class_names

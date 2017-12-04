@@ -9,7 +9,7 @@ class TenguFrameChangeObserver(object):
         pass
 
 class TenguObjectsDetectionObserver(object):
-    def objects_detected(self, detections):
+    def objects_detected(self, detections, class_names):
         pass
 
 class TenguTrackletsUpdateObserver(object):

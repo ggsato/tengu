@@ -59,11 +59,11 @@ class Tengu(object):
             if isinstance(observer, TenguTrackletsUpdateObserver):
                 observer.tracklets_updated(tracklets)
 
-    def _notify_objects_detected(self, detections):
+    def _notify_objects_detected(self, detections, class_names):
         for observer_id in self._observers:
             observer = self._observers[observer_id]
             if isinstance(observer, TenguObjectsDetectionObserver):
-                observer.objects_detected(detections)
+                observer.objects_detected(detections, class_names)
 
     def _notify_analysis_finished(self):
         for observer_id in self._observers:
@@ -135,8 +135,8 @@ class Tengu(object):
 
             # detect
             if tengu_flow_analyzer is not None:
-                detections, tracklets, scene = tengu_flow_analyzer.analyze_flow(cropped, self._current_frame)
-                self._notify_objects_detected(detections)
+                detections, class_names, tracklets, scene = tengu_flow_analyzer.analyze_flow(cropped, self._current_frame)
+                self._notify_objects_detected(detections, class_names)
                 self._notify_tracklets_updated(tracklets)
 
                 # count trackings
