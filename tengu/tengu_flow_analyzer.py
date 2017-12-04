@@ -542,6 +542,7 @@ class TenguFlowAnalyzer(object):
     def __init__(self, detector, tracker, scene_file=None, flow_blocks=(20, 30), show_graph=True, majority_in_percent=5, initial_weight=200, min_sink_count_for_flow=10, **kwargs):
         super(TenguFlowAnalyzer, self).__init__()
         self.logger= logging.getLogger(__name__)
+        self._initialized = False
         self._last_tracklets = Set([])
         self._klt_analyzer = KLTAnalyzer(**kwargs)
         self._detector = detector
@@ -564,9 +565,10 @@ class TenguFlowAnalyzer(object):
 
     def analyze_flow(self, frame, frame_no):
 
-        if frame_no == 0:
+        if not self._initialized:
             # this means new src came in
             self.initialize(frame.shape)
+            self._initialized = True
 
         detections = []
         tracklets = []
