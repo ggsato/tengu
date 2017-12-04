@@ -17,7 +17,8 @@ class TenguDetector(object):
     def __init__(self):
         self.logger= logging.getLogger(__name__)
 
-    def class_names(self):
+    @staticmethod
+    def class_names():
         return [TenguDetector.DETECTION_CLASS_ANY]
     
     def detect(self, frame):

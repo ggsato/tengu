@@ -14,7 +14,6 @@ class TenguSceneAnalyzer(object):
     def analyze_scene(self, scene):
         """ analyze scene, and outputs a count report at intervals
         """
-
         for name in scene.flow_names:
             for named_flow in scene.named_flows(name):
                 group = named_flow.group
@@ -46,6 +45,7 @@ class TenguSceneAnalyzer(object):
         """
         if self._output_file is not None:
             f = open(self._output_file, 'w')
+            header = StringIO.StringIO()
             sf = StringIO.StringIO()
             sorted_groups = sorted(self._counter_dict.keys())
             self.logger.info('sorted keys: {}'.format(sorted_groups))
