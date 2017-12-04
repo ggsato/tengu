@@ -23,6 +23,7 @@ class TenguSceneAnalyzer(object):
                 for tracklet in tracklets:
                     if tracklet.removed:
                         # increment
+                        self.logger.info('found removed tracklet, counting {}'.format(tracklet))
                         # TODO
                         counts = self.tracklet_to_counts(tracklet)
                         if not self._counter_dict.has_key(group):
@@ -38,7 +39,7 @@ class TenguSceneAnalyzer(object):
         """ returns a list of numbers to be counted of this tracklet
         """
         # count 
-        return [1]
+        return [1, tracklet.speed]
 
     def finish_analysis(self):
         """ write its output to a file
@@ -47,9 +48,10 @@ class TenguSceneAnalyzer(object):
             f = open(self._output_file, 'w')
             sf = StringIO.StringIO()
             sorted_groups = sorted(self._counter_dict.keys())
+            self.logger.info('sorted keys: {}'.format(sorted_groups))
             for g, sorted_group in enumerate(sorted_groups):
                 js_array = json.dumps(self._counter_dict[sorted_group])
-                csv = js_array[1:-2]
+                csv = js_array[1:-1]
                 self.logger.info('converted {} to {}'.format(js_array, csv))
                 if g > 0:
                     sf.write(',')

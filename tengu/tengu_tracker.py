@@ -18,6 +18,9 @@ class Tracklet(object):
     _estimation_decay = 0.9
     _recent_updates_length = 2
 
+    # see speed for details
+    average_real_size = 4.5
+
     def __init__(self):
         self.logger = logging.getLogger(__name__)
         Tracklet._class_obj_id += 1
@@ -32,11 +35,14 @@ class Tracklet(object):
         self._recent_updates = ['N/A']
         # used by flow analyzer for building flow graph
         self._path = []
+        # (center, rect, frame_no)
+        self._milestones = []
         # used by flow analyzer for updating a scene
         self._current_flow = None
         self._dist_to_sink = 0
         self._flow_similarity = 0
         self._removed = False
+        self._left = False
 
     # Tracklet Properties
 
@@ -182,6 +188,40 @@ class Tracklet(object):
     def path(self):
         return self._path
 
+    def add_flow_node_to_path(self, flow_node):
+        self._path.append(flow_node)
+        self._milestones.append([self.center, self.rect, TenguTracker._global_updates])
+
+    @property
+    def speed(self):
+        """calculates speed of this tracklet based on milestones using Tracklet.average_real_size
+        """
+
+        if len(self._milestones) < 2:
+            return -1
+
+        prev_stone = None
+        observations = []
+        for milestone in self._milestones:
+            if prev_stone is None:
+                prev_stone = milestone
+                continue
+            distance = Tracklet.compute_distance(prev_stone[0], milestone[0])
+            real_size_per_pixel = Tracklet.average_real_size / max(milestone[1][2], milestone[1][3])
+            real_distance = distance * real_size_per_pixel
+            real_distance_per_frame = real_distance / (milestone[2] - prev_stone[2])
+            self.logger.info('observation of speed distance={}, real_size_per_pixel={}, real_distance={}, real_distance_per_frame={}'.format(distance, real_size_per_pixel, real_distance, real_distance_per_frame))
+            observations.append(real_distance_per_frame)
+
+        estimated_speed = float(sum(observations)) / len(observations)
+        self.logger.info('estimated speed per frame = {}, observations = {}'.format(estimated_speed, observations))
+
+        return estimated_speed
+
+    @staticmethod
+    def compute_distance(pos0, pos1):
+        return math.sqrt((pos1[0]-pos0[0])**2+(pos1[1]-pos0[1])**2)
+
     @property
     def last_flow(self):
         if len(self._path) < 1:
@@ -209,6 +249,13 @@ class Tracklet(object):
 
     def mark_removed(self):
         self._removed = True
+
+    @property
+    def has_left(self):
+        return self._left
+
+    def mark_left(self):
+        self._left = True
 
 class TenguCostMatrix(object):
 
@@ -299,6 +346,8 @@ class TenguTracker(object):
         """
         cost_matrix = TenguTracker.create_empty_cost_matrix(len(self._tracklets), len(detections))
         for t, tracklet in enumerate(self._tracklets):
+            if tracklet.has_left:
+                continue
             for d, detection in enumerate(detections):
                 cost = self.calculate_cost_by_overlap_ratio(tracklet.rect, detection)
                 cost_matrix[t][d] = cost

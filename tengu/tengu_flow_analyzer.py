@@ -102,7 +102,7 @@ class TenguNode(object):
 
         pos0 = self.tr[-1]
         pos1 = another.tr[-1]
-        distance = TenguNode.compute_distance(pos0, pos1)
+        distance = Tracklet.compute_distance(pos0, pos1)
         if self._last_detection is not None and (TenguTracker._global_updates-self._last_detected_at)<Tracklet._min_confidence:
             # use detection
             half_rect = min(self._last_detection[2:])/2
@@ -119,8 +119,8 @@ class TenguNode(object):
         else:
             pos01 = self.tr[-1 * TenguNode._min_length]
             pos11 = another.tr[-1 * TenguNode._min_length]
-            distance0 = TenguNode.compute_distance(pos0, pos01)
-            distance1 = TenguNode.compute_distance(pos1, pos11)
+            distance0 = Tracklet.compute_distance(pos0, pos01)
+            distance1 = Tracklet.compute_distance(pos1, pos11)
             if distance0 > 5:
                 self.logger.debug('distance0 between {} and {} is {}'.format(pos0, pos01, distance0))
                 self.logger.debug('tr = {}'.format(self.tr))
@@ -157,8 +157,8 @@ class TenguNode(object):
                 acceleration_similarity = 1.0
                 self.logger.debug('skipping acceleration similarity calculation')
             else:
-                distance00 = TenguNode.compute_distance(self.tr[0], self.tr[TenguNode._min_length])
-                distance10 = TenguNode.compute_distance(another.tr[0], another.tr[TenguNode._min_length])
+                distance00 = Tracklet.compute_distance(self.tr[0], self.tr[TenguNode._min_length])
+                distance10 = Tracklet.compute_distance(another.tr[0], another.tr[TenguNode._min_length])
                 acceleration0 = distance0 - distance00
                 acceleration1 = distance1 - distance10
                 diff_acceleration = max(TenguNode._min_acceleration, math.fabs(acceleration1 - acceleration0))
@@ -183,10 +183,6 @@ class TenguNode(object):
         self.logger.debug('similarity = {} [{}, {}, {}, {}]'.format(similarity, location_similarity, orientation_similarity, speed_similarity, acceleration_similarity))
 
         return similarity
-
-    @staticmethod
-    def compute_distance(pos0, pos1):
-        return math.sqrt((pos1[0]-pos0[0])**2+(pos1[1]-pos0[1])**2)
 
     @staticmethod
     def get_angle(tr):
@@ -600,9 +596,9 @@ class TenguFlowAnalyzer(object):
         return detections, tracklets, self._scene
 
     def print_graph(self):
-        self.logger.info('flow_graph is not None? {}'.format(self._flow_graph is not None))
+        self.logger.debug('flow_graph is not None? {}'.format(self._flow_graph is not None))
         for flow_node in self._flow_graph:
-            self.logger.info('{}'.format(flow_node))
+            self.logger.debug('{}'.format(flow_node))
 
     def initialize(self, frame_shape):
         # flow graph
@@ -698,7 +694,7 @@ class TenguFlowAnalyzer(object):
                 self._flow_graph.add_edge(prev_flow_node, flow_node, weight={})
             edge = self._flow_graph[prev_flow_node][flow_node]
             # add flow
-            existing_tracklet.path.append(flow_node)
+            existing_tracklet.add_flow_node_to_path(flow_node)
             # min_set = [source, prev_flow_node, flow_node]
             if not len(existing_tracklet.path) < 5:
                 # prev prev is not available

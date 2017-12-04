@@ -38,7 +38,6 @@ class ClusteredKLTTracklet(Tracklet):
         self._hist = None
         self._centers = []
         self._validated_nodes = set()
-        self._left = False
 
     @property
     def rect(self):
@@ -196,13 +195,6 @@ class ClusteredKLTTracklet(Tracklet):
 
     def last_movement(self):
         return None
-
-    @property
-    def has_left(self):
-        return self._left
-
-    def mark_left(self):
-        self._left = True
 
 class NodeCluster(object):
 
