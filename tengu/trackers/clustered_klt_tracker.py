@@ -123,7 +123,7 @@ class ClusteredKLTTracklet(Tracklet):
         if not lost:
             self._last_updated_at = TenguTracker._global_updates
 
-    def update_with_assignment(self, assignment):
+    def update_with_assignment(self, assignment, class_name):
         if len(self._assignments) > 0:
             self.logger.debug('{}@{}: updating with {} from {} at {}'.format(id(self), self.obj_id, assignment, self._assignments[-1], self._last_updated_at))
 
@@ -136,6 +136,9 @@ class ClusteredKLTTracklet(Tracklet):
             self._validated_nodes = set(assignment.group)
             self.update_properties(lost=False)
             self.recent_updates_by('1')
+            if not self._class_map.has_key(class_name):
+                self._class_map[class_name] = 0
+            self._class_map[class_name] += 1
 
     def update_without_assignment(self):
         """
@@ -315,16 +318,16 @@ class ClusteredKLTTracker(TenguTracker):
             self.draw_graph()
             cv2.imshow('Clustered KLT Debug', self.debug)
 
-    def initialize_tracklets(self, detections):
+    def initialize_tracklets(self, detections, class_names):
         
         self.prepare_updates(detections)
 
-        for detection in detections:
-            self._tracklets.append(self.new_tracklet(detection))
+        for d, detection in enumerate(detections):
+            self._tracklets.append(self.new_tracklet(detection, class_names[d]))
 
-    def new_tracklet(self, assignment):
+    def new_tracklet(self, assignment, class_name):
         to = ClusteredKLTTracklet(self)
-        to.update_with_assignment(NodeCluster(self.detection_node_map[assignment], assignment))
+        to.update_with_assignment(NodeCluster(self.detection_node_map[assignment], assignment), class_name)
         return to
 
     def update_graph(self):
@@ -360,11 +363,11 @@ class ClusteredKLTTracker(TenguTracker):
 
         return detection_node_map
 
-    def assign_new_to_tracklet(self, new_assignment, tracklet):
+    def assign_new_to_tracklet(self, new_assignment, class_name, tracklet):
         if new_assignment is None:
             tracklet.update_without_assignment()
         else:
-            tracklet.update_with_assignment(NodeCluster(self.detection_node_map[new_assignment], new_assignment))
+            tracklet.update_with_assignment(NodeCluster(self.detection_node_map[new_assignment], new_assignment), class_name)
 
     def obsolete_trackings(self):
 

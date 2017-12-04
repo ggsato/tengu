@@ -580,7 +580,7 @@ class TenguFlowAnalyzer(object):
             detections, class_names = self._detector.detect(frame)
 
             if self._tracker is not None:
-                tracklets = self._tracker.resolve_tracklets(detections)
+                tracklets = self._tracker.resolve_tracklets(detections, class_names)
                 self.update_flow_graph(tracklets)
 
                 if self._scene_file is None:
