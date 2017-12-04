@@ -25,9 +25,9 @@ class TenguNode(object):
     # Smin = 10 degrees
     _min_angle = math.pi / 180 * 10
     # Smin = 5 per 10 frames
-    _min_speed = 5
+    _min_speed = float(_min_distance) / 10
     # Smin = 1
-    _min_acceleration = _min_speed / 5
+    _min_acceleration = float(_min_speed) / 5
 
     def __init__(self, tr, *argv):
         super(TenguNode, self).__init__(*argv)
@@ -39,6 +39,7 @@ class TenguNode(object):
         self._movement = None
         self._angle = None
         self._property_updated_at = -1
+        self._left = False
 
     def __repr__(self):
         return 'node at {} detected at {} updated at {}'.format(self.tr[-1], self._last_detected_at, self._last_updated_at)
@@ -207,6 +208,15 @@ class TenguNode(object):
         move_y = prev[1]-prev2[1]
         return [int(move_x/min_length), int(move_y/min_length)] 
 
+    @property
+    def has_left(self):
+        return self._left
+
+    def mark_left(self):
+        """ this indicates this node has left the image
+        """
+        self._left = True
+
 class KLTAnalyzer(object):
 
     _max_nodes = 1000
@@ -273,6 +283,10 @@ class KLTAnalyzer(object):
             if not good_flag:
                 self._last_removed_nodes.append(node)
                 continue
+
+            if img1.shape[0] < int(y) or img1.shape[1] < int(x) or int(y) <= 0 or int(x) <= 0:
+                # this has left the area
+                node.mark_left()
 
             if len(node.tr) > self.max_track_length:
                 del node.tr[0]
@@ -572,15 +586,15 @@ class TenguFlowAnalyzer(object):
 
                 if self._scene_file is None:
                     # actively build scene
-                    #if frame_no % self._initial_weight == 0:
-                    #    self.build_scene()
-                    pass
+                    if frame_no % self._initial_weight == 0:
+                        self.build_scene()
+
+                img = self.draw_graph()
+                self._last_graph_img = img
 
                 if self._show_graph:
                     # show
-                    img = self.draw_graph()
                     cv2.imshow('TenguFlowAnalyzer Graph', img)
-                    cv2.imwrite('scene.jpg', img)
                     ch = 0xFF & cv2.waitKey(1)
 
         return detections, tracklets, self._scene
@@ -887,6 +901,8 @@ class TenguFlowAnalyzer(object):
             f.write(js_string)
         finally:
             f.close()
+        #
+        cv2.imwrite('{}.jpg'.format(file[:file.rindex('.')]), self._last_graph_img)
 
     def serialize(self):
         js = {}

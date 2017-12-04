@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 import logging, json
+import StringIO
 
 class TenguSceneAnalyzer(object):
 

@@ -38,6 +38,7 @@ class ClusteredKLTTracklet(Tracklet):
         self._hist = None
         self._centers = []
         self._validated_nodes = set()
+        self._left = False
 
     @property
     def rect(self):
@@ -195,6 +196,13 @@ class ClusteredKLTTracklet(Tracklet):
 
     def last_movement(self):
         return None
+
+    @property
+    def has_left(self):
+        return self._left
+
+    def mark_left(self):
+        self._left = True
 
 class NodeCluster(object):
 
@@ -381,6 +389,14 @@ class ClusteredKLTTracker(TenguTracker):
                 # remove from sceneanalyzer as well
                 del self._tengu_flow_analyer._klt_analyzer.nodes[self._tengu_flow_analyer._klt_analyzer.nodes.index(node)]
                 self.logger.debug('removed obsolete node and its edges due to diff = {}'.format(diff))
+
+        for tracklet in self._tracklets:
+            # obsolete if one of its nodes has left
+            for node in tracklet._validated_nodes:
+                if node.has_left:
+                    self.logger.info('removing {}, node {} has left'.format(tracklet, node))
+                    tracklet.mark_left()
+                    break
 
         self.graph = self.graph - obsolete_nodes
 
