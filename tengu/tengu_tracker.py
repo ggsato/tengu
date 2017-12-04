@@ -36,6 +36,7 @@ class Tracklet(object):
         self._current_flow = None
         self._dist_to_sink = 0
         self._flow_similarity = 0
+        self._removed = False
 
     # Tracklet Properties
 
@@ -57,8 +58,10 @@ class Tracklet(object):
         the true location of this object is lower than the simple center of this rectangle
         center = (int(self._rect[0]+self._rect[2]/2), int(self._rect[1]+self._rect[3]/2))
         location is a bit lower than the center y by 1/4 of the hight
+
+        this is used to locate a flow node
         """
-        return (int(self._rect[0]+self._rect[2]/2), int(self._rect[1]+self._rect[3]/2-self._rect[3]/4))
+        return (int(self._rect[0]+self._rect[2]/2), int(self._rect[1]+self._rect[3]/2+self._rect[3]/4))
 
     @property
     def confidence(self):
@@ -199,6 +202,13 @@ class Tracklet(object):
         self._current_flow = flow
         self._dist_to_sink = distance_to_sink
         self._flow_similarity = similarity
+
+    @property
+    def removed(self):
+        return self._removed
+
+    def mark_removed(self):
+        self._removed = True
 
 class TenguCostMatrix(object):
 

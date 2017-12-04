@@ -170,10 +170,10 @@ class TenguNode(object):
             self._property_updated_at = TenguTracker._global_updates
 
         # debug
-        disable_similarity = True
+        disable_similarity = False
         if disable_similarity:
-            #location_similarity = 1.0
-            #orientation_similarity = 1.0
+            location_similarity = 1.0
+            orientation_similarity = 1.0
             speed_similarity = 1.0
             acceleration_similarity = 1.0
 
@@ -429,6 +429,10 @@ class TenguFlow(object):
     def name(self):
         return self._name
 
+    @property
+    def group(self):
+        return self._group
+
     def similarity(self, another_flow):
         shorter = self if len(self.path) < len(another_flow.path) else another_flow
         longer = self if another_flow == shorter else another_flow
@@ -452,17 +456,14 @@ class TenguFlow(object):
         # set flow
         tracklet.set_flow(self, dist_to_sink, similarity)
 
-        # TODO: DO THIS IN SCENE ANALYZER
-        # TEMPORALY REMOVE IF MORE THAN A THRESHOLD
-        if len(self._tracklets) > 10:
-            sorted_tracklets = self.tracklets_by_dist()
-            logging.info('removing the most closer tracklet {}'.format(sorted_tracklets[0]))
-            self._tracklets.remove(sorted_tracklets[0])
-
     def tracklets_by_dist(self):
         """ return tracklets ordered by distance to sink in an ascending order
         """
         return sorted(self._tracklets, key=attrgetter('dist_to_sink'))
+
+    def remove_tracklet(self, tracklet):
+        if tracklet in self._tracklets:
+            self._tracklets.remove(tracklet)
 
 class TenguFlowNode(object):
 
@@ -571,8 +572,9 @@ class TenguFlowAnalyzer(object):
 
                 if self._scene_file is None:
                     # actively build scene
-                    if frame_no % self._initial_weight == 0:
-                        self.build_scene()
+                    #if frame_no % self._initial_weight == 0:
+                    #    self.build_scene()
+                    pass
 
                 if self._show_graph:
                     # show
@@ -725,6 +727,10 @@ class TenguFlowAnalyzer(object):
                 return
             flow_node.mark_sink(source_node)
             self.logger.debug('sink at {}'.format(flow_node))
+
+            # mark tracklet removed
+            if removed_tracklet.last_flow is not None:
+                removed_tracklet.mark_removed()
 
     def build_scene(self):
         """
