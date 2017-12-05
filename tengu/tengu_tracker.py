@@ -217,6 +217,7 @@ class Tracklet(object):
             real_distance_per_frame = real_distance / (milestone[2] - prev_stone[2])
             self.logger.debug('observation of speed distance={}, real_size_per_pixel={}, real_distance={}, real_distance_per_frame={}'.format(distance, real_size_per_pixel, real_distance, real_distance_per_frame))
             observations.append(real_distance_per_frame)
+            prev_stone = milestone
 
         estimated_speed = float(sum(observations)) / len(observations)
         self.logger.debug('estimated speed per frame = {}, observations = {}'.format(estimated_speed, observations))
