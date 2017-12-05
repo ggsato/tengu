@@ -389,7 +389,7 @@ class ClusteredKLTTracker(TenguTracker):
             # obsolete if one of its nodes has left
             for node in tracklet._validated_nodes:
                 if node.has_left:
-                    self.logger.info('removing {}, node {} has left'.format(tracklet, node))
+                    self.logger.debug('removing {}, node {} has left'.format(tracklet, node))
                     tracklet.mark_left()
                     break
 

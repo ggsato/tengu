@@ -215,11 +215,11 @@ class Tracklet(object):
             real_size_per_pixel = Tracklet.average_real_size / max(milestone[1][2], milestone[1][3])
             real_distance = distance * real_size_per_pixel
             real_distance_per_frame = real_distance / (milestone[2] - prev_stone[2])
-            self.logger.info('observation of speed distance={}, real_size_per_pixel={}, real_distance={}, real_distance_per_frame={}'.format(distance, real_size_per_pixel, real_distance, real_distance_per_frame))
+            self.logger.debug('observation of speed distance={}, real_size_per_pixel={}, real_distance={}, real_distance_per_frame={}'.format(distance, real_size_per_pixel, real_distance, real_distance_per_frame))
             observations.append(real_distance_per_frame)
 
         estimated_speed = float(sum(observations)) / len(observations)
-        self.logger.info('estimated speed per frame = {}, observations = {}'.format(estimated_speed, observations))
+        self.logger.debug('estimated speed per frame = {}, observations = {}'.format(estimated_speed, observations))
 
         return estimated_speed
 
