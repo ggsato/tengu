@@ -110,15 +110,6 @@ class Tengu(object):
                 M = cv2.getRotationMatrix2D((cols/2, rows/2), rotation, 1)
                 frame = cv2.warpAffine(frame, M, (cols, rows))
 
-            # block for a client if necessary to synchronize
-            if queue is not None:
-                # wait until queue becomes ready
-                try:
-                    queue.put(frame, max_queue_wait)
-                except Queue.Full:
-                    self.logger.error('queue is full, quitting...')
-                    break
-
             # use copy for gui use, which is done asynchronously, meaning may corrupt buffer during camera updates
             copy = frame.copy()
             self._notify_frame_changed(frame)
@@ -126,6 +117,15 @@ class Tengu(object):
             # preprocess
             cropped = self.preprocess(frame, roi, scale)
             self._notify_frame_preprocessed(cropped.copy())
+
+            # block for a client if necessary to synchronize
+            if queue is not None:
+                # wait until queue becomes ready
+                try:
+                    queue.put(cropped.copy(), max_queue_wait)
+                except Queue.Full:
+                    self.logger.error('queue is full, quitting...')
+                    break
 
             # skip if necessary
             if every_x_frame > 1 and self._current_frame % every_x_frame != 0:

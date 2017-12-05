@@ -57,7 +57,7 @@ class TenguSceneAnalyzer(object):
         """ returns a list of numbers to be counted of this tracklet
         """
         # count 
-        return [TenguSumItem('Count', 1), TenguAvgItem('Speed', tracklet.speed)]
+        return [TenguSumItem('Count', 1), TenguAvgItem('Speed', tracklet.speed if tracklet.speed > 0 else None)]
 
     def finish_analysis(self):
         """ write its output to a file
@@ -76,6 +76,8 @@ class TenguSceneAnalyzer(object):
                     for count_items in count_items_list:
                         for i, count_item in enumerate(count_items):
                             if isinstance(count_item, TenguAvgItem):
+                                if count_item.value is None:
+                                    continue
                                 value = float(count_item.value) / len(count_items_list)
                             else:
                                 value = count_item.value
