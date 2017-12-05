@@ -78,7 +78,7 @@ class TenguSceneAnalyzer(object):
                             if isinstance(count_item, TenguAvgItem):
                                 value = float(count_item.value) / len(count_items_list)
                             else:
-                                value = cout_item.value
+                                value = count_item.value
                             total_count_values[i] += value
                     # got totals
                     for t, total_count_value in enumerate(total_count_values):
