@@ -747,7 +747,22 @@ class TenguFlowAnalyzer(object):
             flow_node.mark_sink(source_node)
             self.logger.debug('sink at {}'.format(flow_node))
 
-            # mark tracklet removed
+            if removed_tracklet.last_flow is None:
+                if removed_tracklet.is_confirmed:
+                    # find a flow
+                    min_distnace_to_sink_and_source = 0
+                    closest_flow = None
+                    for flow in self._scene.flows:
+                        dist_to_source_from_start = TenguTracker.compute_distance(removed_tracklet.path[0].position, flow.source.position)
+                        dist_to_sink_from_end = TenguTracker.compute_distance(removed_tracklet.path[-1].position, flow.sink.position)
+                        dist = dist_to_source_from_start + dist_to_sink_from_end
+                        if dist < min_distnace_to_sink_and_source:
+                            min_distnace_to_sink_and_source = dist
+                            closest_flow = flow
+                    if closest_flow is not None:
+                        self.logger.info('{} was assigned to {} at removal'.format(remove_tracklet, closest_flow))
+                        closest_flow.put_tracklet(remove_tracklet, None, None)
+
             if removed_tracklet.last_flow is not None:
                 removed_tracklet.mark_removed()
 

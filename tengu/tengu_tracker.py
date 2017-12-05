@@ -46,8 +46,10 @@ class Tracklet(object):
         # for classification
         self._class_map = {}
 
-    # Tracklet Properties
+    def __repr__(self):
+        return 'id:{}, obj_id:{}, confidence:{}, speed:{}, flow:{}, left:{}, class:{}'.format(id(self), self._obj_id, self._confidence, self.speed, self.current_flow_name, self._left, self.class_name)
 
+    # Tracklet Properties
     @property
     def obj_id(self):
         return self._obj_id

@@ -18,11 +18,12 @@ class TenguAvgItem(TenguCountItem):
 
 class TenguSceneAnalyzer(object):
 
-    def __init__(self, output_file=None):
+    def __init__(self, output_file=None, fixed_class_names=None):
         super(TenguSceneAnalyzer, self).__init__()
         self.logger= logging.getLogger(__name__)
         self._output_file = output_file
         self._counter_dict = {}
+        self._fixed_class_names = fixed_class_names
 
     def analyze_scene(self, scene):
         """ analyze scene, and outputs a count report at intervals
@@ -43,9 +44,11 @@ class TenguSceneAnalyzer(object):
                         count_items = self.tracklet_to_count_items(tracklet)
                         class_name = tracklet.class_name
                         if not self._counter_dict.has_key(group):
-                            # TODO: the number of counting elements should be determined dynamically
-                            # e.g. class0, class1, class2, speed
                             self._counter_dict[group] = {}
+                            if self._fixed_class_names is not None:
+                                # set fixed class names at first
+                                for fixed_class_name in self._fixed_class_names:
+                                    self._counter_dict[group][fixed_class_name] = []
                         if not self._counter_dict[group].has_key(class_name):
                             self._counter_dict[group][class_name] = []
                         self._counter_dict[group][class_name].append(count_items)
