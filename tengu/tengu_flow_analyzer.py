@@ -487,6 +487,8 @@ class TenguFlowNode(object):
         self._sink_count = 0
         # pair of source, count
         self._sources = {}
+        # pair of sink, count
+        self._sinks = {}
 
     def __repr__(self):
         return json.dumps(self.serialize())
@@ -516,6 +518,10 @@ class TenguFlowNode(object):
         if not self._sources.has_key(source):
             self._sources[source] = 0
         self._sources[source] += 1
+
+        if not source._sinks.has_key(self):
+            source._sinks[self] = 0
+        source._sinks[self] += 1
 
     @property
     def position(self):
@@ -750,14 +756,16 @@ class TenguFlowAnalyzer(object):
         builds a scene from the current flow_graph
         """
         # flows
+        majority = int(len(self._flow_graph)/100*self._majority_in_percent)
+        flows = []
+
+        # sinks
         try:
             major_sinks = sorted(self._flow_graph, key=attrgetter('sink_count'), reverse=True)
         except:
             self.print_graph()
             raise
 
-        majority = int(len(self._flow_graph)/100*self._majority_in_percent)
-        flows = []
         for major_sink in major_sinks[:majority]:
             if major_sink.sink_count < self._min_sink_count_for_flow:
                 continue
@@ -767,6 +775,43 @@ class TenguFlowAnalyzer(object):
             # path
             if major_source == major_sink:
                 self.logger.error('major source {} should not be the same as sink node {}'.format(major_source, major_sink))
+                return
+            path, _ = self.find_shortest_path_and_cost(major_source, major_sink)
+            if path is None:
+                continue
+            # build
+            tengu_flow = TenguFlow(major_source, major_sink, path, name='{:02d}'.format(len(flows)))
+            # check similarity
+            unique = True
+            for flow in flows:
+                similarity = flow.similarity(tengu_flow)
+                self.logger.debug('similarity between {} and {} = {}'.format(flow, tengu_flow, similarity)) 
+                if similarity > Tracklet._min_confidence:
+                    self.logger.debug('a flow from {} to {} is too similar to {}, being skipped...'.format(major_source, major_sink, flow))
+                    unique = False
+                    break
+            if not unique:
+                continue
+            flows.append(tengu_flow)
+
+        # sources
+        try:
+            major_sources = sorted(self._flow_graph, key=attrgetter('source_count'), reverse=True)
+        except:
+            self.print_graph()
+            raise
+        for major_source in major_sources[:majority]:
+            if major_source.source_count < self._min_sink_count_for_flow:
+                continue
+            sink_nodes = major_source._sinks.keys()
+            # sinks are set after, so check if exists at all
+            if len(sink_nodes) == 0:
+                continue
+            sink_nodes = sorted(sink_nodes, key=major_source._sinks.__getitem__, reverse=True)
+            major_sink = sink_nodes[0]
+            # path
+            if major_sink == major_source:
+                self.logger.error('major sink {} should not be the same as source node {}'.format(major_sink, major_source))
                 return
             path, _ = self.find_shortest_path_and_cost(major_source, major_sink)
             if path is None:
