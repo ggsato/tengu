@@ -46,6 +46,9 @@ class Tracklet(object):
         # for classification
         self._class_map = {}
 
+        # debug
+        self._shortest_path_for_debug = None
+
     def __repr__(self):
         return 'id:{}, obj_id:{}, confidence:{}, speed:{}, flow:{}, left:{}, class:{}'.format(id(self), self._obj_id, self._confidence, self.speed, self.current_flow_name, self._left, self.class_name)
 
@@ -267,10 +270,11 @@ class Tracklet(object):
     def flow_similarity(self):
         return self._flow_similarity
 
-    def set_flow(self, flow, distance_to_sink, similarity):
+    def set_flow(self, flow, distance_to_sink, similarity, shortest_path_for_debug=None):
         self._current_flow = flow
         self._dist_to_sink = distance_to_sink
         self._flow_similarity = similarity
+        self._shortest_path_for_debug = shortest_path_for_debug
 
     @property
     def removed(self):
