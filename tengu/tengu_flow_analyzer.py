@@ -399,7 +399,7 @@ class TenguFlow(object):
         self._tracklets = Set([])
 
     def __repr__(self):
-        return json.dumps(self.serialize())
+        return 'id={}, name={}, group={}'.format(id(self), self._name, self._group)
 
     def serialize(self):
         js = {}
@@ -702,21 +702,25 @@ class TenguFlowAnalyzer(object):
             flow_node = self.flow_node_at(*existing_tracklet.center)
             if prev_flow_node == flow_node:
                 # no change
+                self.logger.info('{} stays on the same flow node'.format(existing_tracklet))
                 continue
             # update edge
             if prev_flow_node is None:
                 self.logger.error('no last flow exists on {}'.format(existing_tracklet))
                 raise
             # if flow_node is not adjacent of prev, skip it
-            if not flow_node.adjacent(prev_flow_node):
-                self.logger.debug('{} is not adjacent of {}'.format(flow_node, prev_flow_node))
+            # but this could happen by a quickly moving tracklet
+            # so check this only when building scene
+            if self._scene_file is None and not flow_node.adjacent(prev_flow_node):
+                self.logger.info('{} is not adjacent of {}'.format(flow_node, prev_flow_node))
                 continue
             
             # add flow
             existing_tracklet.add_flow_node_to_path(flow_node)
             # min_set = [source, prev_flow_node, flow_node]
-            if not len(existing_tracklet.path) < 5:
+            if len(existing_tracklet.path) < 5:
                 # prev prev is not available
+                self.logger.info('path length is too short for modified shortest path finding for {}'.format(existing_tracklet))
                 continue
 
             if self._scene_file is not None:
@@ -741,13 +745,13 @@ class TenguFlowAnalyzer(object):
                 if similarity > best_similarity:
                     most_similar_flow = flow
                     best_similarity = similarity
-            self.logger.debug('the most similar flow of {} is {} at {}'.format(existing_tracklet, most_similar_flow, best_similarity))
+            self.logger.info('the most similar flow of {} is {} at {}'.format(existing_tracklet, most_similar_flow, best_similarity))
             if most_similar_flow is not None:
                 # TODO: filter by a threshold by lowest cost
                 path, dist_to_sink = self.find_shortest_path_and_cost(flow_node, most_similar_flow.sink)
                 if path is None:
                     # no such path exist
-                    self.logger.debug('but no such path from {} to {}'.format(flow_node, most_similar_flow.sink))
+                    self.logger.info('but no such path from {} to {}'.format(flow_node, most_similar_flow.sink))
                     return
                 most_similar_flow.put_tracklet(existing_tracklet, dist_to_sink, best_similarity, shortest_path_for_debug=path)
             elif existing_tracklet.last_flow is not None:
