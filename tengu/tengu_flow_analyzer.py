@@ -702,7 +702,7 @@ class TenguFlowAnalyzer(object):
             flow_node = self.flow_node_at(*existing_tracklet.center)
             if prev_flow_node == flow_node:
                 # no change
-                self.logger.info('{} stays on the same flow node'.format(existing_tracklet))
+                self.logger.debug('{} stays on the same flow node'.format(existing_tracklet))
                 continue
             # update edge
             if prev_flow_node is None:
@@ -712,7 +712,7 @@ class TenguFlowAnalyzer(object):
             # but this could happen by a quickly moving tracklet
             # so check this only when building scene
             if self._scene_file is None and not flow_node.adjacent(prev_flow_node):
-                self.logger.info('{} is not adjacent of {}'.format(flow_node, prev_flow_node))
+                self.logger.debug('{} is not adjacent of {}'.format(flow_node, prev_flow_node))
                 continue
             
             # add flow
@@ -720,7 +720,7 @@ class TenguFlowAnalyzer(object):
             # min_set = [source, prev_flow_node, flow_node]
             if len(existing_tracklet.path) < 5:
                 # prev prev is not available
-                self.logger.info('path length is too short for modified shortest path finding for {}'.format(existing_tracklet))
+                self.logger.debug('path length is too short for modified shortest path finding for {}'.format(existing_tracklet))
                 continue
 
             if self._scene_file is not None:
@@ -745,13 +745,13 @@ class TenguFlowAnalyzer(object):
                 if similarity > best_similarity:
                     most_similar_flow = flow
                     best_similarity = similarity
-            self.logger.info('the most similar flow of {} is {} at {}'.format(existing_tracklet, most_similar_flow, best_similarity))
+            self.logger.debug('the most similar flow of {} is {} at {}'.format(existing_tracklet, most_similar_flow, best_similarity))
             if most_similar_flow is not None:
                 # TODO: filter by a threshold by lowest cost
                 path, dist_to_sink = self.find_shortest_path_and_cost(flow_node, most_similar_flow.sink)
                 if path is None:
                     # no such path exist
-                    self.logger.info('but no such path from {} to {}'.format(flow_node, most_similar_flow.sink))
+                    self.logger.debug('but no such path from {} to {}'.format(flow_node, most_similar_flow.sink))
                     return
                 most_similar_flow.put_tracklet(existing_tracklet, dist_to_sink, best_similarity, shortest_path_for_debug=path)
             elif existing_tracklet.last_flow is not None:
@@ -770,7 +770,7 @@ class TenguFlowAnalyzer(object):
             max_diff = TenguFlow.max_node_diff(removed_tracklet.path[0], removed_tracklet.path[-1])
             if max_diff < 2:
                 # within adjacent blocks, this is stationally
-                self.logger.info('{} is removed, but not for counting, stationally')
+                self.logger.debug('{} is removed, but not for counting, stationally')
                 continue
 
             flow_node = self.flow_node_at(*removed_tracklet.center)
@@ -798,10 +798,10 @@ class TenguFlowAnalyzer(object):
                         # check at least path exists
                         path, dist_to_sink = self.find_shortest_path_and_cost(flow_node, closest_flow.sink)
                         if path is None:
-                            self.logger.info('found closest flow, but no path exists for {}'.format(remove_tracklet))
+                            self.logger.debug('found closest flow, but no path exists for {}'.format(remove_tracklet))
                             return
                         similarity = closest_flow.similarity(removed_tracklet)
-                        self.logger.info('{} was assigned to {} at removal, the similarity = {}'.format(remove_tracklet, closest_flow, similarity))
+                        self.logger.debug('{} was assigned to {} at removal, the similarity = {}'.format(remove_tracklet, closest_flow, similarity))
                         closest_flow.put_tracklet(remove_tracklet, None, None)
 
             if removed_tracklet.last_flow is not None:
