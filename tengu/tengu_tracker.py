@@ -233,6 +233,15 @@ class Tracklet(object):
             observations.append(real_distance_per_frame)
             prev_stone = milestone
 
+        # finally, from the last to the current location
+        if prev_stone[2] < TenguTracker._global_updates:
+            distance = Tracklet.compute_distance(prev_stone[0], self.center)
+            real_size_per_pixel = Tracklet.average_real_size / max(self.rect[2], self.rect[3])
+            real_distance = distance * real_size_per_pixel
+            real_distance_per_frame = real_distance / (TenguTracker._global_updates - prev_stone[2])
+            self.logger.debug('current observation of speed distance={}, real_size_per_pixel={}, real_distance={}, real_distance_per_frame={}'.format(distance, real_size_per_pixel, real_distance, real_distance_per_frame))
+            observations.append(real_distance_per_frame)
+
         estimated_speed = float(sum(observations)) / len(observations)
         self.logger.debug('estimated speed per frame = {}, observations = {}'.format(estimated_speed, observations))
 

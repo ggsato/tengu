@@ -265,7 +265,6 @@ class KLTAnalyzer(object):
 
         if self.draw_flows:
             cv2.imshow('KLT Debug - Flows', self.debug)
-            ch = 0xFF & cv2.waitKey(1)
 
     def calculate_flow(self, img0, img1):
         self.logger.debug('calculating flow')

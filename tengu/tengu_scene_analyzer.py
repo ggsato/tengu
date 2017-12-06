@@ -108,3 +108,8 @@ class TenguSceneAnalyzer(object):
             row.close()
             f.write('{}\n{}'.format(csv_hedaer, csv_row))
             f.close()
+
+        self.reset_counter()
+
+    def reset_counter(self):
+        self._counter_dict = {}
