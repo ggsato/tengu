@@ -384,6 +384,7 @@ class TenguFlow(object):
     TenguFlow represents a flow of typical movments by a particular type of objects,
     and whichi is characterized by its source, path, and sink.
     """
+    min_source_sink_similarity_dist = 2.0
 
     def __init__(self, source=None, sink=None, path=[], name='default', group='default'):
         super(TenguFlow, self).__init__()
@@ -444,6 +445,7 @@ class TenguFlow(object):
         return self._group
 
     def similarity(self, another_flow):
+        # path similarity
         shorter = self if len(self.path) < len(another_flow.path) else another_flow
         longer = self if another_flow == shorter else another_flow
         duplicates = 0
@@ -455,7 +457,15 @@ class TenguFlow(object):
                     if flow_node.adjacent(another_node):
                         duplicates += 0.5
                         break
-        return float(duplicates) / len(shorter.path)
+        path_similarity = float(duplicates) / len(shorter.path)
+
+        # source and sink similarity
+        source_dist = max(abs(self.source._y_blk-another_flow.source._y_blk), abs(self.source._x_blk-another_flow.source._x_blk))
+        source_similarity = TenguFlow.min_source_sink_similarity_dist / max(TenguFlow.min_source_sink_similarity_dist, source_dist)
+        sink_dist = max(abs(self.sink._y_blk-another_flow.sink._y_blk), abs(self.sink._x_blk-another_flow.sink._x_blk))
+        sink_similarity = TenguFlow.min_source_sink_similarity_dist / max(TenguFlow.min_source_sink_similarity_dist, sink_dist)
+
+        return (path_similarity + source_similarity + sink_similarity) / 3
 
     def put_tracklet(self, tracklet, dist_to_sink, similarity):
         if tracklet._current_flow is not None and tracklet._current_flow != self:

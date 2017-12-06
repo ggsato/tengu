@@ -195,6 +195,18 @@ class Tracklet(object):
     def path(self):
         return self._path
 
+    @property
+    def source(self):
+        if len(self._path) < 1:
+            return None
+        return self._path[0]
+
+    @property
+    def sink(self):
+        if len(self._path) < 1:
+            return None
+        return self._path[-1]
+
     def add_flow_node_to_path(self, flow_node):
         self._path.append(flow_node)
         self._milestones.append([self.center, self.rect, TenguTracker._global_updates])
