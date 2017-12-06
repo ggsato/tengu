@@ -707,21 +707,25 @@ class TenguFlowAnalyzer(object):
             if not flow_node.adjacent(prev_flow_node):
                 self.logger.debug('{} is not adjacent of {}'.format(flow_node, prev_flow_node))
                 continue
-            if not self._flow_graph.has_edge(prev_flow_node, flow_node):
-                self.logger.debug('making an edge from {} to {}'.format(prev_flow_node, flow_node))
-                self._flow_graph.add_edge(prev_flow_node, flow_node, weight={})
-            edge = self._flow_graph[prev_flow_node][flow_node]
+            
             # add flow
             existing_tracklet.add_flow_node_to_path(flow_node)
             # min_set = [source, prev_flow_node, flow_node]
             if not len(existing_tracklet.path) < 5:
                 # prev prev is not available
                 continue
-            prev_prev_flow_node = existing_tracklet.path[-2]
-            if not edge['weight'].has_key(prev_prev_flow_node):
-                edge['weight'][prev_prev_flow_node] = 0
-            edge['weight'][prev_prev_flow_node] += 1
-            self.logger.debug('updating weight at {}'.format(edge))
+
+            if self._scene_file is not None:
+                # update edge
+                if not self._flow_graph.has_edge(prev_flow_node, flow_node):
+                    self.logger.debug('making an edge from {} to {}'.format(prev_flow_node, flow_node))
+                    self._flow_graph.add_edge(prev_flow_node, flow_node, weight={})
+                edge = self._flow_graph[prev_flow_node][flow_node]
+                prev_prev_flow_node = existing_tracklet.path[-2]
+                if not edge['weight'].has_key(prev_prev_flow_node):
+                    edge['weight'][prev_prev_flow_node] = 0
+                edge['weight'][prev_prev_flow_node] += 1
+                self.logger.debug('updating weight at {}'.format(edge))
             # check if this tracklet is on a flow
             # total cost of a shortest path tends to point to a closer sink
             # so, check the cost of the next edge on each shortest path,
