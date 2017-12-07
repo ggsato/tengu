@@ -53,6 +53,7 @@ class TenguSceneAnalyzer(object):
         # count 
         count_dict = {}
         count_dict['Count'] = {tracklet.obj_id: 1}
+        # note that this speed is UNIT/FRAME
         count_dict['Speed'] = {tracklet.obj_id: tracklet.speed if tracklet.speed > 0 else None}
         return count_dict
 
@@ -95,7 +96,7 @@ class TenguSceneAnalyzer(object):
                     row.write(grouped_count[group, class_name])
                 # add group level average speed
                 header.write(',{}-Speed'.format(group))
-                row.write(',{}'.format(int(grouped_speed[group] * 90)))
+                row.write(',{}'.format('{:03.2f}'.format(grouped_speed[group])))
 
             header_value = header.getvalue()
             header.close()
