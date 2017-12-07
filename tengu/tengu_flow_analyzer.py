@@ -180,7 +180,7 @@ class TenguNode(object):
 
         similarity = [location_similarity, orientation_similarity, speed_similarity, acceleration_similarity]
 
-        self.logger.debug('similarity = {} [{}, {}, {}, {}]'.format(similarity, location_similarity, orientation_similarity, speed_similarity, acceleration_similarity))
+        self.logger.debug('similarity = {}'.format(similarity))
 
         return similarity
 
@@ -558,7 +558,7 @@ class TenguFlowAnalyzer(object):
     fbn =
     """
 
-    def __init__(self, detector, tracker, scene_file=None, flow_blocks=(20, 30), show_graph=True, majority_in_percent=5, initial_weight=200, min_sink_count_for_flow=10, **kwargs):
+    def __init__(self, detector, tracker, scene_file=None, flow_blocks=(20, 30), show_graph=True, majority_in_percent=5, initial_weight=200, min_sink_count_for_flow=10, allow_non_adjacent_edge=False, **kwargs):
         super(TenguFlowAnalyzer, self).__init__()
         self.logger= logging.getLogger(__name__)
         self._initialized = False
@@ -575,6 +575,7 @@ class TenguFlowAnalyzer(object):
         self._initial_weight = initial_weight
         self._weight_func = lambda u, v, d, prev_prev_node, s=self: s.calculate_weight(u, v, d, prev_prev_node)
         self._min_sink_count_for_flow = min_sink_count_for_flow
+        self._allow_non_adjacent_edge = allow_non_adjacent_edge
         # the folowings will be initialized
         self._scene = None
         self._frame_shape = None
@@ -711,7 +712,7 @@ class TenguFlowAnalyzer(object):
             # if flow_node is not adjacent of prev, skip it
             # but this could happen by a quickly moving tracklet
             # so check this only when building scene
-            if self._scene_file is None and not flow_node.adjacent(prev_flow_node):
+            if self._scene_file is None and not self._allow_non_adjacent_edge and not flow_node.adjacent(prev_flow_node):
                 self.logger.debug('{} is not adjacent of {}'.format(flow_node, prev_flow_node))
                 continue
             
