@@ -2,28 +2,18 @@
 # -*- coding: utf-8 -*-
 import logging, json
 import StringIO
-
-class TenguCountItem(object):
-
-    def __init__(self, header, value):
-        super(TenguCountItem, self).__init__()
-        self.header = header
-        self.value = value
-
-class TenguSumItem(TenguCountItem):
-    pass
-
-class TenguAvgItem(TenguCountItem):
-    pass
+from pandas import DataFrame
+import pandas as pd
 
 class TenguSceneAnalyzer(object):
 
-    def __init__(self, output_file=None, fixed_class_names=None):
+    def __init__(self, output_file=None, ignore_default=True):
         super(TenguSceneAnalyzer, self).__init__()
         self.logger= logging.getLogger(__name__)
         self._output_file = output_file
+        self._ignore_default = ignore_default
         self._counter_dict = {}
-        self._fixed_class_names = fixed_class_names
+        self._df = None
 
     def analyze_scene(self, scene):
         """ analyze scene, and outputs a count report at intervals
@@ -40,73 +30,81 @@ class TenguSceneAnalyzer(object):
                     if tracklet.removed:
                         # increment
                         self.logger.info('found removed tracklet, counting {}'.format(tracklet))
-                        # TODO
-                        count_items = self.tracklet_to_count_items(tracklet)
-                        class_name = tracklet.class_name
-                        if not self._counter_dict.has_key(group):
-                            self._counter_dict[group] = {}
-                            if self._fixed_class_names is not None:
-                                # set fixed class names at first
-                                for fixed_class_name in self._fixed_class_names:
-                                    self._counter_dict[group][fixed_class_name] = []
-                        if not self._counter_dict[group].has_key(class_name):
-                            self._counter_dict[group][class_name] = []
-                        self._counter_dict[group][class_name].append(count_items)
+                        count_dict = self.tracklet_to_count_dict(tracklet)
+                        count_dict['Class'] = {tracklet.obj_id: tracklet.class_name}
+                        count_dict['Group'] = {tracklet.obj_id: group}
+                        df = DataFrame.from_dict(count_dict)
+                        self.logger.debug('df = {}'.format(df))
+                        # merge
+                        if self._df is None:
+                            self._df = df
+                        else:
+                            self._df = self._df.merge(df, how='outer')
+                            self.logger.info('self df = {}'.format(self._df))
+                        # remove this tracklet from tracklet
                         named_flow.remove_tracklet(tracklet)
 
         return self._counter_dict
 
-    def tracklet_to_count_items(self, tracklet):
+    def tracklet_to_count_dict(self, tracklet):
         """ returns a list of numbers to be counted of this tracklet
+        override as necessary
         """
         # count 
-        return [TenguSumItem('Count', 1), TenguAvgItem('Speed', tracklet.speed if tracklet.speed > 0 else None)]
+        count_dict = {}
+        count_dict['Count'] = {tracklet.obj_id: 1}
+        count_dict['Speed'] = {tracklet.obj_id: tracklet.speed if tracklet.speed > 0 else None}
+        return count_dict
 
     def finish_analysis(self):
         """ write its output to a file
+        override as necessary
         """
-        if self._output_file is not None:
+        if self._output_file is not None and self._df is not None:
             self.logger.info('writing a report to {}'.format(self._output_file))
-            f = open(self._output_file, 'w')
-            header = None
-            row = StringIO.StringIO()
-            sorted_groups = sorted(self._counter_dict.keys())
-            self.logger.info('groups: {}'.format(sorted_groups))
-            for g, sorted_group in enumerate(sorted_groups):
-                for c, class_name in enumerate(self._counter_dict[sorted_group]):
-                    count_items_list = self._counter_dict[sorted_group][class_name]
-                    total_count_values = [0 for i in range(len(count_items_list[0]))]
-                    for count_items in count_items_list:
-                        for i, count_item in enumerate(count_items):
-                            if isinstance(count_item, TenguAvgItem):
-                                if count_item.value is None:
-                                    continue
-                                value = float(count_item.value) / len(count_items_list)
-                            else:
-                                value = count_item.value
-                            total_count_values[i] += value
-                    # got totals
-                    for t, total_count_value in enumerate(total_count_values):
-                        if header is None:
-                            # this is the first item being written
-                            header = StringIO.StringIO()
-                        else:
-                            header.write(',')
-                            row.write(',')
-                        # write
-                        header.write('{}-{}-{}'.format(sorted_group, class_name, count_items_list[0][t].header))
-                        if isinstance(total_count_value, float):
-                            row.write('{:03.2f}'.format(total_count_value))
-                        else:
-                            row.write('{:d}'.format(total_count_value))
+            
+            grouped_count = self._df['Count'].groupby([self._df['Group'], self._df['Class']]).sum()
+            self.logger.info(grouped_count)
+            self.logger.info(grouped_count.shape)
+            self.logger.info(grouped_count.index)
 
-            csv_hedaer = header.getvalue()
-            csv_row = row.getvalue()
-            self.logger.info('csv header = {}'.format(csv_hedaer))
-            self.logger.info('csv row = {}'.format(csv_row))
+            grouped_speed = self._df['Speed'].groupby([self._df['Group']]).mean()
+            self.logger.info(grouped_speed)
+            self.logger.info(grouped_speed.shape)
+            self.logger.info(grouped_speed.index)
+
+            header = None
+            row = None
+            for group in grouped_speed.index:
+                self.logger.info('checking {}'.format(group))
+                if group == 'default' and self._ignore_default:
+                    self.logger.info('skipping default')
+                    continue
+                grouped_by_class = grouped_count[group]
+                for class_name in grouped_by_class.index:
+                    self.logger.info('{}, {}, {}'.format(group, class_name, grouped_count[group, class_name]))
+                    if header is None:
+                        # this is the first time
+                        header = StringIO.StringIO()
+                        row = StringIO.StringIO()
+                    else:
+                        header.write(',')
+                        row.write(',')
+
+                    header.write('{}-{}'.format(group, class_name))
+                    row.write(grouped_count[group, class_name])
+                # add group level average speed
+                header.write(',{}-Speed'.format(group))
+                row.write(',{}'.format(int(grouped_speed[group] * 90)))
+
+            header_value = header.getvalue()
             header.close()
+            row_value = row.getvalue()
             row.close()
-            f.write('{}\n{}'.format(csv_hedaer, csv_row))
+
+            f = open(self._output_file, 'w')
+            f.write('{}\n'.format(header_value))
+            f.write('{}\n'.format(row_value))
             f.close()
 
         self.reset_counter()
