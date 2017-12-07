@@ -101,8 +101,8 @@ class Tengu(object):
             self._current_frame += 1
 
             # debug
-            if self._current_frame > 1000:
-                break
+            #if self._current_frame > 1000:
+            #    break
 
             # rotate
             if rotation != 0:

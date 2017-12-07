@@ -66,13 +66,9 @@ class TenguSceneAnalyzer(object):
             
             grouped_count = self._df['Count'].groupby([self._df['Group'], self._df['Class']]).sum()
             self.logger.info(grouped_count)
-            self.logger.info(grouped_count.shape)
-            self.logger.info(grouped_count.index)
 
             grouped_speed = self._df['Speed'].groupby([self._df['Group']]).mean()
             self.logger.info(grouped_speed)
-            self.logger.info(grouped_speed.shape)
-            self.logger.info(grouped_speed.index)
 
             header = None
             row = None
