@@ -754,10 +754,10 @@ class TenguFlowAnalyzer(object):
                     self.logger.debug('but no such path from {} to {}'.format(flow_node, most_similar_flow.sink))
                     return
                 most_similar_flow.put_tracklet(existing_tracklet, dist_to_sink, best_similarity, shortest_path_for_debug=path)
-            elif existing_tracklet.current_flow is not None:
+            elif existing_tracklet._current_flow is not None:
                 # this may have left the prev flow, and yet not identified by a new
                 # set None to reset
-                existing_tracklet.current_flow.remove_tracklet(existing_tracklet)
+                existing_tracklet._current_flow.remove_tracklet(existing_tracklet)
                 existing_tracklet.set_flow(None, 0, 0, shortest_path_for_debug=None)
 
     def finish_removed_tracklets(self, removed_tracklets):
