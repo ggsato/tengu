@@ -94,15 +94,17 @@ class TenguSceneAnalyzer(object):
                 header.write(',{}-Speed'.format(group))
                 row.write(',{}'.format('{:03.2f}'.format(grouped_speed[group])))
 
-            header_value = header.getvalue()
-            header.close()
-            row_value = row.getvalue()
-            row.close()
+            if header is not None:
 
-            f = open(self._output_file, 'w')
-            f.write('{}\n'.format(header_value))
-            f.write('{}\n'.format(row_value))
-            f.close()
+                header_value = header.getvalue()
+                header.close()
+                row_value = row.getvalue()
+                row.close()
+
+                f = open(self._output_file, 'w')
+                f.write('{}\n'.format(header_value))
+                f.write('{}\n'.format(row_value))
+                f.close()
 
         self.reset_counter()
 
