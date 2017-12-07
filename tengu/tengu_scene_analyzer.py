@@ -12,7 +12,6 @@ class TenguSceneAnalyzer(object):
         self.logger= logging.getLogger(__name__)
         self._output_file = output_file
         self._ignore_default = ignore_default
-        self._counter_dict = {}
         self._df = None
 
     def analyze_scene(self, scene):
@@ -43,8 +42,6 @@ class TenguSceneAnalyzer(object):
                             self.logger.info('self df = {}'.format(self._df))
                         # remove this tracklet from tracklet
                         named_flow.remove_tracklet(tracklet)
-
-        return self._counter_dict
 
     def tracklet_to_count_dict(self, tracklet):
         """ returns a list of numbers to be counted of this tracklet
@@ -109,4 +106,4 @@ class TenguSceneAnalyzer(object):
         self.reset_counter()
 
     def reset_counter(self):
-        self._counter_dict = {}
+        self._df = None
