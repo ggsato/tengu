@@ -558,6 +558,8 @@ class TenguFlowAnalyzer(object):
     fbn =
     """
 
+    rebuild_scene_ratio = 10
+
     def __init__(self, detector, tracker, scene_file=None, flow_blocks=(20, 30), show_graph=True, majority_in_percent=5, initial_weight=200, min_sink_count_for_flow=10, allow_non_adjacent_edge=False, **kwargs):
         super(TenguFlowAnalyzer, self).__init__()
         self.logger= logging.getLogger(__name__)
@@ -605,7 +607,7 @@ class TenguFlowAnalyzer(object):
 
                 if self._scene_file is None:
                     # actively build scene
-                    if frame_no % self._initial_weight == 0:
+                    if frame_no % (self._initial_weight * TenguFlowAnalyzer.rebuild_scene_ratio) == 0:
                         self.build_scene()
 
                 img = self.draw_graph()

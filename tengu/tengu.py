@@ -15,8 +15,9 @@ from tengu_observer import *
 
 class Tengu(object):
 
-    def __init__(self):
+    def __init__(self, equalize=False):
         self.logger= logging.getLogger(__name__)
+        self._equalize = equalize
 
         self._observers = WeakValueDictionary()
         self._current_frame = -1
@@ -170,6 +171,15 @@ class Tengu(object):
             cropped = resized[roi[1]:roi[1]+roi[3], roi[0]:roi[0]+roi[2]]
         else:
             cropped = resized
+
+        if self._equalize:
+            clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
+            ycb = cv2.cvtColor(cropped, cv2.COLOR_BGR2YCrCb)
+            y,c,b = cv2.split(ycb)
+            y_eq = clahe.apply(y)
+            ycb_eq = cv2.merge((y_eq, c, b))
+            equalized = cv2.cvtColor(ycb_eq, cv2.COLOR_YCrCb2BGR)
+            cropped = equalized
         
         return cropped
 
