@@ -767,47 +767,57 @@ class TenguFlowAnalyzer(object):
         
         for removed_tracklet in removed_tracklets:
             if len(removed_tracklet.path) < 2:
+                self.logger.info('{} has too short path, not counted'.format(removed_tracklet))
                 continue
 
             # if this tracklet is not moving, just remove
             max_diff = TenguFlow.max_node_diff(removed_tracklet.path[0], removed_tracklet.path[-1])
             if max_diff < 2:
                 # within adjacent blocks, this is stationally
-                self.logger.debug('{} is removed, but not for counting, stationally')
+                self.logger.info('{} is removed, but not for counting, stationally')
                 continue
 
             flow_node = self.flow_node_at(*removed_tracklet.center)
             source_node = removed_tracklet.path[0]
             if flow_node == source_node:
-                self.logger.debug('same source {} and sink {}, skipped'.format(source_node, flow_node))
+                self.logger.info('same source {} and sink {}, skipped'.format(source_node, flow_node))
                 return
             flow_node.mark_sink(source_node)
-            self.logger.debug('sink at {}'.format(flow_node))
+            self.logger.info('sink at {}'.format(flow_node))
 
             # flow operations for counting
-            if removed_tracklet.last_flow is None:
+            if removed_tracklet._current_flow is None:
                 if removed_tracklet.is_confirmed:
                     # find a flow
-                    min_distnace_to_sink_and_source = 0
+                    min_distnace_to_sink_and_source = None
                     closest_flow = None
                     for flow in self._scene.flows:
-                        dist_to_source_from_start = TenguTracker.compute_distance(removed_tracklet.path[0].position, flow.source.position)
-                        dist_to_sink_from_end = TenguTracker.compute_distance(removed_tracklet.path[-1].position, flow.sink.position)
+                        dist_to_source_from_start = Tracklet.compute_distance(removed_tracklet.path[0].position, flow.source.position)
+                        dist_to_sink_from_end = Tracklet.compute_distance(removed_tracklet.path[-1].position, flow.sink.position)
                         dist = dist_to_source_from_start + dist_to_sink_from_end
+                        if min_distnace_to_sink_and_source is None:
+                            min_distnace_to_sink_and_source = dist
+                            closest_flow = flow
+                            continue
                         if dist < min_distnace_to_sink_and_source:
                             min_distnace_to_sink_and_source = dist
                             closest_flow = flow
                     if closest_flow is not None:
                         # check at least path exists
                         path, dist_to_sink = self.find_shortest_path_and_cost(flow_node, closest_flow.sink)
-                        if path is None:
-                            self.logger.debug('found closest flow, but no path exists for {}'.format(remove_tracklet))
-                            return
+                        #if path is None:
+                        #    self.logger.info('found closest flow, but no path exists for {}'.format(removed_tracklet))
+                        #    return
                         similarity = closest_flow.similarity(removed_tracklet)
-                        self.logger.debug('{} was assigned to {} at removal, the similarity = {}'.format(remove_tracklet, closest_flow, similarity))
-                        closest_flow.put_tracklet(remove_tracklet, None, None)
+                        self.logger.info('{} was assigned to {} at removal, the similarity = {}'.format(removed_tracklet, closest_flow, similarity))
+                        closest_flow.put_tracklet(removed_tracklet, dist_to_sink, similarity)
+                    else:
+                        self.logger.info('no closest flow found for {}'.format(removed_tracklet))
+                else:
+                    self.logger.info('{} was not counted, confidence too low {}'.format(removed_tracklet.confidence))
 
-            if removed_tracklet.last_flow is not None:
+            if removed_tracklet._current_flow is not None:
+                self.logger.info('{} will be counted on {}'.format(removed_tracklet, removed_tracklet._current_flow.group))
                 removed_tracklet.mark_removed()
 
     def build_scene(self):

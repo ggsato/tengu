@@ -173,8 +173,12 @@ class Tengu(object):
             cropped = resized
 
         if self._equalize:
+            # at first, apply bilateral filter
+            blurred = cv2.bilateralFilter(cropped, 8, 75, 75)
+
+            # then, equalize
             clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
-            ycb = cv2.cvtColor(cropped, cv2.COLOR_BGR2YCrCb)
+            ycb = cv2.cvtColor(blurred, cv2.COLOR_BGR2YCrCb)
             y,c,b = cv2.split(ycb)
             y_eq = clahe.apply(y)
             ycb_eq = cv2.merge((y_eq, c, b))
