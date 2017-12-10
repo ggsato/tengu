@@ -766,8 +766,11 @@ class TenguFlowAnalyzer(object):
     def finish_removed_tracklets(self, removed_tracklets):
         
         for removed_tracklet in removed_tracklets:
+
             if removed_tracklet.speed < 0:
                 self.logger.info('{} has too short path, speed is not available, not counted'.format(removed_tracklet))
+                if removed_tracklet._current_flow is not None:
+                    removed_tracklet._current_flow.remove_tracklet(removed_tracklet)
                 continue
 
             # if this tracklet is not moving, just remove
@@ -775,12 +778,16 @@ class TenguFlowAnalyzer(object):
             if max_diff < 2:
                 # within adjacent blocks, this is stationally
                 self.logger.info('{} is removed, but not for counting, stationally')
+                if removed_tracklet._current_flow is not None:
+                    removed_tracklet._current_flow.remove_tracklet(removed_tracklet)
                 continue
 
             flow_node = self.flow_node_at(*removed_tracklet.center)
             source_node = removed_tracklet.path[0]
             if flow_node == source_node:
                 self.logger.info('same source {} and sink {}, skipped'.format(source_node, flow_node))
+                if removed_tracklet._current_flow is not None:
+                    removed_tracklet._current_flow.remove_tracklet(removed_tracklet)
                 return
             flow_node.mark_sink(source_node)
             self.logger.info('sink at {}'.format(flow_node))
@@ -817,7 +824,6 @@ class TenguFlowAnalyzer(object):
                     self.logger.info('{} was not counted, confidence too low {}'.format(removed_tracklet.confidence))
 
             if removed_tracklet._current_flow is not None:
-                self.logger.info('{} will be counted on {}'.format(removed_tracklet, removed_tracklet._current_flow.group))
                 removed_tracklet.mark_removed()
 
     def build_scene(self):

@@ -51,7 +51,7 @@ class TenguSceneAnalyzer(object):
         count_dict = {}
         count_dict['Count'] = {tracklet.obj_id: 1}
         # note that this speed is UNIT/FRAME
-        count_dict['Speed'] = {tracklet.obj_id: tracklet.speed if tracklet.speed > 0 else None}
+        count_dict['Speed'] = {tracklet.obj_id: tracklet.speed}
         return count_dict
 
     def finish_analysis(self):
