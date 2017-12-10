@@ -821,7 +821,7 @@ class TenguFlowAnalyzer(object):
                     else:
                         self.logger.info('no closest flow found for {}'.format(removed_tracklet))
                 else:
-                    self.logger.info('{} was not counted, confidence too low {}'.format(removed_tracklet.confidence))
+                    self.logger.info('{} was not counted, confidence too low {}'.format(removed_tracklet, removed_tracklet.confidence))
 
             if removed_tracklet._current_flow is not None:
                 removed_tracklet.mark_removed()
