@@ -695,7 +695,7 @@ class TenguFlowAnalyzer(object):
         for new_tracklet in new_tracklets:
             flow_node = self.flow_node_at(*new_tracklet.center)
             flow_node.mark_source()
-            new_tracklet.path.append(flow_node)
+            new_tracklet.add_flow_node_to_path(flow_node)
             self.logger.debug('source at {}'.format(flow_node))
 
     def update_existing_tracklets(self, existing_tracklets):
@@ -766,8 +766,8 @@ class TenguFlowAnalyzer(object):
     def finish_removed_tracklets(self, removed_tracklets):
         
         for removed_tracklet in removed_tracklets:
-            if len(removed_tracklet.path) < 2:
-                self.logger.info('{} has too short path, not counted'.format(removed_tracklet))
+            if removed_tracklet.speed < 0:
+                self.logger.info('{} has too short path, speed is not available, not counted'.format(removed_tracklet))
                 continue
 
             # if this tracklet is not moving, just remove
