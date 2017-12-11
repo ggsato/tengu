@@ -812,9 +812,9 @@ class TenguFlowAnalyzer(object):
                     if closest_flow is not None:
                         # check at least path exists
                         path, dist_to_sink = self.find_shortest_path_and_cost(flow_node, closest_flow.sink)
-                        #if path is None:
-                        #    self.logger.info('found closest flow, but no path exists for {}'.format(removed_tracklet))
-                        #    return
+                        if path is None:
+                            self.logger.info('found closest flow, but no path exists for {}'.format(removed_tracklet))
+                            return
                         similarity = closest_flow.similarity(removed_tracklet)
                         self.logger.info('{} was assigned to {} at removal, the similarity = {}'.format(removed_tracklet, closest_flow, similarity))
                         closest_flow.put_tracklet(removed_tracklet, dist_to_sink, similarity)
