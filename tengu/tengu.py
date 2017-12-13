@@ -143,7 +143,7 @@ class Tengu(object):
                 # count trackings
                 if tengu_scene_analyzer is not None:
                     self.logger.debug('calling scene analyzer')
-                    tengu_scene_analyzer.analyze_scene(scene)
+                    tengu_scene_analyzer.analyze_scene(cropped, scene)
 
                 else:
                     self.logger.debug('skip calling scene analyzer')

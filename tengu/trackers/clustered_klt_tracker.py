@@ -31,13 +31,14 @@ a cost matrix is calculated for assignments.
 
 class ClusteredKLTTracklet(Tracklet):
 
-    def __init__(self, tracker):
+    def __init__(self, tracker, keep_lost_tracklet=False):
         super(ClusteredKLTTracklet, self).__init__()
         self.tracker = tracker
+        self._keep_lost_tracklet = keep_lost_tracklet
         self._rect = None
         self._hist = None
         self._centers = []
-        self._validated_nodes = set()
+        self._validated_nodes = None
 
     @property
     def rect(self):
@@ -120,7 +121,7 @@ class ClusteredKLTTracklet(Tracklet):
         self._centers.append(NodeCluster.center(self._rect))
         if len(self._centers) > TenguNode._min_length:
             del self._centers[0]
-        if not lost:
+        if not lost or self._keep_lost_tracklet:
             self._last_updated_at = TenguTracker._global_updates
 
     def update_with_assignment(self, assignment, class_name):
@@ -169,7 +170,7 @@ class ClusteredKLTTracklet(Tracklet):
         check and merge valid nodes
         """
         latest_set = set(self._assignments[-1].group)
-        if len(self._validated_nodes) == 0:
+        if self._validated_nodes is None:
             self._validated_nodes = latest_set
             return True
 
@@ -193,11 +194,6 @@ class ClusteredKLTTracklet(Tracklet):
                     validated = validated | set([node, another])
                     break
         self._validated_nodes = validated
-
-        return len(self._validated_nodes) > 0
-
-    def last_movement(self):
-        return None
 
 class NodeCluster(object):
 
@@ -283,8 +279,9 @@ class ClusteredKLTTracker(TenguTracker):
     _minimum_community_size = 2
     _minimum_node_similarity = 0.5
     
-    def __init__(self, **kwargs):
+    def __init__(self, keep_lost_tracklet=False, **kwargs):
         super(ClusteredKLTTracker, self).__init__(**kwargs)
+        self._keep_lost_tracklet = keep_lost_tracklet
         self._tengu_flow_analyer = None
         self.graph = Set([])
         self.detection_node_map = None
@@ -326,7 +323,7 @@ class ClusteredKLTTracker(TenguTracker):
             self._tracklets.append(self.new_tracklet(detection, class_names[d]))
 
     def new_tracklet(self, assignment, class_name):
-        to = ClusteredKLTTracklet(self)
+        to = ClusteredKLTTracklet(self, keep_lost_tracklet=self._keep_lost_tracklet)
         to.update_with_assignment(NodeCluster(self.detection_node_map[assignment], assignment), class_name)
         return to
 
@@ -403,5 +400,5 @@ class ClusteredKLTTracker(TenguTracker):
             node_cluster = tracklet.last_assignment
             rect = node_cluster.rect_from_group()
             cv2.rectangle(self.debug, (rect[0], rect[1]), (rect[0]+rect[2], rect[1]+rect[3]), 255, 3)
-            for node in node_cluster.group:
+            for node in tracklet._validated_nodes:
                 cv2.circle(self.debug, node.tr[-1], 5, 256, -1)

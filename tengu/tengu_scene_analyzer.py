@@ -14,7 +14,7 @@ class TenguSceneAnalyzer(object):
         self._ignore_default = ignore_default
         self._df = None
 
-    def analyze_scene(self, scene):
+    def analyze_scene(self, cropped, scene):
         """ analyze scene, and outputs a count report at intervals
         GROUP A     | GROUP A     | ... | GROUP Z  
         CLASS 0     | CLASS N     | ... | CLASS N 
