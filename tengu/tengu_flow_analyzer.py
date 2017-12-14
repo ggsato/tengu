@@ -227,7 +227,7 @@ class KLTAnalyzer(object):
         self.count_lines = count_lines
 
         self.frame_idx = 0
-        self.update_interval = 10
+        self.update_interval = 1
         self.nodes = [] 
         self.max_track_length = 100
         self.prev_gray = None

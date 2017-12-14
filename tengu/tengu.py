@@ -121,11 +121,16 @@ class Tengu(object):
 
             # block for a client if necessary to synchronize
             if queue is not None:
-                # wait until queue becomes ready
-                try:
-                    queue.put(cropped.copy(), max_queue_wait)
-                except Queue.Full:
-                    self.logger.error('queue is full, quitting...')
+                done = False
+                while not done and not self._stopped:
+                    # wait until queue becomes ready
+                    try:
+                        queue.put_nowait(cropped.copy())
+                        done = True
+                    except Queue.Full:
+                        self.logger.debug('queue is full, quitting...')
+
+                if self._stopped:
                     break
 
             # skip if necessary
@@ -194,7 +199,7 @@ class Tengu(object):
         self.logger.debug('loading models from {}...'.format(model_folder))
 
     def stop(self):
-        self.logger.debug('stopping...')
+        self.logger.info('stopping...')
         self._stopped = True
 
 def main():

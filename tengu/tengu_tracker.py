@@ -307,7 +307,12 @@ class TenguTracker(object):
 
     _global_updates = -1
     _min_value = 0.0001
-    _confident_min_cost = 0.3
+    # this is the -1 * log value
+    # 0.5 = 0.7
+    # 0.2 = 1.61
+    # 0.1 = 2.3
+    # 0.01 = 4.6
+    _confident_min_cost = 4.6
 
     def __init__(self, obsoletion=100):
         self.logger = logging.getLogger(__name__)
@@ -438,19 +443,21 @@ class TenguTracker(object):
 
     def update_trackings_with_optimized_assignments(self, tengu_cost_matrix, class_names):
         self.logger.debug('updating trackings based on cost matrix, ind ={}'.format(tengu_cost_matrix.ind))
+        assigned = []
         for ix, row in enumerate(tengu_cost_matrix.ind[0]):
             cost = tengu_cost_matrix.cost_matrix[row][tengu_cost_matrix.ind[1][ix]]
             tracklet = self._tracklets[row]
-            if cost > TenguTracker._confident_min_cost:
-                self.logger.debug('{} is not updated due to too high cost {}'.format(tracklet.obj_id, cost))
-                continue
             new_assignment = tengu_cost_matrix.assignments[tengu_cost_matrix.ind[1][ix]]
-            self.logger.debug('updating tracked object {} of id={} having {} with {} at {}'.format(id(tracklet), tracklet.obj_id, tracklet.rect, new_assignment, TenguTracker._global_updates))
+            if cost > TenguTracker._confident_min_cost:
+                self.logger.info('{} is not updated due to too high cost {}'.format(tracklet.obj_id, cost))
+                continue
+            assigned.append(new_assignment)
+            self.logger.info('updating tracked object {} of id={} having {} with {} at {}'.format(id(tracklet), tracklet.obj_id, tracklet.rect, new_assignment, TenguTracker._global_updates))
             self.assign_new_to_tracklet(new_assignment, class_names[tengu_cost_matrix.assignments.index(new_assignment)], tracklet)
 
         # create new ones
         for ix, assignment in enumerate(tengu_cost_matrix.assignments):
-            if not ix in tengu_cost_matrix.ind[1]:
+            if not assignment in assigned:
                 # this is not assigned, create a new one
                 # but do not create one contains existing tracklets
                 to = self.new_tracklet(assignment, class_names[ix])
@@ -460,10 +467,10 @@ class TenguTracker(object):
                         contains = True
                         break
                 if contains:
-                    self.logger.debug('skipping creating a new, but disturbing tracklet {}'.format(to))
+                    self.logger.info('skipping creating a new, but disturbing tracklet {}'.format(to))
                     continue
                 self._tracklets.append(to)
-                self.logger.debug('created tracked object {} of id={} at {}'.format(to, to.obj_id, TenguTracker._global_updates))
+                self.logger.info('created tracked object {} of id={} at {}'.format(to, to.obj_id, TenguTracker._global_updates))
 
     def update_tracklets(self):
         for tracklet in self._tracklets:
