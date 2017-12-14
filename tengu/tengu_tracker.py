@@ -349,6 +349,9 @@ class TenguTracker(object):
             lap4 = time.time()
             self.logger.debug('update_trackings_with_optimized_assignments took {} s'.format(lap4 - lap3))
 
+        # update without detections
+        self.update_tracklets()
+
         # Obsolete old ones
         self.obsolete_trackings()
         lap5 = time.time()
@@ -462,6 +465,7 @@ class TenguTracker(object):
                 self._tracklets.append(to)
                 self.logger.debug('created tracked object {} of id={} at {}'.format(to, to.obj_id, TenguTracker._global_updates))
 
+    def update_tracklets(self):
         for tracklet in self._tracklets:
             if not tracklet.updated:
                 self.assign_new_to_tracklet(None, None, tracklet)
