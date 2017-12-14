@@ -768,7 +768,7 @@ class TenguFlowAnalyzer(object):
         for removed_tracklet in removed_tracklets:
 
             if removed_tracklet.speed < 0:
-                self.logger.info('{} has too short path, speed is not available, not counted'.format(removed_tracklet))
+                self.logger.debug('{} has too short path, speed is not available, not counted'.format(removed_tracklet))
                 if removed_tracklet._current_flow is not None:
                     removed_tracklet._current_flow.remove_tracklet(removed_tracklet)
                 continue
@@ -777,7 +777,7 @@ class TenguFlowAnalyzer(object):
             max_diff = TenguFlow.max_node_diff(removed_tracklet.path[0], removed_tracklet.path[-1])
             if max_diff < 2:
                 # within adjacent blocks, this is stationally
-                self.logger.info('{} is removed, but not for counting, stationally')
+                self.logger.debug('{} is removed, but not for counting, stationally')
                 if removed_tracklet._current_flow is not None:
                     removed_tracklet._current_flow.remove_tracklet(removed_tracklet)
                 continue
@@ -785,16 +785,16 @@ class TenguFlowAnalyzer(object):
             flow_node = self.flow_node_at(*removed_tracklet.center)
             source_node = removed_tracklet.path[0]
             if flow_node == source_node:
-                self.logger.info('same source {} and sink {}, skipped'.format(source_node, flow_node))
+                self.logger.debug('same source {} and sink {}, skipped'.format(source_node, flow_node))
                 if removed_tracklet._current_flow is not None:
                     removed_tracklet._current_flow.remove_tracklet(removed_tracklet)
                 return
             flow_node.mark_sink(source_node)
-            self.logger.info('sink at {}'.format(flow_node))
+            self.logger.debug('sink at {}'.format(flow_node))
 
             # flow operations for counting
             if removed_tracklet._current_flow is None:
-                self.logger.info('{} will be just removed without counting, no flow assigned...'.format(removed_tracklet))
+                self.logger.debug('{} will be just removed without counting, no flow assigned...'.format(removed_tracklet))
 
             if removed_tracklet._current_flow is not None:
                 removed_tracklet.mark_removed()
@@ -901,7 +901,7 @@ class TenguFlowAnalyzer(object):
             path = paths[sink_node]
             cost = dist[sink_node]
         except KeyError:
-            self.logger.info('no path from {} to {}'.format(flow_node, sink_node))
+            self.logger.debug('no path from {} to {}'.format(flow_node, sink_node))
             return None, None
         # too short
         if len(path) < 5:
