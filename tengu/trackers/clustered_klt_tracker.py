@@ -267,10 +267,10 @@ class NodeCluster(object):
         avg_movement = self.avg_movement()
         if avg_movement is None or avg_movement[0] < 1 or avg_movement[1] < 1:
             # this is stationally
-            self.logger.info('stationally cluster, estimate the same rect as prev')
+            self.logger.debug('stationally cluster, estimate the same rect as prev')
             return current_rect
         else:
-            self.logger.info('avg_move is {}, not stationally, estimating next rect...'.format(avg_movement))
+            self.logger.debug('avg_move is {}, not stationally, estimating next rect...'.format(avg_movement))
 
         total_moves = []
         for node in self.group:

@@ -294,6 +294,10 @@ class Tracklet(object):
     def class_name(self):
         return sorted(self._class_map.keys(), key=self._class_map.__getitem__, reverse=True)[0]
 
+    @property
+    def milestones(self):
+        return self._milestones
+
 class TenguCostMatrix(object):
 
     def __init__(self, assignments, cost_matrix):

@@ -131,12 +131,12 @@ class TenguNode(object):
                 # stationally
                 angle0 = None
             else:
-                angle0 = TenguNode.get_angle(self.tr)
+                angle0 = TenguNode.get_angle(self.tr[-1 * TenguNode._min_length], self.tr[-1])
             if distance1 < TenguNode._min_speed:
                 # stationally
                 angle1 = None
             else:
-                angle1 = TenguNode.get_angle(another.tr)
+                angle1 = TenguNode.get_angle(another.tr[-1 * TenguNode._min_length], another.tr[-1])
 
             diff_angle = None
             if angle0 is None and angle1 is None:
@@ -187,9 +187,7 @@ class TenguNode(object):
         return similarity
 
     @staticmethod
-    def get_angle(tr):
-        p_from = tr[-1 * TenguNode._min_length]
-        p_to = tr[-1]
+    def get_angle(p_from, p_to):
         diff_x = p_to[0] - p_from[0]
         diff_y = p_to[1] - p_from[1]
         # angle = (-pi, pi)
@@ -756,6 +754,13 @@ class TenguFlowAnalyzer(object):
             most_similar_flow = None
             best_similarity = 0
             for flow in self._scene.flows:
+                # do not consider a flow to an opposite direction
+                tracklet_to_sink = TenguNode.get_angle(existing_tracklet.center, flow.sink.position)
+                tracklet_direction = TenguNode.get_angle(existing_tracklet.milestones[0][0], existing_tracklet.center)
+                diff_angle = math.fabs(tracklet_to_sink - tracklet_direction)
+                if diff_angle > math.pi:
+                    self.logger.info('{} is opposite direction to {}'.format(flow, existing_tracklet))
+                    continue
                 similarity = flow.similarity(existing_tracklet)
                 if similarity > best_similarity:
                     most_similar_flow = flow

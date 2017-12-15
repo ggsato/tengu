@@ -77,7 +77,7 @@ class Tengu(object):
         the caller should register by add_observer before calling run if it needs updates during analysis
         this should return quicky for the caller to do its own tasks especially showing progress graphically
         """
-        self.logger.info('running with flow_analyzer:{}, scene_analyzer:{}, skipping to {}'.format(tengu_flow_analyzer, tengu_scene_analyzer, skip_to))
+        self.logger.info('running with flow_analyzer:{}, scene_analyzer:{}, roi={}, scale={}, skipping to {}'.format(tengu_flow_analyzer, tengu_scene_analyzer, roi, scale, skip_to))
         
         if src is None:
             self.logger.error('src has to be set')
