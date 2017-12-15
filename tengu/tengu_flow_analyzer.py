@@ -204,7 +204,7 @@ class TenguNode(object):
         prev2 = self.tr[-1 * TenguNode._min_length]
         move_x = prev[0]-prev2[0]
         move_y = prev[1]-prev2[1]
-        return [int(move_x/min_length), int(move_y/min_length)] 
+        return [int(move_x/TenguNode._min_length), int(move_y/TenguNode._min_length)] 
 
     @property
     def has_left(self):

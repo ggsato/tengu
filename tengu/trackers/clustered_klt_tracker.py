@@ -38,7 +38,7 @@ class ClusteredKLTTracklet(Tracklet):
         self._rect = None
         self._hist = None
         self._centers = []
-        self._validated_nodes = None
+        self._validated_nodes = Set([])
 
     @property
     def rect(self):
@@ -148,7 +148,7 @@ class ClusteredKLTTracklet(Tracklet):
         else:
             # update
             self._assignments.append(assignment)
-            self._validated_nodes = set(assignment.group)
+            self._validated_nodes = Set(assignment.group)
             self.update_properties(lost=False)
             self.recent_updates_by('1')
             if not self._class_map.has_key(class_name):
@@ -183,13 +183,13 @@ class ClusteredKLTTracklet(Tracklet):
         """
         check and merge valid nodes
         """
-        latest_set = set(self._assignments[-1].group)
+        latest_set = Set(self._assignments[-1].group)
         if self._validated_nodes is None:
             self._validated_nodes = latest_set
             return True
 
         # check
-        validated = set()
+        validated = Set([])
         for node in self._validated_nodes:
             # in the first place, remove if outdated
             if node.last_updated_at != TenguTracker._global_updates-1:
@@ -205,7 +205,7 @@ class ClusteredKLTTracklet(Tracklet):
                 similarity = node.similarity(another)
                 if min(similarity) >=  ClusteredKLTTracker._minimum_node_similarity:
                     # found one
-                    validated = validated | set([node, another])
+                    validated = validated | Set([node, another])
                     break
         self._validated_nodes = validated
 
@@ -262,25 +262,35 @@ class NodeCluster(object):
         return [total_move_x/valid, total_move_y/valid]
 
     def estinamte_next_rect(self, current_rect):
-        origin_estimates = []
+        """ estimate the next rect from the movement of pixels
+        """
+        avg_movement = self.avg_movement()
+        if avg_movement is None or avg_movement[0] < 1 or avg_movement[1] < 1:
+            # this is stationally
+            self.logger.info('stationally tracklet, estimate the same rect as prev')
+            return current_rect
+        else:
+            self.logger.info('avg_move is {}, not stationally, estimating next rect...'.format(avg_movement))
+
+        total_moves = []
         for node in self.group:
             if len(node.tr) == 1:
                 continue
             prev = node.tr[-1]
             prev2 = node.tr[-2]
 
-            origin_estimate = [prev[0]-int(current_rect[2]/2), prev[1]-int(current_rect[3]/2)]
-            origin_estimates.append(origin_estimate)
+            move = [prev[0]-prev2[0], prev[1]-prev2[1]]
+            total_moves.append(move)
 
-        if len(origin_estimates) == 0:
+        if len(total_moves) == 0:
             return None
 
-        total_estimates = [0, 0]
-        for origin_estimate in origin_estimates:
-            total_estimates[0] += origin_estimate[0]
-            total_estimates[1] += origin_estimate[1]
+        total_moves_sum = [0, 0]
+        for move in total_moves:
+            total_moves_sum[0] += move[0]
+            total_moves_sum[1] += move[1]
 
-        next_rect = (int(total_estimates[0]/len(origin_estimates)), int(total_estimates[1]/len(origin_estimates)), current_rect[2], current_rect[3])
+        next_rect = (current_rect[0] + int(total_moves_sum[0]/len(total_moves_sum)), current_rect[1] + int(total_moves_sum[1]/len(total_moves_sum)), current_rect[2], current_rect[3])
         self.logger.debug('next rect {} was estimated from {}'.format(next_rect, current_rect))
         return next_rect
 
