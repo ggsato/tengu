@@ -754,15 +754,21 @@ class TenguFlowAnalyzer(object):
             most_similar_flow = None
             best_similarity = 0
             for flow in self._scene.flows:
-                # do not consider a flow to an opposite direction
-                tracklet_to_sink = TenguNode.get_angle(existing_tracklet.center, flow.sink.position)
-                tracklet_direction = TenguNode.get_angle(existing_tracklet.milestones[0][0], existing_tracklet.center)
-                diff_angle = math.fabs(tracklet_to_sink - tracklet_direction)
-                if diff_angle > math.pi:
-                    self.logger.info('{} is opposite direction to {}'.format(flow, existing_tracklet))
-                    continue
+                if existing_tracklet.path[-1].adjacent(flow.sink):
+                    most_similar_flow = flow
+                    best_similarity = 1.0
+                    break
                 similarity = flow.similarity(existing_tracklet)
                 if similarity > best_similarity:
+                    # do not consider a flow to an opposite direction
+                    tracklet_to_sink = TenguNode.get_angle(existing_tracklet.center, flow.sink.position)
+                    tracklet_direction = TenguNode.get_angle(existing_tracklet.milestones[0][0], existing_tracklet.center)
+                    diff_angle = math.fabs(tracklet_to_sink - tracklet_direction)
+                    if diff_angle > math.pi:
+                        diff_angle -= math.pi
+                    if diff_angle > math.pi/2:
+                        self.logger.debug('{} is opposite direction to {} by {:03.1f}, tracklet_to_sink={}, tracklet_direction={}'.format(flow, existing_tracklet, diff_angle, tracklet_to_sink, tracklet_direction))
+                        continue
                     most_similar_flow = flow
                     best_similarity = similarity
             self.logger.debug('the most similar flow of {} is {} at {}'.format(existing_tracklet, most_similar_flow, best_similarity))
