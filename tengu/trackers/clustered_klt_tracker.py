@@ -186,7 +186,7 @@ class ClusteredKLTTracklet(Tracklet):
         latest_set = Set(self._assignments[-1].group)
         if self._validated_nodes is None:
             self._validated_nodes = latest_set
-            return True
+            return
 
         # check
         validated = Set([])
@@ -267,7 +267,7 @@ class NodeCluster(object):
         avg_movement = self.avg_movement()
         if avg_movement is None or avg_movement[0] < 1 or avg_movement[1] < 1:
             # this is stationally
-            self.logger.info('stationally tracklet, estimate the same rect as prev')
+            self.logger.info('stationally cluster, estimate the same rect as prev')
             return current_rect
         else:
             self.logger.info('avg_move is {}, not stationally, estimating next rect...'.format(avg_movement))

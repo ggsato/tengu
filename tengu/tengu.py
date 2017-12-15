@@ -72,12 +72,12 @@ class Tengu(object):
             if isinstance(observer, TenguAnalysisObserver):
                 observer.analysis_finished()
 
-    def run(self, src=None, roi=None, scale=None, every_x_frame=1, rotation=0, tengu_flow_analyzer=None, tengu_scene_analyzer=None, queue=None, max_queue_wait=10):
+    def run(self, src=None, roi=None, scale=None, every_x_frame=1, rotation=0, tengu_flow_analyzer=None, tengu_scene_analyzer=None, queue=None, max_queue_wait=10, skip_to=-1):
         """
         the caller should register by add_observer before calling run if it needs updates during analysis
         this should return quicky for the caller to do its own tasks especially showing progress graphically
         """
-        self.logger.debug('running with flow_analyzer:{}, scene_analyzer:{}'.format(tengu_flow_analyzer, tengu_scene_analyzer))
+        self.logger.info('running with flow_analyzer:{}, scene_analyzer:{}, skipping to {}'.format(tengu_flow_analyzer, tengu_scene_analyzer, skip_to))
         
         if src is None:
             self.logger.error('src has to be set')
@@ -134,7 +134,7 @@ class Tengu(object):
                     break
 
             # skip if necessary
-            if every_x_frame > 1 and self._current_frame % every_x_frame != 0:
+            if (every_x_frame > 1 and self._current_frame % every_x_frame != 0) or (skip_to > 0 and self._current_frame < skip_to):
                 self._current_frame += 1
                 self.logger.debug('skipping frame at {}'.format(self._current_frame))
                 continue
