@@ -41,6 +41,8 @@ class TenguNode(object):
         self._property_updated_at = -1
         self._left = False
 
+        self._owner = None
+
     def __repr__(self):
         return 'node at {} detected at {} updated at {}'.format(self.tr[-1], self._last_detected_at, self._last_updated_at)
 
@@ -212,6 +214,16 @@ class TenguNode(object):
         """ this indicates this node has left the image
         """
         self._left = True
+
+    @property
+    def owner(self):
+        return self._owner
+
+    def set_owner(self, tracklet):
+        if self._owner is not None:
+            self.logger.error('{} is already owned by {}'.format(self, self._owner))
+            return
+        self._owner = tracklet
 
 class KLTAnalyzer(object):
 

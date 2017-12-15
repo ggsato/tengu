@@ -128,6 +128,20 @@ class ClusteredKLTTracklet(Tracklet):
         if len(self._assignments) > 0:
             self.logger.debug('{}@{}: updating with {} from {} at {}'.format(id(self), self.obj_id, assignment, self._assignments[-1], self._last_updated_at))
 
+        # check ownership
+        owned = []
+        for node in assignment.group:
+            if node.owner is not None:
+                if node.owner != self:
+                    continue
+                else:
+                    # already owned
+                    owned.append(node)
+            else:
+                node.set_owner(self)
+                owned.append(node)
+        assignment.group = owned
+
         if len(self._assignments) > 0 and self.similarity(assignment) < Tracklet._min_confidence:
             # do not accept this
             self.update_without_assignment()
