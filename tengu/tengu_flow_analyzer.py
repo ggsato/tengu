@@ -474,6 +474,8 @@ class TenguFlow(object):
         sink_dist = TenguFlow.max_node_diff(self.sink, another_flow.sink)
         sink_similarity = TenguFlow.min_source_sink_similarity_dist / max(TenguFlow.min_source_sink_similarity_dist, sink_dist)
 
+        logging.debug('flow similarity to {}: path={}, source={}, sink={}'.format(another_flow, path_similarity, source_similarity, sink_similarity))
+
         return (path_similarity + source_similarity + sink_similarity) / 3
 
     @staticmethod
@@ -758,6 +760,7 @@ class TenguFlowAnalyzer(object):
                 best_similarity = 0
                 for flow in self._scene.flows:
                     similarity = flow.similarity(existing_tracklet)
+                    self.logger.debug('similarity of {} to {} is {:03.2f}'.format(flow, existing_tracklet, similarity))
                     if similarity > best_similarity:
                         # do not consider a flow to an opposite direction
                         tracklet_to_sink = TenguNode.get_angle(existing_tracklet.path[-1].position, flow.sink.position)
@@ -770,18 +773,19 @@ class TenguFlowAnalyzer(object):
                             continue
                         most_similar_flow = flow
                         best_similarity = similarity
-                self.logger.info('the most similar flow of {} is {} at {}'.format(existing_tracklet, most_similar_flow, best_similarity))
+                self.logger.debug('the most similar flow of {} is {} at {}'.format(existing_tracklet, most_similar_flow, best_similarity))
                 if most_similar_flow is not None:
-                    if existing_tracklet.path[-1].adjacent(most_similar_flow.sink):
-                        existing_tracklet.mark_left()
-                        self.logger.info('{} is selected because of its adjacency for {}'.format(flow, existing_tracklet))
-                        break
+                    if existing_tracklet.speed > -1 and existing_tracklet.path[-1].adjacent(most_similar_flow.sink):
+                        # ok, mark this as passed
+                        existing_tracklet.mark_flow_passed(most_similar_flow)
+                        self.logger.info('{} passed {}'.format(existing_tracklet, flow))
+                        continue
                     # TODO: filter by a threshold by lowest cost
                     path, dist_to_sink = self.find_shortest_path_and_cost(flow_node, most_similar_flow.sink)
                     if path is None:
                         # no such path exist
-                        self.logger.info('but no such path from {} to {}'.format(flow_node, most_similar_flow.sink))
-                        return
+                        self.logger.debug('but no such path from {} to {}'.format(flow_node, most_similar_flow.sink))
+                        continue
                     most_similar_flow.put_tracklet(existing_tracklet, dist_to_sink, best_similarity, shortest_path_for_debug=path)
                 elif existing_tracklet._current_flow is not None:
                     # this may have left the prev flow, and yet not identified by a new
@@ -794,7 +798,7 @@ class TenguFlowAnalyzer(object):
         for removed_tracklet in removed_tracklets:
 
             if removed_tracklet.speed < 0:
-                self.logger.debug('{} has too short path, speed is not available, not counted'.format(removed_tracklet))
+                self.logger.info('{} has too short path, speed is not available, not counted'.format(removed_tracklet))
                 if removed_tracklet._current_flow is not None:
                     removed_tracklet._current_flow.remove_tracklet(removed_tracklet)
                 continue
@@ -803,7 +807,7 @@ class TenguFlowAnalyzer(object):
             max_diff = TenguFlow.max_node_diff(removed_tracklet.path[0], removed_tracklet.path[-1])
             if max_diff < 2:
                 # within adjacent blocks, this is stationally
-                self.logger.debug('{} is removed, but not for counting, stationally')
+                self.logger.info('{} is removed, but not for counting, stationally')
                 if removed_tracklet._current_flow is not None:
                     removed_tracklet._current_flow.remove_tracklet(removed_tracklet)
                 continue
@@ -811,18 +815,24 @@ class TenguFlowAnalyzer(object):
             flow_node = self.flow_node_at(*removed_tracklet.center)
             source_node = removed_tracklet.path[0]
             if flow_node == source_node:
-                self.logger.debug('same source {} and sink {}, skipped'.format(source_node, flow_node))
+                self.logger.info('same source {} and sink {}, skipped'.format(source_node, flow_node))
                 if removed_tracklet._current_flow is not None:
                     removed_tracklet._current_flow.remove_tracklet(removed_tracklet)
                 return
             flow_node.mark_sink(source_node)
-            self.logger.debug('sink at {}'.format(flow_node))
+            self.logger.info('sink at {}'.format(flow_node))
 
             # flow operations for counting
             if removed_tracklet._current_flow is None:
-                self.logger.debug('{} will be just removed without counting, no flow assigned...'.format(removed_tracklet))
-
-            if removed_tracklet._current_flow is not None:
+                if removed_tracklet.passed_flow is not None:
+                    # this has already passed a flow
+                    removed_tracklet.passed_flow.put_tracklet(removed_tracklet, 0, 1, shortest_path_for_debug=None)
+                    removed_tracklet.mark_removed()
+                    self.logger.info('{} has passed {}, and removed for counting'.format(removed_tracklet, removed_tracklet.passed_flow))
+                else:
+                    self.logger.info('{} will be just removed without counting, no flow assigned...'.format(removed_tracklet))
+            else:
+                self.logger.info('{} was removed for counting on {}'.format(removed_tracklet, removed_tracklet._current_flow))
                 removed_tracklet.mark_removed()
 
     def build_scene(self):

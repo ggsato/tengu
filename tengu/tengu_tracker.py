@@ -43,6 +43,7 @@ class Tracklet(object):
         self._flow_similarity = 0
         self._removed = False
         self._left = False
+        self._passed_flow = None
         # for classification
         self._class_map = {}
 
@@ -297,6 +298,13 @@ class Tracklet(object):
     @property
     def milestones(self):
         return self._milestones
+
+    def mark_flow_passed(self, flow):
+        self._passed_flow = flow
+
+    @property
+    def passed_flow(self):
+        return self._passed_flow
 
 class TenguCostMatrix(object):
 
