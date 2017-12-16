@@ -747,45 +747,47 @@ class TenguFlowAnalyzer(object):
                     edge['weight'][prev_prev_flow_node] = 0
                 edge['weight'][prev_prev_flow_node] += 1
                 self.logger.debug('updating weight at {}'.format(edge))
-            # check if this tracklet is on a flow
-            # total cost of a shortest path tends to point to a closer sink
-            # so, check the cost of the next edge on each shortest path,
-            # which is correctly weighted by prev prev node
-            most_similar_flow = None
-            best_similarity = 0
-            for flow in self._scene.flows:
-                if existing_tracklet.path[-1].adjacent(flow.sink):
-                    most_similar_flow = flow
-                    best_similarity = 1.0
-                    self.logger.debug('{} is selected because of its adjacency for {}'.format(flow, existing_tracklet))
-                    break
-                similarity = flow.similarity(existing_tracklet)
-                if similarity > best_similarity:
-                    # do not consider a flow to an opposite direction
-                    tracklet_to_sink = TenguNode.get_angle(existing_tracklet.center, flow.sink.position)
-                    tracklet_direction = TenguNode.get_angle(existing_tracklet.milestones[0][0], existing_tracklet.center)
-                    diff_angle = math.fabs(tracklet_to_sink - tracklet_direction)
-                    if diff_angle > math.pi:
-                        diff_angle = 2*math.pi - diff_angle
-                    if diff_angle > math.pi/2:
-                        self.logger.debug('{} is opposite direction to {} by {:03.1f}, tracklet_to_sink={}, tracklet_direction={}'.format(flow, existing_tracklet, diff_angle, tracklet_to_sink, tracklet_direction))
-                        continue
-                    most_similar_flow = flow
-                    best_similarity = similarity
-            self.logger.info('the most similar flow of {} is {} at {}'.format(existing_tracklet, most_similar_flow, best_similarity))
-            if most_similar_flow is not None:
-                # TODO: filter by a threshold by lowest cost
-                path, dist_to_sink = self.find_shortest_path_and_cost(flow_node, most_similar_flow.sink)
-                if path is None:
-                    # no such path exist
-                    self.logger.debug('but no such path from {} to {}'.format(flow_node, most_similar_flow.sink))
-                    return
-                most_similar_flow.put_tracklet(existing_tracklet, dist_to_sink, best_similarity, shortest_path_for_debug=path)
-            elif existing_tracklet._current_flow is not None:
-                # this may have left the prev flow, and yet not identified by a new
-                # set None to reset
-                existing_tracklet._current_flow.remove_tracklet(existing_tracklet)
-                existing_tracklet.set_flow(None, 0, 0, shortest_path_for_debug=None)
+
+
+            if not existing_tracklet.has_left:
+                # check if this tracklet is on a flow
+                # total cost of a shortest path tends to point to a closer sink
+                # so, check the cost of the next edge on each shortest path,
+                # which is correctly weighted by prev prev node
+                most_similar_flow = None
+                best_similarity = 0
+                for flow in self._scene.flows:
+                    similarity = flow.similarity(existing_tracklet)
+                    if similarity > best_similarity:
+                        # do not consider a flow to an opposite direction
+                        tracklet_to_sink = TenguNode.get_angle(existing_tracklet.path[-1].position, flow.sink.position)
+                        tracklet_direction = TenguNode.get_angle(existing_tracklet.milestones[0][0], existing_tracklet.center)
+                        diff_angle = math.fabs(tracklet_to_sink - tracklet_direction)
+                        if diff_angle > math.pi:
+                            diff_angle = 2*math.pi - diff_angle
+                        if diff_angle > math.pi/2:
+                            self.logger.debug('{} is opposite direction to {} by {:03.1f}, tracklet_to_sink={}, tracklet_direction={}'.format(flow, existing_tracklet, diff_angle, tracklet_to_sink, tracklet_direction))
+                            continue
+                        most_similar_flow = flow
+                        best_similarity = similarity
+                self.logger.info('the most similar flow of {} is {} at {}'.format(existing_tracklet, most_similar_flow, best_similarity))
+                if most_similar_flow is not None:
+                    if existing_tracklet.path[-1].adjacent(most_similar_flow.sink):
+                        existing_tracklet.mark_left()
+                        self.logger.info('{} is selected because of its adjacency for {}'.format(flow, existing_tracklet))
+                        break
+                    # TODO: filter by a threshold by lowest cost
+                    path, dist_to_sink = self.find_shortest_path_and_cost(flow_node, most_similar_flow.sink)
+                    if path is None:
+                        # no such path exist
+                        self.logger.info('but no such path from {} to {}'.format(flow_node, most_similar_flow.sink))
+                        return
+                    most_similar_flow.put_tracklet(existing_tracklet, dist_to_sink, best_similarity, shortest_path_for_debug=path)
+                elif existing_tracklet._current_flow is not None:
+                    # this may have left the prev flow, and yet not identified by a new
+                    # set None to reset
+                    existing_tracklet._current_flow.remove_tracklet(existing_tracklet)
+                    existing_tracklet.set_flow(None, 0, 0, shortest_path_for_debug=None)
 
     def finish_removed_tracklets(self, removed_tracklets):
         
