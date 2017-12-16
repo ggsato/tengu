@@ -512,7 +512,7 @@ class TenguTracker(object):
                 self.logger.debug('{} is not obsolete yet, diff = {}'.format(tracklet, TenguTracker._global_updates - tracklet.last_updated_at))
                 new_tracklet.append(tracklet)
             else:
-                self.logger.info('{} became obsolete'.format(tracklet))
+                self.logger.debug('{} became obsolete'.format(tracklet))
         removed = len(self._tracklets) - len(new_tracklet)
         self._tracklets = new_tracklet
         self.logger.debug('removed {} tracked objects due to obsoletion'.format(removed))

@@ -778,7 +778,7 @@ class TenguFlowAnalyzer(object):
                     if existing_tracklet.speed > -1 and existing_tracklet.path[-1].adjacent(most_similar_flow.sink):
                         # ok, mark this as passed
                         existing_tracklet.mark_flow_passed(most_similar_flow)
-                        self.logger.info('{} passed {}'.format(existing_tracklet, flow))
+                        self.logger.debug('{} passed {}'.format(existing_tracklet, flow))
                         continue
                     # TODO: filter by a threshold by lowest cost
                     path, dist_to_sink = self.find_shortest_path_and_cost(flow_node, most_similar_flow.sink)
@@ -798,7 +798,7 @@ class TenguFlowAnalyzer(object):
         for removed_tracklet in removed_tracklets:
 
             if removed_tracklet.speed < 0:
-                self.logger.info('{} has too short path, speed is not available, not counted'.format(removed_tracklet))
+                self.logger.debug('{} has too short path, speed is not available, not counted'.format(removed_tracklet))
                 if removed_tracklet._current_flow is not None:
                     removed_tracklet._current_flow.remove_tracklet(removed_tracklet)
                 continue
@@ -807,7 +807,7 @@ class TenguFlowAnalyzer(object):
             max_diff = TenguFlow.max_node_diff(removed_tracklet.path[0], removed_tracklet.path[-1])
             if max_diff < 2:
                 # within adjacent blocks, this is stationally
-                self.logger.info('{} is removed, but not for counting, stationally')
+                self.logger.debug('{} is removed, but not for counting, stationally')
                 if removed_tracklet._current_flow is not None:
                     removed_tracklet._current_flow.remove_tracklet(removed_tracklet)
                 continue
@@ -815,12 +815,12 @@ class TenguFlowAnalyzer(object):
             flow_node = self.flow_node_at(*removed_tracklet.center)
             source_node = removed_tracklet.path[0]
             if flow_node == source_node:
-                self.logger.info('same source {} and sink {}, skipped'.format(source_node, flow_node))
+                self.logger.debug('same source {} and sink {}, skipped'.format(source_node, flow_node))
                 if removed_tracklet._current_flow is not None:
                     removed_tracklet._current_flow.remove_tracklet(removed_tracklet)
                 return
             flow_node.mark_sink(source_node)
-            self.logger.info('sink at {}'.format(flow_node))
+            self.logger.debug('sink at {}'.format(flow_node))
 
             # flow operations for counting
             if removed_tracklet._current_flow is None:
@@ -828,11 +828,11 @@ class TenguFlowAnalyzer(object):
                     # this has already passed a flow
                     removed_tracklet.passed_flow.put_tracklet(removed_tracklet, 0, 1, shortest_path_for_debug=None)
                     removed_tracklet.mark_removed()
-                    self.logger.info('{} has passed {}, and removed for counting'.format(removed_tracklet, removed_tracklet.passed_flow))
+                    self.logger.debug('{} has passed {}, and removed for counting'.format(removed_tracklet, removed_tracklet.passed_flow))
                 else:
-                    self.logger.info('{} will be just removed without counting, no flow assigned...'.format(removed_tracklet))
+                    self.logger.debug('{} will be just removed without counting, no flow assigned...'.format(removed_tracklet))
             else:
-                self.logger.info('{} was removed for counting on {}'.format(removed_tracklet, removed_tracklet._current_flow))
+                self.logger.debug('{} was removed for counting on {}'.format(removed_tracklet, removed_tracklet._current_flow))
                 removed_tracklet.mark_removed()
 
     def build_scene(self):
@@ -973,7 +973,7 @@ class TenguFlowAnalyzer(object):
                     prev_prev_node = None
                 else:
                     prev_prev_node = paths[v][-2]
-                #logging.info('prev_prev_node = {} from path {}'.format(prev_prev_node, paths[v]))
+                #logging.debug('prev_prev_node = {} from path {}'.format(prev_prev_node, paths[v]))
                 cost = weight(v, u, e, prev_prev_node=prev_prev_node)
                 if cost is None:
                     continue
