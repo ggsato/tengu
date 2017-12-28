@@ -227,7 +227,7 @@ class KLTAnalyzer(object):
 
     _max_nodes = 1000
     
-    def __init__(self, draw_flows=False, lk_params=None, feature_params=None, count_lines=None, **kwargs):
+    def __init__(self, draw_flows=False, lk_params=None, feature_params=None, count_lines=None, update_interval=1, **kwargs):
         super(KLTAnalyzer, self).__init__(**kwargs)
 
         self.logger= logging.getLogger(__name__)
@@ -237,7 +237,7 @@ class KLTAnalyzer(object):
         self.count_lines = count_lines
 
         self.frame_idx = 0
-        self.update_interval = 1
+        self.update_interval = update_interval
         self.nodes = [] 
         self.max_track_length = 100
         self.prev_gray = None
@@ -310,10 +310,12 @@ class KLTAnalyzer(object):
     def find_corners_to_track(self, frame_gray):
         self.logger.debug('finding corners')
 
-        # every pixel is not tracked by default
-        mask = np.zeros_like(frame_gray)
-        use_detections = True
-        if use_detections and self.last_detections is not None:
+        if self.last_detections is None:
+            # every pixel is tracked by default
+            mask = np.ones_like(frame_gray) * 255
+        else:
+            # every pixel is *not* tracked by default
+            mask = np.zeros_like(frame_gray)
             for detection in self.last_detections:
                 cv2.rectangle(mask, (int(detection[0]), int(detection[1])), (int(detection[0]+detection[2]), int(detection[1]+detection[3])), 255, -1)
         # don't pick up existing pixels
@@ -628,11 +630,13 @@ class TenguFlowAnalyzer(object):
                 if self._show_graph:
                     # show
                     cv2.imshow('TenguFlowAnalyzer Graph', img)
-                    ch = 0xFF & cv2.waitKey(1)
         else:
             # cleanup removed_nodes
             removed_nodes = self._klt_analyzer.last_removed_nodes
-            self.logger.info('cleaned up {} nodes'.format(len(removed_nodes)))
+            self.logger.debug('cleaned up {} nodes'.format(len(removed_nodes)))
+
+        if self._show_graph or self._klt_analyzer.draw_flows:
+            ch = 0xFF & cv2.waitKey(1)
 
         return detections, class_names, tracklets, self._scene
 
