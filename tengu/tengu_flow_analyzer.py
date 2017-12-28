@@ -629,6 +629,10 @@ class TenguFlowAnalyzer(object):
                     # show
                     cv2.imshow('TenguFlowAnalyzer Graph', img)
                     ch = 0xFF & cv2.waitKey(1)
+        else:
+            # cleanup removed_nodes
+            removed_nodes = self._klt_analyzer.last_removed_nodes
+            self.logger.info('cleaned up {} nodes'.format(len(removed_nodes)))
 
         return detections, class_names, tracklets, self._scene
 
