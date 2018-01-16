@@ -209,6 +209,17 @@ class ClusteredKLTTracklet(Tracklet):
                     break
         self._validated_nodes = validated
 
+    def last_cropped_images(self, max_size):
+        cropped_images = []
+        index = len(self._assignments) - 1
+        while index >= 0 and len(cropped_images) < max_size:
+            assignment = self._assignments[index]
+            if hasattr(assignment, 'img') and assignment.img is not None:
+                cropped_images.append(assignment.img)
+            index -= 1
+
+        return cropped_images
+
 class NodeCluster(object):
 
     _min_rect_length = 10
