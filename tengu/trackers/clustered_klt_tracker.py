@@ -65,7 +65,7 @@ class ClusteredKLTTracklet(Tracklet):
 
         if self._rect is None:
             # this means this is called for the first time
-            assignment.hist = self.histogram(assignment.detection)
+            assignment.hist, assignment.img = self.histogram(assignment.detection)
             return 1.0
 
         # 1. rect similarity
@@ -73,7 +73,7 @@ class ClusteredKLTTracklet(Tracklet):
 
         # 2. histogram similarity
         hist0 = self._hist
-        hist1 = self.histogram(assignment.detection)
+        hist1, assignment.img = self.histogram(assignment.detection)
         assignment.hist = hist1
         hist_similarity = cv2.compareHist(hist0, hist1, cv2.HISTCMP_CORREL)
 
@@ -94,7 +94,7 @@ class ClusteredKLTTracklet(Tracklet):
         hist = cv2.calcHist([img], [0, 1, 2], None, [32, 32, 32], [0, 256, 0, 256, 0, 256])
         cv2.normalize(hist, hist)
         flattened = hist.flatten()
-        return flattened
+        return flattened, img
 
     def last_movement(self):
         if len(self._centers) < TenguNode._min_length:
