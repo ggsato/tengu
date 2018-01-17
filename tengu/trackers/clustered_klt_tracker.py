@@ -94,7 +94,7 @@ class ClusteredKLTTracklet(Tracklet):
         hist = cv2.calcHist([img], [0, 1, 2], None, [32, 32, 32], [0, 256, 0, 256, 0, 256])
         cv2.normalize(hist, hist)
         flattened = hist.flatten()
-        return flattened, img
+        return flattened, img.copy()
 
     def last_movement(self):
         if len(self._centers) < TenguNode._min_length:
