@@ -30,16 +30,17 @@ class TenguSceneAnalyzer(object):
                         # increment
                         self.logger.info('found removed tracklet, counting {}'.format(tracklet))
                         count_dict = self.tracklet_to_count_dict(tracklet)
-                        count_dict['Class'] = {tracklet.obj_id: tracklet.class_name}
-                        count_dict['Group'] = {tracklet.obj_id: group}
-                        df = DataFrame.from_dict(count_dict)
-                        self.logger.debug('df = {}'.format(df))
-                        # merge
-                        if self._df is None:
-                            self._df = df
-                        else:
-                            self._df = self._df.merge(df, how='outer')
-                            self.logger.info('self df = {}'.format(self._df))
+                        if count_dict is not None:
+                            count_dict['Class'] = {tracklet.obj_id: tracklet.class_name}
+                            count_dict['Group'] = {tracklet.obj_id: group}
+                            df = DataFrame.from_dict(count_dict)
+                            self.logger.debug('df = {}'.format(df))
+                            # merge
+                            if self._df is None:
+                                self._df = df
+                            else:
+                                self._df = self._df.merge(df, how='outer')
+                                self.logger.info('self df = {}'.format(self._df))
                         # remove this tracklet from tracklet
                         named_flow.remove_tracklet(tracklet)
 

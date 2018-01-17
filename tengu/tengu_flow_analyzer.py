@@ -227,10 +227,11 @@ class KLTAnalyzer(object):
 
     _max_nodes = 1000
     
-    def __init__(self, draw_flows=False, lk_params=None, feature_params=None, count_lines=None, update_interval=1, **kwargs):
+    def __init__(self, no_detector=False, draw_flows=False, lk_params=None, feature_params=None, count_lines=None, update_interval=1, **kwargs):
         super(KLTAnalyzer, self).__init__(**kwargs)
 
         self.logger= logging.getLogger(__name__)
+        self._no_detector = no_detector
         self.draw_flows = draw_flows
         self.lk_params = lk_params
         self.feature_params = feature_params
@@ -246,7 +247,6 @@ class KLTAnalyzer(object):
 
         # used for mask
         self.last_detections = None
-
         self.last_frame = None
 
     @property
@@ -310,14 +310,15 @@ class KLTAnalyzer(object):
     def find_corners_to_track(self, frame_gray):
         self.logger.debug('finding corners')
 
-        if self.last_detections is None:
+        if self._no_detector:
             # every pixel is tracked by default
             mask = np.ones_like(frame_gray) * 255
         else:
             # every pixel is *not* tracked by default
             mask = np.zeros_like(frame_gray)
-            for detection in self.last_detections:
-                cv2.rectangle(mask, (int(detection[0]), int(detection[1])), (int(detection[0]+detection[2]), int(detection[1]+detection[3])), 255, -1)
+            if self.last_detections is not None:
+                for detection in self.last_detections:
+                    cv2.rectangle(mask, (int(detection[0]), int(detection[1])), (int(detection[0]+detection[2]), int(detection[1]+detection[3])), 255, -1)
         # don't pick up existing pixels
         for x, y in [np.int32(node.tr[-1]) for node in self.nodes]:
             cv2.circle(mask, (x, y), 20, 0, -1)
@@ -579,7 +580,7 @@ class TenguFlowAnalyzer(object):
         self.logger= logging.getLogger(__name__)
         self._initialized = False
         self._last_tracklets = Set([])
-        self._klt_analyzer = KLTAnalyzer(**kwargs)
+        self._klt_analyzer = KLTAnalyzer(no_detector=(detector is None), **kwargs)
         self._detector = detector
         self._tracker = tracker
         if self._tracker is not None:
