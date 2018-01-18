@@ -220,6 +220,26 @@ class ClusteredKLTTracklet(Tracklet):
 
         return cropped_images
 
+    def to_rgb(self, max_size):
+
+        size = min(max_size, len(self._assignments))
+        index = size - 1
+        total_hist = None
+        while index >= 0:
+            assignment = self._assignments[index]
+            if total_hist is None:
+                total_hist = assignment.hist
+            else:
+                total_hist += assignment.hist
+            index -= 1
+        avg = total_hist / size
+        # calculate the max bgr values
+        max_ix = avg.argmax()
+        r = max_ix % 32 * 8
+        g = (max_ix / 32) % 32 * 8
+        b = (max_ix / 32 / 32) % 32 * 8
+        return (r, g, b)
+
 class NodeCluster(object):
 
     _min_rect_length = 10
