@@ -90,7 +90,16 @@ class ClusteredKLTTracklet(Tracklet):
 
     def histogram(self, rect):
         frame = self.tracker._tengu_flow_analyer._klt_analyzer.last_frame
-        img = frame[int(rect[1]):int(rect[1]+rect[3]), int(rect[0]):int(rect[0]+rect[3]), :]
+        bigger_ratio = 0.0
+        from_y = int(rect[1])
+        from_y = max(0, int(from_y - rect[3] * bigger_ratio))
+        to_y = int(rect[1]+rect[3])
+        to_y = min(frame.shape[0], int(to_y + rect[3] * bigger_ratio))
+        from_x = int(rect[0])
+        from_x = max(0, int(from_x - rect[2] * bigger_ratio))
+        to_x = int(rect[0]+rect[3])
+        to_x = min(frame.shape[1], int(to_x + rect[2] * bigger_ratio))
+        img = frame[from_y:to_y, from_x:to_x, :]
         hist = cv2.calcHist([img], [0, 1, 2], None, [32, 32, 32], [0, 256, 0, 256, 0, 256])
         cv2.normalize(hist, hist)
         flattened = hist.flatten()
@@ -213,17 +222,27 @@ class ClusteredKLTTracklet(Tracklet):
         """get intermediate images
         """
         cropped_images = []
-        diff = len(self._assignments) - max_size
-        offset = 0
-        if diff > 0:
-            # take intermediate images
-            offset = diff / 2
-        index = 1
-        while index <= max_size and (index+offset) <= len(self._assignments):
-            assignment = self._assignments[-1*(index+offset)]
-            if hasattr(assignment, 'img') and assignment.img is not None:
-                cropped_images.append(assignment.img)
-            index += 1
+        use_intermediate = False
+        if use_intermediate:
+            diff = len(self._assignments) - max_size
+            offset = 0
+            if diff > 0:
+                # take intermediate images
+                offset = diff / 2
+            index = 1
+            while index <= max_size and (index+offset) <= len(self._assignments):
+                assignment = self._assignments[-1*(index+offset)]
+                if hasattr(assignment, 'img') and assignment.img is not None:
+                    cropped_images.append(assignment.img)
+                index += 1
+        else:
+            # use from the first
+            index = 0
+            while len(cropped_images) < len(self._assignments) and len(cropped_images) < max_size:
+                assignment = self._assignments[index]
+                if hasattr(assignment, 'img') and assignment.img is not None:
+                    cropped_images.append(assignment.img)
+                index += 1
 
         return cropped_images
 
