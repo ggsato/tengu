@@ -1061,8 +1061,8 @@ class TenguFlowAnalyzer(object):
     def deserialize(self, js):
         frame_shape = (js['frame_shape'][0], js['frame_shape'][1], js['frame_shape'][2])
         flow_blocks = (js['flow_blocks'][0], js['flow_blocks'][1])
-        if frame_shape != self._frame_shape or flow_blocks != self._flow_blocks:
-            raise
+        #if frame_shape != self._frame_shape or flow_blocks != self._flow_blocks:
+        #    raise
         self._scene = TenguScene.deserialize(js['scene'], self._blk_node_map)
         self.logger.info('deserialized scene {}'.format(self._scene))
         edges_js = js['edges']
@@ -1096,11 +1096,6 @@ class TenguFlowAnalyzer(object):
             js_string = buf.getvalue()
             buf.close()
             self.deserialize(json.loads(js_string))
-        except:
-            self.logger.error('failed to load from {}'.format(self._scene_file))
-            exc_type, exc_value, exc_traceback = sys.exc_info()
-            logging.error('unexpected error: {}'.format(exc_value))
-            traceback.print_tb(exc_traceback, limit=100, file=sys.stdout)
         finally:
             f.close()
 
