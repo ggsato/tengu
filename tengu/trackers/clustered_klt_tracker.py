@@ -209,36 +209,23 @@ class ClusteredKLTTracklet(Tracklet):
                     break
         self._validated_nodes = validated
 
-    def last_cropped_images(self, max_size):
+    def cropped_images(self, max_size):
+        """get intermediate images
+        """
         cropped_images = []
-        index = len(self._assignments) - 1
-        while index >= 0 and len(cropped_images) < max_size:
-            assignment = self._assignments[index]
+        diff = len(self._assignments) - max_size
+        offset = 0
+        if diff > 0:
+            # take intermediate images
+            offset = diff / 2
+        index = 1
+        while index <= max_size and (index+offset) <= len(self._assignments):
+            assignment = self._assignments[-1*(index+offset)]
             if hasattr(assignment, 'img') and assignment.img is not None:
                 cropped_images.append(assignment.img)
-            index -= 1
+            index += 1
 
         return cropped_images
-
-    def to_rgb(self, max_size):
-
-        size = min(max_size, len(self._assignments))
-        index = size - 1
-        total_hist = None
-        while index >= 0:
-            assignment = self._assignments[index]
-            if total_hist is None:
-                total_hist = assignment.hist
-            else:
-                total_hist += assignment.hist
-            index -= 1
-        avg = total_hist / size
-        # calculate the max bgr values
-        max_ix = avg.argmax()
-        r = max_ix % 32 * 8
-        g = (max_ix / 32) % 32 * 8
-        b = (max_ix / 32 / 32) % 32 * 8
-        return (r, g, b)
 
 class NodeCluster(object):
 
