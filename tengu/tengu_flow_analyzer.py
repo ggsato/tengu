@@ -611,12 +611,15 @@ class TenguFlowAnalyzer(object):
         class_names = []
         tracklets = []
 
+        # A) optical flow
         self._klt_analyzer.analyze_frame(frame)
         
         if self._detector is not None:
+            # B) detections
             detections, class_names = self._detector.detect(frame)
 
             if self._tracker is not None:
+                # C) update existing tracklets with new detections
                 tracklets = self._tracker.resolve_tracklets(detections, class_names)
                 self.update_flow_graph(tracklets)
 

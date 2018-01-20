@@ -15,7 +15,7 @@ class TenguSceneAnalyzer(object):
         self._df = None
 
     def analyze_scene(self, cropped, scene):
-        """ analyze scene, and outputs a count report at intervals
+        """ turn removed tracklets into counts
         GROUP A     | GROUP A     | ... | GROUP Z  
         CLASS 0     | CLASS N     | ... | CLASS N 
         cA0-1 cA0-2 | cAN-1 cAN-2 | ... | cZN-1 cZN-2

@@ -320,10 +320,10 @@ class TenguTracker(object):
     _global_updates = -1
     _min_value = 0.0001
     # this is the -1 * log value
-    # 0.5 = 0.7
+    # 0.5 = 0.7 => 50% overlap
     # 0.2 = 1.61
     # 0.1 = 2.3
-    # 0.01 = 4.6
+    # 0.01 = 4.6 => 1% overlap
     _confident_min_cost = 4.6
 
     def __init__(self, obsoletion=100):
@@ -340,6 +340,17 @@ class TenguTracker(object):
         return copy.copy(self._tracklets)
 
     def resolve_tracklets(self, detections, class_names):
+        """ update existing tracklets with new detections
+        This is the main task of Tracker, which consists of the following jobs:
+        1. tracklet initialization and any other preparations required to complete this task
+        2. calculate cost matrix of existing tracklets and new detections
+        3. create a plan for new detections assignments
+        4. update existing tracklets with the assignment plan
+
+        Also, Tracklet does the following book keeping jobs of tracklets
+        5. update existing tracklets that had no assignment
+        6. find obsolete tracklets among existing tracklets, and clean them up if any
+        """
         TenguTracker._global_updates += 1
 
         if len(self._tracklets) == 0:
@@ -395,7 +406,7 @@ class TenguTracker(object):
         """ Calculates cost matrix
         Given the number of tracked objects, m, and the number of detections, n,
         cost matrix consists of mxn matrix C.
-        Cmn: a cost at (m, n), -Infinity<=Cmn<=0
+        Cmn: a cost at (m, n), 0<=Cmn<=Infinity
         
         Then, such a cost matrix is optimized to produce a combination of minimum cost assignments.
         For more information, see Hungarian algorithm(Wikipedia), scipy.optimize.linear_sum_assignment
