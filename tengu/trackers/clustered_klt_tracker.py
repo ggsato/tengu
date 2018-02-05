@@ -12,6 +12,7 @@ from scipy.optimize import linear_sum_assignment
 
 from ..tengu_flow_analyzer import KLTAnalyzer, TenguNode
 from ..tengu_tracker import TenguTracker, Tracklet, TenguCostMatrix
+from ..common import draw_str
 
 """
 This tracker represents a list of optical flow trackes as a weighed undirected graph.
@@ -33,6 +34,7 @@ class ClusteredKLTTracklet(Tracklet):
 
     def __init__(self, tracker, keep_lost_tracklet=False):
         super(ClusteredKLTTracklet, self).__init__()
+        self._direction = None
         self.tracker = tracker
         self._keep_lost_tracklet = keep_lost_tracklet
         self._rect = None
@@ -113,7 +115,15 @@ class ClusteredKLTTracklet(Tracklet):
         pos_last = self._centers[-1]
         pos_first = self._centers[0]
 
+        # direction
+        # atan results is between -pi and pi
+        self._direction = math.atan2(pos_last[1] - pos_first[1], pos_last[0] - pos_first[0])
+
         return [(pos_last[0]-pos_first[0])/TenguNode._min_length, (pos_last[1]-pos_first[1])/TenguNode._min_length]
+
+    @property
+    def direction(self):
+        return self._direction
 
     def update_properties(self, lost=True):
         assignment = self._assignments[-1]
@@ -128,8 +138,9 @@ class ClusteredKLTTracklet(Tracklet):
         self._rect = assignment.detection
         self._hist = assignment.hist
         self._centers.append(NodeCluster.center(self._rect))
-        if len(self._centers) > TenguNode._min_length:
-            del self._centers[0]
+        # to get a stable direction, keep all the centers
+        #if len(self._centers) > TenguNode._min_length:
+        #    del self._centers[0]
         if not lost or self._keep_lost_tracklet:
             self._last_updated_at = TenguTracker._global_updates
 
@@ -340,9 +351,11 @@ class ClusteredKLTTracker(TenguTracker):
     _minimum_community_size = 2
     _minimum_node_similarity = 0.5
     
-    def __init__(self, keep_lost_tracklet=False, **kwargs):
+    def __init__(self, keep_lost_tracklet=False, ignore_direction_range=None, **kwargs):
         super(ClusteredKLTTracker, self).__init__(**kwargs)
         self._keep_lost_tracklet = keep_lost_tracklet
+        # (start, end], 0 <= ignored_range < 2pi
+        self._ignore_direction_range = ignore_direction_range
         self._tengu_flow_analyer = None
         self.detected_node_set = Set([])
         self.detection_node_map = None
@@ -456,6 +469,11 @@ class ClusteredKLTTracker(TenguTracker):
                 del self._tengu_flow_analyer._klt_analyzer.nodes[self._tengu_flow_analyer._klt_analyzer.nodes.index(node)]
 
         for tracklet in self._tracklets:
+            # ignore
+            if self.ignore_tracklet(tracklet):
+                self.logger.debug('ignoring tracket having the direction {}'.format(tracklet.direction))
+                del self._tracklets[self._tracklets.index(tracklet)]
+                continue
             # obsolete if one of its nodes has left
             for node in tracklet._validated_nodes:
                 if node.has_left:
@@ -465,10 +483,16 @@ class ClusteredKLTTracker(TenguTracker):
 
         self.detected_node_set = self.detected_node_set - obsolete_nodes
 
+    def ignore_tracklet(self, tracklet):
+        ignore_tracklet = False
+        if self._ignore_direction_range is not None:
+            if tracklet.direction >= self._ignore_direction_range[0] and tracklet.direction < self._ignore_direction_range[1]:
+                ignore_tracklet = True
+        return ignore_tracklet
+
     def draw_detected_node_set(self):
         for node in self._tengu_flow_analyer._klt_analyzer.nodes:
             cv2.circle(self.debug, node.tr[-1], 5, 128, -1)
-
 
         for tracklet in self._tracklets:
             node_cluster = tracklet.last_assignment
@@ -476,3 +500,8 @@ class ClusteredKLTTracker(TenguTracker):
             cv2.rectangle(self.debug, (rect[0], rect[1]), (rect[0]+rect[2], rect[1]+rect[3]), 255, 3)
             for node in tracklet._validated_nodes:
                 cv2.circle(self.debug, node.tr[-1], 5, 256, -1)
+            if tracklet.direction is not None:
+                diameter = min(50, tracklet.last_movement)
+                color = 0 if self.ignore_tracklet(tracklet) else 255
+                cv2.arrowedLine(self.debug, tracklet.center, (tracklet.center[0] + int((math.cos(tracklet.direction) * diameter)), tracklet.center[1] + int(math.sin(tracklet.direction) * diameter)), color)
+                draw_str(self.debug, tracklet.center, '{}'.format(tracklet.direction))
