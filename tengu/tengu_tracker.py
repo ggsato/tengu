@@ -561,3 +561,8 @@ class TenguTracker(object):
             return diff > 0
 
         return diff > self._obsoletion
+
+    """ this is called from Flow Analyzer to check if this tracklet should be considered
+    """
+    def ignore_tracklet(self, tracklet):
+        return False

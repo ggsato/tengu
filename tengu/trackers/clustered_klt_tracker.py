@@ -469,11 +469,6 @@ class ClusteredKLTTracker(TenguTracker):
                 del self._tengu_flow_analyer._klt_analyzer.nodes[self._tengu_flow_analyer._klt_analyzer.nodes.index(node)]
 
         for tracklet in self._tracklets:
-            # ignore
-            if self.ignore_tracklet(tracklet):
-                self.logger.debug('ignoring tracket having the direction {}'.format(tracklet.direction))
-                del self._tracklets[self._tracklets.index(tracklet)]
-                continue
             # obsolete if one of its nodes has left
             for node in tracklet._validated_nodes:
                 if node.has_left:

@@ -750,6 +750,9 @@ class TenguFlowAnalyzer(object):
                 self.logger.debug('path length is too short for modified shortest path finding for {}'.format(existing_tracklet))
                 continue
 
+            if self._tracker.ignore_tracklet(existing_tracklet):
+                continue
+
             if self._scene_file is None:
                 # update edge
                 if not self._flow_graph.has_edge(prev_flow_node, flow_node):
