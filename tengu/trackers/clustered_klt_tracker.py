@@ -481,7 +481,9 @@ class ClusteredKLTTracker(TenguTracker):
     def ignore_tracklet(self, tracklet):
         ignore_tracklet = False
         if self._ignore_direction_range is not None:
-            if tracklet.direction >= self._ignore_direction_range[0] and tracklet.direction < self._ignore_direction_range[1]:
+            if tracklet.direction is None:
+                ignore_tracklet = True
+            elif tracklet.direction >= self._ignore_direction_range[0] and tracklet.direction < self._ignore_direction_range[1]:
                 ignore_tracklet = True
         return ignore_tracklet
 
