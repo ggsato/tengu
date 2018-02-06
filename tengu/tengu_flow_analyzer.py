@@ -822,13 +822,13 @@ class TenguFlowAnalyzer(object):
             max_diff = TenguFlow.max_node_diff(removed_tracklet.path[0], removed_tracklet.path[-1])
             if max_diff < 2:
                 # within adjacent blocks, this is stationally
-                self.logger.debug('{} is removed, but not for counting, stationally')
+                self.logger.debug('{} is removed, but not for counting, stationally'.format(removed_tracklet))
                 if removed_tracklet._current_flow is not None:
                     removed_tracklet._current_flow.remove_tracklet(removed_tracklet)
                 continue
 
-            if self._tracker.ignore_tracklet(existing_tracklet):
-                self.logger.debug('{} is removed, but not for counting, within ignored directions')
+            if self._tracker.ignore_tracklet(removed_tracklet):
+                self.logger.debug('{} is removed, but not for counting, within ignored directions'.format(removed_tracklet))
                 if removed_tracklet._current_flow is not None:
                     removed_tracklet._current_flow.remove_tracklet(removed_tracklet)
                 continue
