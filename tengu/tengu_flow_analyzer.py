@@ -827,6 +827,12 @@ class TenguFlowAnalyzer(object):
                     removed_tracklet._current_flow.remove_tracklet(removed_tracklet)
                 continue
 
+            if self._tracker.ignore_tracklet(existing_tracklet):
+                self.logger.debug('{} is removed, but not for counting, within ignored directions')
+                if removed_tracklet._current_flow is not None:
+                    removed_tracklet._current_flow.remove_tracklet(removed_tracklet)
+                continue
+
             flow_node = self.flow_node_at(*removed_tracklet.center)
             source_node = removed_tracklet.path[0]
             if flow_node == source_node:
