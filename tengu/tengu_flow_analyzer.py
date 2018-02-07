@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-import logging, math, json, sys, traceback
+import logging, math, json, sys, traceback, copy
 import cv2
 import numpy as np
 import networkx as nx
@@ -407,6 +407,10 @@ class TenguFlow(object):
         self._group = group
 
         # transient attributes
+
+        # direction
+        self._direction = TenguNode.get_angle(self._source.position, self._sink.position)
+
         # a set of tracklets currently on this flow
         # can be sorted by Tracklet#dist_to_sink
         self._tracklets = Set([])
@@ -456,30 +460,66 @@ class TenguFlow(object):
     def group(self):
         return self._group
 
+    @property
+    def direction(self):
+        return self._direction
+
     def similarity(self, another_flow):
         # path similarity
         shorter = self if len(self.path) < len(another_flow.path) else another_flow
         longer = self if another_flow == shorter else another_flow
-        duplicates = 0
+        flow_node_similarities = 0.0
+        flow_nodes_in_longer_path = copy.copy(longer.path)
         for flow_node in shorter.path:
             if flow_node in longer.path:
-                duplicates += 1
+                flow_node_similarities += 1.0
             else:
-                for another_node in longer.path:
-                    if flow_node.adjacent(another_node):
-                        duplicates += 0.5
-                        break
-        path_similarity = float(duplicates) / len(shorter.path)
+                nearest = None
+                nearest_node = None
+                for another_node in flow_nodes_in_longer_path:
+                    distance = flow_node.distance(another_node)
+                    if nearest is None:
+                        nearest = distance
+                        nearest_node = another_node
+                    elif distance < nearest:
+                        nearest = distance
+                        nearest_node = another_node
+                # if diff is only 1, similarity = 1.0, otherwise, 0 ~ 1.0
+                flow_node_similarities += 1.0 / nearest
+                del flow_nodes_in_longer_path[flow_nodes_in_longer_path.index(nearest_node)]
+
+        path_similarity = flow_node_similarities / len(shorter.path)
 
         # source and sink similarity
         source_dist = TenguFlow.max_node_diff(self.source, another_flow.source)
         source_similarity = TenguFlow.min_source_sink_similarity_dist / max(TenguFlow.min_source_sink_similarity_dist, source_dist)
         sink_dist = TenguFlow.max_node_diff(self.sink, another_flow.sink)
         sink_similarity = TenguFlow.min_source_sink_similarity_dist / max(TenguFlow.min_source_sink_similarity_dist, sink_dist)
+        source_sink_similarity = (source_similarity + sink_similarity) / 2
 
-        logging.debug('flow similarity to {}: path={}, source={}, sink={}'.format(another_flow, path_similarity, source_similarity, sink_similarity))
+        # direction similarity
+        direction_similarity = 0.0
+        # a tracklet may not have its directoin, then ignore this
+        if another_flow.direction is None:
+            direction_similarity = 1.0
+        else:
+            diff_angle = math.fabs(self._direction - another_flow.direction)
+            # make the diff between 0 and pi
+            if diff_angle > math.pi:
+                diff_angle = 2*math.pi - diff_angle
+            # calculate
+            if diff_angle > math.pi/2:
+                # no similarity, no change
+                pass
+            elif diff_angle = 0:
+                direction_similarity = 1.0
+            else:
+                # 1.0 if diff is within +-pi/18(10 degrees), otherwise, between 0.1(1/9) ~ 1.0
+                direction_similarity = min(1.0, math.pi/18 / diff_angle)
 
-        return (path_similarity + source_similarity + sink_similarity) / 3
+        logging.info('flow similarity of {} to {}: path={}, source={}, sink={}, direction={}'.format(self, another_flow, path_similarity, source_similarity, sink_similarity, direction_similarity))
+
+        return (path_similarity + source_sink_similarity + direction_similarity) / 3
 
     @staticmethod
     def max_node_diff(node1, node2):
@@ -557,6 +597,9 @@ class TenguFlowNode(object):
 
     def adjacent(self, another_flow):
         return abs(self._y_blk - another_flow._y_blk) <= 1 and abs(self._x_blk - another_flow._x_blk) <= 1
+
+    def distance(self, another_flow):
+        return max(abs(self._y_blk - another_flow._y_blk), abs(self._x_blk - another_flow._x_blk))
 
 class TenguFlowAnalyzer(object):
 
