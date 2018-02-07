@@ -618,7 +618,7 @@ class TenguFlowAnalyzer(object):
 
     rebuild_scene_ratio = 10
 
-    def __init__(self, detector, tracker, scene_file=None, flow_blocks=(20, 30), show_graph=True, majority_in_percent=5, initial_weight=200, min_sink_count_for_flow=10, allow_non_adjacent_edge=False, **kwargs):
+    def __init__(self, detector, tracker, scene_file=None, flow_blocks=(20, 30), show_graph=True, majority_in_percent=5, initial_weight=200, min_sink_count_for_flow=10, allow_non_adjacent_edge=False, identical_flow_similarity=0.5**kwargs):
         super(TenguFlowAnalyzer, self).__init__()
         self.logger= logging.getLogger(__name__)
         self._initialized = False
@@ -636,6 +636,7 @@ class TenguFlowAnalyzer(object):
         self._weight_func = lambda u, v, d, prev_prev_node, s=self: s.calculate_weight(u, v, d, prev_prev_node)
         self._min_sink_count_for_flow = min_sink_count_for_flow
         self._allow_non_adjacent_edge = allow_non_adjacent_edge
+        self._identical_flow_similarity = identical_flow_similarity
         # the folowings will be initialized
         self._scene = None
         self._frame_shape = None
@@ -818,11 +819,11 @@ class TenguFlowAnalyzer(object):
                 best_similarity = 0
                 for flow in self._scene.flows:
                     similarity = flow.similarity(existing_tracklet)
-                    self.logger.debug('similarity of {} to {} is {:03.2f}'.format(flow, existing_tracklet, similarity))
+                    self.logger.info('similarity of {} to {} is {:03.2f}'.format(flow, existing_tracklet, similarity))
                     if similarity > best_similarity:
                         most_similar_flow = flow
                         best_similarity = similarity
-                self.logger.debug('the most similar flow of {} is {} at {}'.format(existing_tracklet, most_similar_flow, best_similarity))
+                self.logger.info('the most similar flow of {} is {} at {}'.format(existing_tracklet, most_similar_flow, best_similarity))
                 if most_similar_flow is not None:
                     if existing_tracklet.speed > -1 and existing_tracklet.path[-1].adjacent(most_similar_flow.sink):
                         # ok, mark this as passed
@@ -925,7 +926,7 @@ class TenguFlowAnalyzer(object):
             for flow in flows:
                 similarity = flow.similarity(tengu_flow)
                 self.logger.debug('similarity between {} and {} = {}'.format(flow, tengu_flow, similarity)) 
-                if similarity > Tracklet._min_confidence:
+                if similarity > self._identical_flow_similarity:
                     self.logger.debug('a flow from {} to {} is too similar to {}, being skipped...'.format(major_source, major_sink, flow))
                     unique = False
                     break
@@ -962,7 +963,7 @@ class TenguFlowAnalyzer(object):
             for flow in flows:
                 similarity = flow.similarity(tengu_flow)
                 self.logger.debug('similarity between {} and {} = {}'.format(flow, tengu_flow, similarity)) 
-                if similarity > Tracklet._min_confidence:
+                if similarity > self._identical_flow_similarity:
                     self.logger.debug('a flow from {} to {} is too similar to {}, being skipped...'.format(major_source, major_sink, flow))
                     unique = False
                     break
