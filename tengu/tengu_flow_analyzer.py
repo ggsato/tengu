@@ -819,11 +819,11 @@ class TenguFlowAnalyzer(object):
                 best_similarity = 0
                 for flow in self._scene.flows:
                     similarity = flow.similarity(existing_tracklet)
-                    self.logger.info('similarity of {} to {} is {:03.2f}'.format(flow, existing_tracklet, similarity))
+                    self.logger.debug('similarity of {} to {} is {:03.2f}'.format(flow, existing_tracklet, similarity))
                     if similarity > best_similarity:
                         most_similar_flow = flow
                         best_similarity = similarity
-                self.logger.info('the most similar flow of {} is {} at {}'.format(existing_tracklet, most_similar_flow, best_similarity))
+                self.logger.debug('the most similar flow of {} is {} at {}'.format(existing_tracklet, most_similar_flow, best_similarity))
                 if most_similar_flow is not None:
                     if existing_tracklet.speed > -1 and existing_tracklet.path[-1].adjacent(most_similar_flow.sink):
                         # ok, mark this as passed
