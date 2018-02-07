@@ -517,7 +517,7 @@ class TenguFlow(object):
                 # 1.0 if diff is within +-pi/18(10 degrees), otherwise, between 0.1(1/9) ~ 1.0
                 direction_similarity = min(1.0, math.pi/18 / diff_angle)
 
-        logging.info('flow similarity of {} to {}: path={}, source={}, sink={}, direction={}'.format(self, another_flow, path_similarity, source_similarity, sink_similarity, direction_similarity))
+        logging.debug('flow similarity of {} to {}: path={}, source={}, sink={}, direction={}'.format(self, another_flow, path_similarity, source_similarity, sink_similarity, direction_similarity))
 
         return (path_similarity + source_sink_similarity + direction_similarity) / 3
 
@@ -820,15 +820,6 @@ class TenguFlowAnalyzer(object):
                     similarity = flow.similarity(existing_tracklet)
                     self.logger.debug('similarity of {} to {} is {:03.2f}'.format(flow, existing_tracklet, similarity))
                     if similarity > best_similarity:
-                        # do not consider a flow to an opposite direction
-                        tracklet_to_sink = TenguNode.get_angle(existing_tracklet.path[-1].position, flow.sink.position)
-                        tracklet_direction = TenguNode.get_angle(existing_tracklet.milestones[0][0], existing_tracklet.center)
-                        diff_angle = math.fabs(tracklet_to_sink - tracklet_direction)
-                        if diff_angle > math.pi:
-                            diff_angle = 2*math.pi - diff_angle
-                        if diff_angle > math.pi/2:
-                            self.logger.debug('{} is opposite direction to {} by {:03.1f}, tracklet_to_sink={}, tracklet_direction={}'.format(flow, existing_tracklet, diff_angle, tracklet_to_sink, tracklet_direction))
-                            continue
                         most_similar_flow = flow
                         best_similarity = similarity
                 self.logger.debug('the most similar flow of {} is {} at {}'.format(existing_tracklet, most_similar_flow, best_similarity))
