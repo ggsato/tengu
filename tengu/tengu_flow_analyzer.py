@@ -511,7 +511,7 @@ class TenguFlow(object):
             if diff_angle > math.pi/2:
                 # no similarity, no change
                 pass
-            elif diff_angle = 0:
+            elif diff_angle == 0:
                 direction_similarity = 1.0
             else:
                 # 1.0 if diff is within +-pi/18(10 degrees), otherwise, between 0.1(1/9) ~ 1.0
