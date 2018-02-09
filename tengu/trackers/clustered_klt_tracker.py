@@ -354,7 +354,7 @@ class ClusteredKLTTracker(TenguTracker):
     def __init__(self, keep_lost_tracklet=False, ignore_direction_range=None, **kwargs):
         super(ClusteredKLTTracker, self).__init__(**kwargs)
         self._keep_lost_tracklet = keep_lost_tracklet
-        # (start, end], 0 <= ignored_range < 2pi
+        # (start, end], -pi <= ignored_range < pi
         self._ignore_direction_range = ignore_direction_range
         self._tengu_flow_analyer = None
         self.detected_node_set = Set([])
