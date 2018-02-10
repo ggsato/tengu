@@ -482,10 +482,12 @@ class ClusteredKLTTracker(TenguTracker):
         ignore_tracklet = False
         if self._ignore_direction_ranges is not None:
             if tracklet.direction is None:
+                self.logger.debug('{} has no direction yet, will be ignored'.format(tracklet))
                 ignore_tracklet = True
             else:
                 for ignore_direction_range in self._ignore_direction_ranges:
                     if tracklet.direction >= ignore_direction_range[0] and tracklet.direction < ignore_direction_range[1]:
+                        self.logger.debug('{} is moving towards the direction between ignored ranges'.format(tracklet))
                         ignore_tracklet = True
                         break
         return ignore_tracklet

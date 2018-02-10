@@ -18,7 +18,7 @@ from .common import draw_str
 class TenguNode(object):
 
     # location, orientation, acceleration, speed
-    _min_length = 25
+    _min_length = 10
     # if threshold is 0.5, the lowest similarity Smin:
     # Smin = 100
     _min_distance = 50
@@ -795,6 +795,7 @@ class TenguFlowAnalyzer(object):
                 continue
 
             if self._tracker.ignore_tracklet(existing_tracklet):
+                self.logger.debug('ignoring update of {}'.format(existing_tracklet))
                 continue
 
             if self._scene_file is None:
@@ -832,9 +833,9 @@ class TenguFlowAnalyzer(object):
                         continue
                     # TODO: filter by a threshold by lowest cost
                     path, dist_to_sink = self.find_shortest_path_and_cost(flow_node, most_similar_flow.sink)
-                    if path is None:
+                    if path is None and best_similarity < self._identical_flow_similarity:
                         # no such path exist
-                        self.logger.debug('but no such path from {} to {}'.format(flow_node, most_similar_flow.sink))
+                        self.logger.debug('less similarity {} and no such path from {} to {}'.format(best_similarity, flow_node, most_similar_flow.sink))
                         continue
                     most_similar_flow.put_tracklet(existing_tracklet, dist_to_sink, best_similarity, shortest_path_for_debug=path)
                 elif existing_tracklet._current_flow is not None:
