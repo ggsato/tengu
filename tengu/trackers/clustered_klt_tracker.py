@@ -351,11 +351,11 @@ class ClusteredKLTTracker(TenguTracker):
     _minimum_community_size = 2
     _minimum_node_similarity = 0.5
     
-    def __init__(self, keep_lost_tracklet=False, ignore_direction_range=None, **kwargs):
+    def __init__(self, keep_lost_tracklet=False, ignore_direction_ranges=None, **kwargs):
         super(ClusteredKLTTracker, self).__init__(**kwargs)
         self._keep_lost_tracklet = keep_lost_tracklet
         # (start, end], -pi <= ignored_range < pi
-        self._ignore_direction_range = ignore_direction_range
+        self._ignore_direction_ranges = ignore_direction_ranges
         self._tengu_flow_analyer = None
         self.detected_node_set = Set([])
         self.detection_node_map = None
@@ -480,13 +480,16 @@ class ClusteredKLTTracker(TenguTracker):
 
     def ignore_tracklet(self, tracklet):
         ignore_tracklet = False
-        if self._ignore_direction_range is not None:
+        if self._ignore_direction_ranges is not None:
             if tracklet.direction is None:
                 self.logger.debug('{} has no direction yet, will be ignored'.format(tracklet))
                 ignore_tracklet = True
-            elif tracklet.direction >= self._ignore_direction_range[0] and tracklet.direction < self._ignore_direction_range[1]:
-                self.logger.debug('{} is moving towards the direction between ignored ranges'.format(tracklet))
-                ignore_tracklet = True
+            else:
+                for ignore_direction_range in self._ignore_direction_ranges:
+                    if tracklet.direction >= ignore_direction_ranges[0] and tracklet.direction < ignore_direction_ranges[1]:
+                        self.logger.debug('{} is moving towards the direction between ignored ranges'.format(tracklet))
+                        ignore_tracklet = True
+                        break
         return ignore_tracklet
 
     def draw_detected_node_set(self):
