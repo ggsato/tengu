@@ -108,7 +108,7 @@ class ClusteredKLTTracklet(Tracklet):
         return flattened, img.copy()
 
     def last_movement(self):
-        if len(self._centers) < TenguNode._min_length:
+        if len(self._centers) < self._min_length:
             # no speed calculation possible
             return None
 
@@ -119,7 +119,7 @@ class ClusteredKLTTracklet(Tracklet):
         # atan results is between -pi and pi
         self._direction = math.atan2(pos_last[1] - pos_first[1], pos_last[0] - pos_first[0])
 
-        return [(pos_last[0]-pos_first[0])/TenguNode._min_length, (pos_last[1]-pos_first[1])/TenguNode._min_length]
+        return [(pos_last[0]-pos_first[0])/self._min_length, (pos_last[1]-pos_first[1])/self._min_length]
 
     @property
     def direction(self):
@@ -139,7 +139,7 @@ class ClusteredKLTTracklet(Tracklet):
         self._hist = assignment.hist
         self._centers.append(NodeCluster.center(self._rect))
         # to get a stable direction, keep all the centers
-        #if len(self._centers) > TenguNode._min_length:
+        #if len(self._centers) > self._min_length:
         #    del self._centers[0]
         if not lost or self._keep_lost_tracklet:
             self._last_updated_at = TenguTracker._global_updates

@@ -18,7 +18,6 @@ from .common import draw_str
 class TenguNode(object):
 
     # location, orientation, acceleration, speed
-    _min_length = 10
     # if threshold is 0.5, the lowest similarity Smin:
     # Smin = 100
     _min_distance = 50
@@ -29,10 +28,11 @@ class TenguNode(object):
     # Smin = 1
     _min_acceleration = float(_min_speed) / 5
 
-    def __init__(self, tr, *argv):
+    def __init__(self, tr, min_length, *argv):
         super(TenguNode, self).__init__(*argv)
         self.logger = logging.getLogger(__name__)
         self.tr = tr
+        self._min_length = min_length
         self._last_detection = None
         self._last_detected_at = TenguTracker._global_updates
         self._last_updated_at = TenguTracker._global_updates
@@ -113,14 +113,14 @@ class TenguNode(object):
             location_similarity = TenguNode._min_distance/max(TenguNode._min_distance, distance)
         self.logger.debug('location_similarity between {} and {} is {}, distance={}'.format(pos0, pos1, location_similarity, distance))
 
-        if len(self.tr) < TenguNode._min_length or len(another.tr) < TenguNode._min_length:
+        if len(self.tr) < self._min_length or len(another.tr) < self._min_length:
             # not reliable
             orientation_similarity = 0
             speed_similarity = 0
             acceleration_similarity = 0
         else:
-            pos01 = self.tr[-1 * TenguNode._min_length]
-            pos11 = another.tr[-1 * TenguNode._min_length]
+            pos01 = self.tr[-1 * self._min_length]
+            pos11 = another.tr[-1 * self._min_length]
             distance0 = Tracklet.compute_distance(pos0, pos01)
             distance1 = Tracklet.compute_distance(pos1, pos11)
             if distance0 > 5:
@@ -131,12 +131,12 @@ class TenguNode(object):
                 # stationally
                 angle0 = None
             else:
-                angle0 = TenguNode.get_angle(self.tr[-1 * TenguNode._min_length], self.tr[-1])
+                angle0 = TenguNode.get_angle(self.tr[-1 * self._min_length], self.tr[-1])
             if distance1 < TenguNode._min_speed:
                 # stationally
                 angle1 = None
             else:
-                angle1 = TenguNode.get_angle(another.tr[-1 * TenguNode._min_length], another.tr[-1])
+                angle1 = TenguNode.get_angle(another.tr[-1 * self._min_length], another.tr[-1])
 
             diff_angle = None
             if angle0 is None and angle1 is None:
@@ -155,12 +155,12 @@ class TenguNode(object):
             speed_similarity = TenguNode._min_speed/diff_speed
             self.logger.debug('speed similarity between {} and {} is {}, diff={}'.format(distance0, distance1, speed_similarity, diff_speed))
 
-            if len(self.tr) < TenguNode._min_length*2 or len(another.tr) < TenguNode._min_length*2:
+            if len(self.tr) < self._min_length*2 or len(another.tr) < self._min_length*2:
                 acceleration_similarity = 1.0
                 self.logger.debug('skipping acceleration similarity calculation')
             else:
-                distance00 = Tracklet.compute_distance(self.tr[0], self.tr[TenguNode._min_length])
-                distance10 = Tracklet.compute_distance(another.tr[0], another.tr[TenguNode._min_length])
+                distance00 = Tracklet.compute_distance(self.tr[0], self.tr[self._min_length])
+                distance10 = Tracklet.compute_distance(another.tr[0], another.tr[self._min_length])
                 acceleration0 = distance0 - distance00
                 acceleration1 = distance1 - distance10
                 diff_acceleration = max(TenguNode._min_acceleration, math.fabs(acceleration1 - acceleration0))
@@ -168,7 +168,7 @@ class TenguNode(object):
                 self.logger.debug('acceleration similarity between {} and {} is {}, diff={}'.format(acceleration0, acceleration1, acceleration_similarity, diff_acceleration))
 
             # update
-            self._movement = [int((pos0[0]-pos01[0])/TenguNode._min_length), int((pos0[1]-pos01[1])/TenguNode._min_length)]
+            self._movement = [int((pos0[0]-pos01[0])/self._min_length), int((pos0[1]-pos01[1])/self._min_length)]
             self._angle = angle0
             self._property_updated_at = TenguTracker._global_updates
 
@@ -195,14 +195,14 @@ class TenguNode(object):
         return angle
 
     def last_move(self):
-        if len(self.tr) < TenguNode._min_length:
+        if len(self.tr) < self._min_length:
             return None
 
         prev = self.tr[-1]
-        prev2 = self.tr[-1 * TenguNode._min_length]
+        prev2 = self.tr[-1 * self._min_length]
         move_x = prev[0]-prev2[0]
         move_y = prev[1]-prev2[1]
-        return [int(move_x/TenguNode._min_length), int(move_y/TenguNode._min_length)] 
+        return [int(move_x/self._min_length), int(move_y/self._min_length)] 
 
     @property
     def has_left(self):
@@ -227,7 +227,7 @@ class KLTAnalyzer(object):
 
     _max_nodes = 1000
     
-    def __init__(self, no_detector=False, draw_flows=False, lk_params=None, feature_params=None, count_lines=None, update_interval=1, **kwargs):
+    def __init__(self, min_length, no_detector=False, draw_flows=False, lk_params=None, feature_params=None, count_lines=None, update_interval=1, **kwargs):
         super(KLTAnalyzer, self).__init__(**kwargs)
 
         self.logger= logging.getLogger(__name__)
@@ -240,6 +240,7 @@ class KLTAnalyzer(object):
         self.frame_idx = 0
         self.update_interval = update_interval
         self.nodes = [] 
+        self._min_length = min_length
         self.max_track_length = 100
         self.prev_gray = None
         self._last_removed_nodes = []
@@ -328,7 +329,7 @@ class KLTAnalyzer(object):
             self.logger.debug('No good features')
         else:
             for x, y in np.float32(p).reshape(-1, 2):
-                new_node = TenguNode([(x, y)])
+                new_node = TenguNode([(x, y)], self._min_length)
                 self.nodes.append(new_node)
                 if len(self.nodes) > KLTAnalyzer._max_nodes:
                     self._last_removed_nodes.append(self.nodes[0])
@@ -618,16 +619,16 @@ class TenguFlowAnalyzer(object):
 
     rebuild_scene_ratio = 10
 
-    def __init__(self, detector, tracker, scene_file=None, flow_blocks=(20, 30), show_graph=True, majority_in_percent=5, initial_weight=200, min_sink_count_for_flow=10, allow_non_adjacent_edge=False, identical_flow_similarity=0.5, **kwargs):
+    def __init__(self, detector, tracker, min_length=10, scene_file=None, flow_blocks=(20, 30), show_graph=True, majority_in_percent=5, initial_weight=200, min_sink_count_for_flow=10, allow_non_adjacent_edge=False, identical_flow_similarity=0.5, **kwargs):
         super(TenguFlowAnalyzer, self).__init__()
         self.logger= logging.getLogger(__name__)
         self._initialized = False
         self._last_tracklets = Set([])
-        self._klt_analyzer = KLTAnalyzer(no_detector=(detector is None), **kwargs)
+        self._klt_analyzer = KLTAnalyzer(min_length, no_detector=(detector is None), **kwargs)
         self._detector = detector
         self._tracker = tracker
         if self._tracker is not None:
-            self._tracker.set_flow_analyzer(self)
+            self._tracker.set_flow_analyzer(self, min_length)
         self._scene_file = scene_file
         self._flow_blocks = flow_blocks
         self._show_graph = show_graph

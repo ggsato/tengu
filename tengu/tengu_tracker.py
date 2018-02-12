@@ -331,9 +331,11 @@ class TenguTracker(object):
         self._tracklets = []
         self._obsoletion = obsoletion
         self._tengu_flow_analyer = None
+        self._min_length = None
 
-    def set_flow_analyzer(self, tengu_flow_analyzer):
+    def set_flow_analyzer(self, tengu_flow_analyzer, min_length):
         self._tengu_flow_analyer = tengu_flow_analyzer
+        self._min_length = min_length
 
     @property
     def tracklets(self):
