@@ -15,6 +15,10 @@ from tengu_observer import *
 
 class Tengu(object):
 
+    # dictionary to set camera settings
+    # e.g. width {3, 1280}
+    PREFERRED_CAMERA_SETTINGS = None
+
     def __init__(self, equalize=False):
         self.logger= logging.getLogger(__name__)
         self._equalize = equalize
@@ -90,6 +94,11 @@ class Tengu(object):
         if cam is None or not cam.isOpened():
             self.logger.debug(self._src + ' is not available')
             return
+
+        if Tengu.PREFERRED_CAMERA_SETTINGS is not None:
+            for key in Tengu.PREFERRED_CAMERA_SETTINGS:
+                self.logger.info('set a user defined camera setting {} of {}'.format(Tengu.PREFERRED_CAMERA_SETTINGS[key], key))
+                cam.set(key, Tengu.PREFERRED_CAMERA_SETTINGS[key])
 
         while not self._stopped:
             ret, frame = cam.read()
