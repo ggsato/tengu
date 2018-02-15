@@ -105,7 +105,7 @@ class Tengu(object):
 
             # increment
             self._current_frame += 1
-            event_dict[Tengu.EVENT_FRAME_NO, self._current_frame]
+            event_dict[Tengu.EVENT_FRAME_NO] = self._current_frame
 
             # debug
             #if self._current_frame > 1000:
@@ -119,11 +119,11 @@ class Tengu(object):
 
             # use copy for gui use, which is done asynchronously, meaning may corrupt buffer during camera updates
             copy = frame.copy()
-            event_dict[Tengu.EVENT_FRAME, copy]
+            event_dict[Tengu.EVENT_FRAME] = copy
 
             # preprocess
             cropped = self.preprocess(frame, roi, scale)
-            event_dict[Tengu.EVENT_FRAME_CROPPED, cropped]
+            event_dict[Tengu.EVENT_FRAME_CROPPED] = cropped
 
             # block for a client if necessary to synchronize
             if queue is not None:
@@ -148,10 +148,10 @@ class Tengu(object):
             # detect
             if tengu_flow_analyzer is not None:
                 detections, class_names, tracklets, scene = tengu_flow_analyzer.analyze_flow(cropped, self._current_frame)
-                event_dict[Tengu.EVENT_DETECTIONS, copy.copy(detections)]
-                event_dict[Tengu.EVENT_DETECTION_CLASSES, copy.copy(class_names)]
-                event_dict[Tengu.EVENT_TRACKLETS, tracklets]
-                event_dict[Tengu.EVENT_SCENE, scene]
+                event_dict[Tengu.EVENT_DETECTIONS] = detections
+                event_dict[Tengu.EVENT_DETECTION_CLASSES] = class_names
+                event_dict[Tengu.EVENT_TRACKLETS] = tracklets
+                event_dict[Tengu.EVENT_SCENE] = scene
 
                 # count trackings
                 if tengu_scene_analyzer is not None:

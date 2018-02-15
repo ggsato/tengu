@@ -3,7 +3,8 @@
 
 import logging, cv2
 
-from ..tengu_observer import TenguFrameChangeObserver
+from ..tengu import Tengu
+from ..tengu_observer import TenguObserver
 from ..tengu_tracker import TenguTracker, Tracklet
 
 class OpenCVTracklet(Tracklet):
@@ -33,7 +34,7 @@ class OpenCVTracklet(Tracklet):
         if updated:
             super(OpenCVTracklet, self).update_tracking(rect)
 
-class OpenCVTracker(TenguTracker, TenguFrameChangeObserver):
+class OpenCVTracker(TenguTracker, TenguObserver):
 
     tracker_types = ['BOOSTING', 'MIL','KCF', 'TLD', 'MEDIANFLOW']
 
@@ -42,9 +43,9 @@ class OpenCVTracker(TenguTracker, TenguFrameChangeObserver):
         self.tracker_type = tracker_type
         self.last_frame = None
 
-    def frame_changed(self, frame, frame_no):
-        self.last_frame = frame
-    
+    def frame_analyzed(self, event_dict):
+        self.last_frame = event_dict[Tengu.EVENT_FRAME]
+
     def resolve_trackings(self, detections):
 
         """
