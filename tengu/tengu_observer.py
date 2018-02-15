@@ -1,27 +1,11 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-class TenguFrameChangeObserver(object):
-    def frame_changed(self, frame, frame_no):
+class TenguObserver(object):
+    """ a base class to register as an observer, and get notified when every frame gets analyzed
+    """
+    def frame_analyzed(self, event_dict):
         pass
 
-    def frame_preprocessed(self, preprocessed):
-        pass
-
-class TenguObjectsDetectionObserver(object):
-    def objects_detected(self, detections, class_names):
-        pass
-
-class TenguTrackletsUpdateObserver(object):
-    def tracklets_updated(self, tracklets):
-        pass
-
-class TenguAnalysisObserver(object):
     def analysis_finished(self):
         pass
-
-class TenguObserver(TenguFrameChangeObserver, TenguObjectsDetectionObserver, TenguTrackletsUpdateObserver, TenguAnalysisObserver):
-    """
-    This is a base class of all the Tengu observers including Detector, Tracker, Counter, CountReporter, and any other GUI classes.
-    """
-    pass

@@ -11,13 +11,24 @@ import logging
 
 from weakref import WeakValueDictionary
 
-from tengu_observer import *
+from tengu_observer import TenguObserver
 
 class Tengu(object):
 
     # dictionary to set camera settings
     # e.g. width {3, 1280}
     PREFERRED_CAMERA_SETTINGS = None
+
+    # event keys
+    EVENT_FRAME = 'ef'
+    EVENT_FRAME_NO = 'efn'
+    EVENT_FRAME_CROPPED = 'efc'
+
+    EVENT_DETECTIONS = 'ed'
+    EVENT_DETECTION_CLASSES = 'edc'
+
+    EVENT_TRACKLETS = 'et'
+    EVENT_SCENE = 'es'
 
     def __init__(self, equalize=False):
         self.logger= logging.getLogger(__name__)
@@ -34,6 +45,9 @@ class Tengu(object):
     def add_observer(self, observer):
         if observer == None:
             return
+        if not isinstance(observer, TenguObserver):
+            self.logger.info('{} is not an instance of TenguObserver')
+            return
         observer_id = id(observer)
         if self._observers.has_key(observer_id):
             return
@@ -46,35 +60,15 @@ class Tengu(object):
         if self._observers.has_key(observer_id):
             del self._observers[observer_id]
 
-    def _notify_frame_changed(self, frame):
+    def _notify_frame_analyzed(self, event_dict):
         for observer_id in self._observers:
             observer = self._observers[observer_id]
-            if isinstance(observer, TenguFrameChangeObserver):
-                observer.frame_changed(frame, self._current_frame)
-
-    def _notify_frame_preprocessed(self, preprocessed):
-        for observer_id in self._observers:
-            observer = self._observers[observer_id]
-            if isinstance(observer, TenguFrameChangeObserver):
-                observer.frame_preprocessed(preprocessed)
-
-    def _notify_tracklets_updated(self, tracklets):
-        for observer_id in self._observers:
-            observer = self._observers[observer_id]
-            if isinstance(observer, TenguTrackletsUpdateObserver):
-                observer.tracklets_updated(tracklets)
-
-    def _notify_objects_detected(self, detections, class_names):
-        for observer_id in self._observers:
-            observer = self._observers[observer_id]
-            if isinstance(observer, TenguObjectsDetectionObserver):
-                observer.objects_detected(detections, class_names)
+            observer.frame_analyzed(event_dict)
 
     def _notify_analysis_finished(self):
         for observer_id in self._observers:
             observer = self._observers[observer_id]
-            if isinstance(observer, TenguAnalysisObserver):
-                observer.analysis_finished()
+            observer.analysis_finished()
 
     def run(self, src=None, roi=None, scale=None, every_x_frame=1, rotation=0, tengu_flow_analyzer=None, tengu_scene_analyzer=None, queue=None, max_queue_wait=10, skip_to=-1):
         """
@@ -107,8 +101,11 @@ class Tengu(object):
                 self.logger.debug('no frame is avaiable')
                 break
 
+            event_dict = {}
+
             # increment
             self._current_frame += 1
+            event_dict[Tengu.EVENT_FRAME_NO, self._current_frame]
 
             # debug
             #if self._current_frame > 1000:
@@ -122,11 +119,11 @@ class Tengu(object):
 
             # use copy for gui use, which is done asynchronously, meaning may corrupt buffer during camera updates
             copy = frame.copy()
-            self._notify_frame_changed(frame)
+            event_dict[Tengu.EVENT_FRAME, copy]
 
             # preprocess
             cropped = self.preprocess(frame, roi, scale)
-            self._notify_frame_preprocessed(cropped.copy())
+            event_dict[Tengu.EVENT_FRAME_CROPPED, cropped]
 
             # block for a client if necessary to synchronize
             if queue is not None:
@@ -144,15 +141,17 @@ class Tengu(object):
 
             # skip if necessary
             if (every_x_frame > 1 and self._current_frame % every_x_frame != 0) or (skip_to > 0 and self._current_frame < skip_to):
-                self._current_frame += 1
                 self.logger.debug('skipping frame at {}'.format(self._current_frame))
+                self._notify_frame_analyzed(event_dict)
                 continue
 
             # detect
             if tengu_flow_analyzer is not None:
                 detections, class_names, tracklets, scene = tengu_flow_analyzer.analyze_flow(cropped, self._current_frame)
-                self._notify_objects_detected(detections, class_names)
-                self._notify_tracklets_updated(tracklets)
+                event_dict[Tengu.EVENT_DETECTIONS, copy.copy(detections)]
+                event_dict[Tengu.EVENT_DETECTION_CLASSES, copy.copy(class_names)]
+                event_dict[Tengu.EVENT_TRACKLETS, tracklets]
+                event_dict[Tengu.EVENT_SCENE, scene]
 
                 # count trackings
                 if tengu_scene_analyzer is not None:
@@ -161,6 +160,10 @@ class Tengu(object):
 
                 else:
                     self.logger.debug('skip calling scene analyzer')
+
+
+            # notify observers
+            self._notify_frame_analyzed(event_dict)
 
             # only for debugging
             #time.sleep(1)
