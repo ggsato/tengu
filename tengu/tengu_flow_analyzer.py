@@ -474,7 +474,7 @@ class TenguFlow(object):
         # check directions first
         if self._directions is not None and another_flow.direction is not None:
             allowed = self._directions[0] < another_flow.direction and another_flow.direction < self._directions[1]
-            logging.info('checking directions between {} and {}, allowed? {}'.format(self.name, another_flow, allowed))
+            logging.debug('checking directions between {} and {}, allowed? {}'.format(self.name, another_flow, allowed))
             if not allowed:
                 return 0.0
         # path similarity
