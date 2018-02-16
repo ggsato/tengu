@@ -399,13 +399,15 @@ class TenguFlow(object):
     """
     min_source_sink_similarity_dist = 2.0
 
-    def __init__(self, source=None, sink=None, path=[], name='default', group='default'):
+    def __init__(self, source=None, sink=None, path=[], name='default', group='default', directions=None):
         super(TenguFlow, self).__init__()
         self._source = source
         self._sink = sink
         self._path = path
         self._name = name
         self._group = group
+        # if exists, tracklets within this directions are allowed, otherwise, such a similarity should return 0
+        self._directions = directions
 
         # transient attributes
 
@@ -439,7 +441,10 @@ class TenguFlow(object):
             path.append(blk_node_map[js_node['y_blk']][js_node['x_blk']])
         js_source = js['source']
         js_sink = js['sink']
-        return TenguFlow(blk_node_map[js_source['y_blk']][js_source['x_blk']], blk_node_map[js_sink['y_blk']][js_sink['x_blk']], path, js['name'], js['group'])
+        directions = None
+        if js.has_key('directions'):
+            directions = js['directions']
+        return TenguFlow(source=blk_node_map[js_source['y_blk']][js_source['x_blk']], sink=blk_node_map[js_sink['y_blk']][js_sink['x_blk']], path=path, name=js['name'], group=js['group'], directions=directions)
 
     @property
     def source(self):
@@ -466,6 +471,12 @@ class TenguFlow(object):
         return self._direction
 
     def similarity(self, another_flow):
+        # check directions first
+        if self._directions is not None and another_flow.direction is not None:
+            allowed = self._directions[0] < another_flow.direction and another_flow.direction < self._directions[1]
+            logging.info('checking directions between {} and {}, allowed? {}'.format(self.name, another_flow, allowed))
+            if not allowed:
+                return 0.0
         # path similarity
         shorter = self if len(self.path) < len(another_flow.path) else another_flow
         longer = self if another_flow == shorter else another_flow
