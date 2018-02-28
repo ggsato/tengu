@@ -36,6 +36,11 @@ class Tengu(object):
 
         self._observers = WeakValueDictionary()
         self._current_frame = -1
+
+        """ terminate if True
+        TODO: this works only in the same process.
+        Otherwise, this has to be something else to communicate between processes
+        """
         self._stopped = False
 
     @property
@@ -70,11 +75,9 @@ class Tengu(object):
             observer = self._observers[observer_id]
             observer.analysis_finished()
 
+    """ start running analysis on src
+    """
     def run(self, src=None, roi=None, scale=None, every_x_frame=1, rotation=0, tengu_flow_analyzer=None, tengu_scene_analyzer=None, queue=None, max_queue_wait=10, skip_to=-1):
-        """
-        the caller should register by add_observer before calling run if it needs updates during analysis
-        this should return quicky for the caller to do its own tasks especially showing progress graphically
-        """
         self.logger.info('running with flow_analyzer:{}, scene_analyzer:{}, roi={}, scale={}, skipping to {}'.format(tengu_flow_analyzer, tengu_scene_analyzer, roi, scale, skip_to))
         
         if src is None:
@@ -118,20 +121,20 @@ class Tengu(object):
                 frame = cv2.warpAffine(frame, M, (cols, rows))
 
             # use copy for gui use, which is done asynchronously, meaning may corrupt buffer during camera updates
-            copy = frame.copy()
-            event_dict[Tengu.EVENT_FRAME] = copy
+            event_dict[Tengu.EVENT_FRAME] = frame.copy()
 
             # preprocess
             cropped = self.preprocess(frame, roi, scale)
-            event_dict[Tengu.EVENT_FRAME_CROPPED] = cropped
+            cropped_copy = cropped.copy()
+            event_dict[Tengu.EVENT_FRAME_CROPPED] = cropped_copy
 
-            # block for a client if necessary to synchronize
+            # synchronize with a client if necessary
             if queue is not None:
                 done = False
                 while not done and not self._stopped:
                     # wait until queue becomes ready
                     try:
-                        queue.put_nowait(cropped.copy())
+                        queue.put_nowait(cropped_copy)
                         done = True
                     except Queue.Full:
                         self.logger.debug('queue is full, quitting...')
@@ -145,7 +148,7 @@ class Tengu(object):
                 self._notify_frame_analyzed(event_dict)
                 continue
 
-            # detect
+            # flow analysis
             if tengu_flow_analyzer is not None:
                 detections, class_names, tracklets, scene = tengu_flow_analyzer.analyze_flow(cropped, self._current_frame)
                 event_dict[Tengu.EVENT_DETECTIONS] = detections
@@ -153,7 +156,7 @@ class Tengu(object):
                 event_dict[Tengu.EVENT_TRACKLETS] = tracklets
                 event_dict[Tengu.EVENT_SCENE] = scene
 
-                # count trackings
+                # scene analysis
                 if tengu_scene_analyzer is not None:
                     self.logger.debug('calling scene analyzer')
                     tengu_scene_analyzer.analyze_scene(cropped, scene)
