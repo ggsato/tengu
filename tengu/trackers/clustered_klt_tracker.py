@@ -137,9 +137,7 @@ class ClusteredKLTTracklet(Tracklet):
         # rect has to be updated after similarity calculation
         self._rect = assignment.detection
         self._hist = assignment.hist
-        center = self.center
-        self.update_location(center)
-        self._centers.append(center)
+        self._centers.append(self.center)
         # to get a stable direction, keep all the centers
         #if len(self._centers) > self.tracker._min_length:
         #    del self._centers[0]
@@ -167,6 +165,7 @@ class ClusteredKLTTracklet(Tracklet):
         if len(self._assignments) > 0 and self.similarity(assignment) < Tracklet._min_confidence:
             # do not accept this
             self.update_without_assignment()
+            self.update_location(None)
         else:
             # update
             self._assignments.append(assignment)
@@ -176,6 +175,7 @@ class ClusteredKLTTracklet(Tracklet):
             if not self._class_map.has_key(class_name):
                 self._class_map[class_name] = 0
             self._class_map[class_name] += 1
+            self.update_location(self._centers[-1])
 
     def update_without_assignment(self):
         """
@@ -190,14 +190,17 @@ class ClusteredKLTTracklet(Tracklet):
             next_rect = empty.estinamte_next_rect(self._rect)
             if next_rect is None:
                 self.recent_updates_by('2-0x')
+                self.update_location(None)
             else:
                 empty.detection = next_rect
                 self._assignments.append(empty)
                 self.update_properties()
                 self.recent_updates_by('2-0')
+                self.update_location(self._centers[-1])
         else:
             # pattern 2
             self.recent_updates_by('2-1')
+            self.update_location(None)
         
         self.validate_nodes()
 

@@ -15,7 +15,7 @@ class TenguObject(object):
     To achieve the first purpose, this class uses a KalmanFilter.
     """
 
-    def __init__(self, R_std=5., Q=1., dt=1, P=100.):
+    def __init__(self, R_std=10., Q=.0001, dt=1, P=100.):
         self._filter = TenguObject.create_filter(R_std, Q, dt, P)
         self._zs = []
         self._xs = []
@@ -33,6 +33,13 @@ class TenguObject(object):
             return (self._filter.x[0], self._filter.x[3])
 
         return (self._xs[-1][0], self._xs[-1][3])
+
+    @property
+    def measurement(self):
+        if len(self._zs) == 0:
+            return (self._filter.x[0], self._filter.x[3])
+
+        return (self._zs[-1][0], self._zs[-1][1])
 
     @property
     def direction(self):
@@ -58,16 +65,19 @@ class TenguObject(object):
 
 
         """
-        self._zs.append(z)
-        if len(self._xs) == 0:
+        if len(self._zs) == 0:
+            if z is None:
+                return
             # initialize
             self._filter.x = np.array([[z[0], 0., 0., z[1], 0., 0.,]]).T
         else:
             # predict
             self._filter.predict()
-            self._update(z)
+            if z is not None:
+                self._filter.update(z)
             self._xs.append(self._filter.x)
             self._covs.append(self._filter.P)
+        self._zs.append(z)
 
     def similarity(self, another):
         """ calculate a similarity between self and another instance of TenguObject 
