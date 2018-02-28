@@ -32,8 +32,8 @@ a cost matrix is calculated for assignments.
 
 class ClusteredKLTTracklet(Tracklet):
 
-    def __init__(self, tracker, keep_lost_tracklet=False):
-        super(ClusteredKLTTracklet, self).__init__()
+    def __init__(self, tracker, keep_lost_tracklet=False, **kwargs):
+        super(ClusteredKLTTracklet, self).__init__(**kwargs)
         self._direction = None
         self.tracker = tracker
         self._keep_lost_tracklet = keep_lost_tracklet
@@ -137,7 +137,9 @@ class ClusteredKLTTracklet(Tracklet):
         # rect has to be updated after similarity calculation
         self._rect = assignment.detection
         self._hist = assignment.hist
-        self._centers.append(NodeCluster.center(self._rect))
+        center = self.center
+        self.update_location(center)
+        self._centers.append(center)
         # to get a stable direction, keep all the centers
         #if len(self._centers) > self.tracker._min_length:
         #    del self._centers[0]

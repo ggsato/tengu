@@ -2,6 +2,9 @@
 # -*- coding: utf-8 -*-
 
 import numpy as np
+from scipy.linalg import block_diag
+from filterpy.kalman import KalmanFilter
+from filterpy.common import Q_discrete_white_noise
 
 class TenguObject(object):
     """ TenguObject is a base class of any travelling object classes.
@@ -12,21 +15,11 @@ class TenguObject(object):
     To achieve the first purpose, this class uses a KalmanFilter.
     """
 
-    DEFAULT_LOCATION_VALUE = -1.0
-
-    def __init__(self, fps=25, keep_locations_in_seconds=10):
-        self._fps = fps
-        self._keep_locations_in_seconds = keep_locations_in_seconds
-        self._locations = np.ones((keep_locations_in_seconds, fps, 2), np.dtype=np.float) * TenguObject.DEFAULT_LOCATION_VALUE
-        self._location_ix = -1
-
-    @property
-    def path(self):
-        """ a path is a history of past locations
-
-        returns a list of (x, y)
-        """
-        return copy.copy(self._locations)
+    def __init__(self, R_std=5., Q=1., dt=1, P=100.):
+        self._filter = TenguObject.create_filter(R_std, Q, dt, P)
+        self._zs = []
+        self._xs = []
+        self._covs = []
 
     @property
     def location(self):
@@ -36,10 +29,10 @@ class TenguObject(object):
 
         returns (x, y) or None if no location history
         """
-        if len(self._locations) == 0:
-            return None
+        if len(self._xs) == 0:
+            return (self._filter.x[0], self._filter.x[3])
 
-        return self._locations[-1]
+        return (self._xs[-1][0], self._xs[-1][3])
 
     @property
     def direction(self):
@@ -60,12 +53,21 @@ class TenguObject(object):
         """
         pass
 
-    def update_location(self, observed_location):
-        """ update the current location by a predicted location and the given observed_location
+    def update_location(self, z):
+        """ update the current location by a predicted location and the given z(observed_location)
 
 
         """
-        pass
+        self._zs.append(z)
+        if len(self._xs) == 0:
+            # initialize
+            self._filter.x = np.array([[z[0], 0., 0., z[1], 0., 0.,]]).T
+        else:
+            # predict
+            self._filter.predict()
+            self._update(z)
+            self._xs.append(self._filter.x)
+            self._covs.append(self._filter.P)
 
     def similarity(self, another):
         """ calculate a similarity between self and another instance of TenguObject 
@@ -73,3 +75,28 @@ class TenguObject(object):
         a similarity
         """
         pass
+
+    @staticmethod
+    def create_filter(R_std, Q, dt, P):
+        """ creates a second order Kalman Filter
+
+        R_std: float, a standard deviation of measurement error
+        Q    : float, a covariance of process noise
+        dt   : int, a time unit
+        P    : float, a maximum initial covariance
+        """
+        kf = KalmanFilter(dim_x=6, dim_z=2)
+        kf.x = np.array([[0, 0, 0, 0, 0, 0]]).T
+        kf.P = np.eye(6) * P
+        kf.R = np.eye(2) * R_std**2
+        q = Q_discrete_white_noise(3, dt, Q)
+        kf.Q = block_diag(q, q)
+        kf.F = np.array([[1., dt, .5*dt*dt, 0., 0., 0.],
+                         [0., 1., dt, 0., 0., 0.],
+                         [0., 0., 1., 0., 0., 0.],
+                         [0., 0., 0., 1., dt, .5*dt*dt],
+                         [0., 0., 0., 0., 1., dt],
+                         [0., 0., 0., 0., 0., 1.]])
+        kf.H = np.array([[1., 0., 0., 0., 0., 0.],
+                         [0., 0., 0., 1., 0., 0.]])
+        return kf
