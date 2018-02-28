@@ -99,7 +99,7 @@ class ClusteredKLTTracklet(Tracklet):
         to_y = min(frame.shape[0], int(to_y + rect[3] * bigger_ratio))
         from_x = int(rect[0])
         from_x = max(0, int(from_x - rect[2] * bigger_ratio))
-        to_x = int(rect[0]+rect[3])
+        to_x = int(rect[0]+rect[2])
         to_x = min(frame.shape[1], int(to_x + rect[2] * bigger_ratio))
         img = frame[from_y:to_y, from_x:to_x, :]
         hist = cv2.calcHist([img], [0, 1, 2], None, [32, 32, 32], [0, 256, 0, 256, 0, 256])
@@ -233,7 +233,7 @@ class ClusteredKLTTracklet(Tracklet):
         """get intermediate images
         """
         cropped_images = []
-        use_intermediate = False
+        use_intermediate = True
         if use_intermediate:
             diff = len(self._assignments) - max_size
             offset = 0
