@@ -781,7 +781,7 @@ class TenguFlowAnalyzer(object):
     def update_existing_tracklets(self, existing_tracklets):
         
         for existing_tracklet in existing_tracklets:
-            if existing_tracklet.has_left:
+            if existing_tracklet.has_left or not existing_tracklet.is_confirmed:
                 continue
 
             prev_flow_node = existing_tracklet.path[-1]
