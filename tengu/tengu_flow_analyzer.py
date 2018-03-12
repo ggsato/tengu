@@ -798,32 +798,34 @@ class TenguFlowAnalyzer(object):
             # but this could happen by a quickly moving tracklet
             # so check this only when building scene
             if self._scene_file is None and not self._allow_non_adjacent_edge and not flow_node.adjacent(prev_flow_node):
-                self.logger.debug('{} is not adjacent of {}'.format(flow_node, prev_flow_node))
-                continue
-            
-            # add flow
-            existing_tracklet.add_flow_node_to_path(flow_node)
-            # min_set = [source, prev_flow_node, flow_node]
-            if len(existing_tracklet.path) < 5:
-                # prev prev is not available
-                self.logger.debug('path length is too short for modified shortest path finding for {}'.format(existing_tracklet))
+                self.logger.debug('skipping update of {}, {} is not adjacent of {}'.format(existing_tracklet, flow_node, prev_flow_node))
                 continue
 
             if self._tracker.ignore_tracklet(existing_tracklet):
                 self.logger.debug('ignoring update of {}'.format(existing_tracklet))
                 continue
 
+            # add flow
+            existing_tracklet.add_flow_node_to_path(flow_node)
+
+            # update graph
             if self._scene_file is None:
                 # update edge
                 if not self._flow_graph.has_edge(prev_flow_node, flow_node):
-                    self.logger.debug('making an edge from {} to {}'.format(prev_flow_node, flow_node))
+                    self.logger.info('making an edge from {} to {}'.format(prev_flow_node, flow_node))
                     self._flow_graph.add_edge(prev_flow_node, flow_node, weight={})
                 edge = self._flow_graph[prev_flow_node][flow_node]
                 prev_prev_flow_node = existing_tracklet.path[-2]
                 if not edge['weight'].has_key(prev_prev_flow_node):
                     edge['weight'][prev_prev_flow_node] = 0
                 edge['weight'][prev_prev_flow_node] += 1
-                self.logger.debug('updating weight at {}'.format(edge))
+                self.logger.info('updating weight at {}'.format(edge))
+
+            # no path available yet
+            if len(existing_tracklet.path) < 5:
+                # prev prev is not available
+                self.logger.debug('path length is too short for modified shortest path finding for {}'.format(existing_tracklet))
+                continue
 
             # check if this tracklet is on a flow
             # total cost of a shortest path tends to point to a closer sink
@@ -890,7 +892,7 @@ class TenguFlowAnalyzer(object):
                     removed_tracklet._current_flow.remove_tracklet(removed_tracklet)
                 return
             flow_node.mark_sink(source_node)
-            self.logger.debug('sink at {}'.format(flow_node))
+            self.logger.info('{} sink at {} through {}'.format(removed_tracklet, flow_node, removed_tracklet.path))
 
             # flow operations for counting
             if removed_tracklet._current_flow is None:
@@ -898,11 +900,11 @@ class TenguFlowAnalyzer(object):
                     # this has already passed a flow
                     removed_tracklet.passed_flow.put_tracklet(removed_tracklet, 0, 1, shortest_path_for_debug=None)
                     removed_tracklet.mark_removed()
-                    self.logger.debug('{} has passed {}, and removed for counting'.format(removed_tracklet, removed_tracklet.passed_flow))
+                    self.logger.info('{} has passed {}, and removed for counting'.format(removed_tracklet, removed_tracklet.passed_flow))
                 else:
                     self.logger.debug('{} will be just removed without counting, no flow assigned...'.format(removed_tracklet))
             else:
-                self.logger.debug('{} was removed for counting on {}'.format(removed_tracklet, removed_tracklet._current_flow))
+                self.logger.info('{} was removed for counting on {}'.format(removed_tracklet, removed_tracklet._current_flow))
                 removed_tracklet.mark_removed()
 
     def build_scene(self):
@@ -916,6 +918,7 @@ class TenguFlowAnalyzer(object):
         # sinks
         try:
             major_sinks = sorted(self._flow_graph, key=attrgetter('sink_count'), reverse=True)
+            self.logger.info('checking {} major sinks'.format(len(major_sinks)))
         except:
             self.print_graph()
             raise
@@ -932,6 +935,7 @@ class TenguFlowAnalyzer(object):
                 return
             path, _ = self.find_shortest_path_and_cost(major_source, major_sink)
             if path is None:
+                self.logger.info('no path exists between {} and {}'.format(major_source, major_sink))
                 continue
             # build
             tengu_flow = TenguFlow(major_source, major_sink, path, name='{:02d}'.format(len(flows)))
@@ -941,7 +945,7 @@ class TenguFlowAnalyzer(object):
                 similarity = flow.similarity(tengu_flow)
                 self.logger.debug('similarity between {} and {} = {}'.format(flow, tengu_flow, similarity)) 
                 if similarity > self._identical_flow_similarity:
-                    self.logger.debug('a flow from {} to {} is too similar to {}, being skipped...'.format(major_source, major_sink, flow))
+                    self.logger.info('a flow from {} to {} is too similar to {}, being skipped...'.format(major_source, major_sink, flow))
                     unique = False
                     break
             if not unique:
@@ -951,6 +955,7 @@ class TenguFlowAnalyzer(object):
         # sources
         try:
             major_sources = sorted(self._flow_graph, key=attrgetter('source_count'), reverse=True)
+            self.logger.info('checking {} major sources'.format(len(major_sources)))
         except:
             self.print_graph()
             raise
@@ -969,6 +974,7 @@ class TenguFlowAnalyzer(object):
                 return
             path, _ = self.find_shortest_path_and_cost(major_source, major_sink)
             if path is None:
+                self.logger.info('no path exists between {} and {}'.format(major_source, major_sink))
                 continue
             # build
             tengu_flow = TenguFlow(major_source, major_sink, path, name='{:02d}'.format(len(flows)))
@@ -978,7 +984,7 @@ class TenguFlowAnalyzer(object):
                 similarity = flow.similarity(tengu_flow)
                 self.logger.debug('similarity between {} and {} = {}'.format(flow, tengu_flow, similarity)) 
                 if similarity > self._identical_flow_similarity:
-                    self.logger.debug('a flow from {} to {} is too similar to {}, being skipped...'.format(major_source, major_sink, flow))
+                    self.logger.info('a flow from {} to {} is too similar to {}, being skipped...'.format(major_source, major_sink, flow))
                     unique = False
                     break
             if not unique:
