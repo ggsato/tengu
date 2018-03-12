@@ -773,7 +773,7 @@ class TenguFlowAnalyzer(object):
     def add_new_tracklets(self, new_tracklets):
         
         for new_tracklet in new_tracklets:
-            flow_node = self.flow_node_at(*new_tracklet.center)
+            flow_node = self.flow_node_at(*new_tracklet.location)
             flow_node.mark_source()
             new_tracklet.add_flow_node_to_path(flow_node)
             self.logger.debug('source at {}'.format(flow_node))
@@ -781,8 +781,11 @@ class TenguFlowAnalyzer(object):
     def update_existing_tracklets(self, existing_tracklets):
         
         for existing_tracklet in existing_tracklets:
+            if existing_tracklet.has_left:
+                continue
+
             prev_flow_node = existing_tracklet.path[-1]
-            flow_node = self.flow_node_at(*existing_tracklet.center)
+            flow_node = self.flow_node_at(*existing_tracklet.location)
             if prev_flow_node == flow_node:
                 # no change
                 self.logger.debug('{} stays on the same flow node'.format(existing_tracklet))
@@ -822,39 +825,37 @@ class TenguFlowAnalyzer(object):
                 edge['weight'][prev_prev_flow_node] += 1
                 self.logger.debug('updating weight at {}'.format(edge))
 
-
-            if not existing_tracklet.has_left:
-                # check if this tracklet is on a flow
-                # total cost of a shortest path tends to point to a closer sink
-                # so, check the cost of the next edge on each shortest path,
-                # which is correctly weighted by prev prev node
-                most_similar_flow = None
-                best_similarity = 0
-                for flow in self._scene.flows:
-                    similarity = flow.similarity(existing_tracklet)
-                    self.logger.debug('similarity of {} to {} is {:03.2f}'.format(flow, existing_tracklet, similarity))
-                    if similarity > best_similarity:
-                        most_similar_flow = flow
-                        best_similarity = similarity
-                self.logger.debug('the most similar flow of {} is {} at {}'.format(existing_tracklet, most_similar_flow, best_similarity))
-                if most_similar_flow is not None:
-                    if existing_tracklet.speed > -1 and existing_tracklet.path[-1].adjacent(most_similar_flow.sink):
-                        # ok, mark this as passed
-                        existing_tracklet.mark_flow_passed(most_similar_flow)
-                        self.logger.debug('{} passed {}'.format(existing_tracklet, flow))
-                        continue
-                    # TODO: filter by a threshold by lowest cost
-                    path, dist_to_sink = self.find_shortest_path_and_cost(flow_node, most_similar_flow.sink)
-                    if path is None and best_similarity < self._identical_flow_similarity:
-                        # no such path exist
-                        self.logger.debug('less similarity {} and no such path from {} to {}'.format(best_similarity, flow_node, most_similar_flow.sink))
-                        continue
-                    most_similar_flow.put_tracklet(existing_tracklet, dist_to_sink, best_similarity, shortest_path_for_debug=path)
-                elif existing_tracklet._current_flow is not None:
-                    # this may have left the prev flow, and yet not identified by a new
-                    # set None to reset
-                    existing_tracklet._current_flow.remove_tracklet(existing_tracklet)
-                    existing_tracklet.set_flow(None, 0, 0, shortest_path_for_debug=None)
+            # check if this tracklet is on a flow
+            # total cost of a shortest path tends to point to a closer sink
+            # so, check the cost of the next edge on each shortest path,
+            # which is correctly weighted by prev prev node
+            most_similar_flow = None
+            best_similarity = 0
+            for flow in self._scene.flows:
+                similarity = flow.similarity(existing_tracklet)
+                self.logger.debug('similarity of {} to {} is {:03.2f}'.format(flow, existing_tracklet, similarity))
+                if similarity > best_similarity:
+                    most_similar_flow = flow
+                    best_similarity = similarity
+            self.logger.debug('the most similar flow of {} is {} at {}'.format(existing_tracklet, most_similar_flow, best_similarity))
+            if most_similar_flow is not None:
+                if existing_tracklet.speed > -1 and existing_tracklet.path[-1].adjacent(most_similar_flow.sink):
+                    # ok, mark this as passed
+                    existing_tracklet.mark_flow_passed(most_similar_flow)
+                    self.logger.debug('{} passed {}'.format(existing_tracklet, flow))
+                    continue
+                # TODO: filter by a threshold by lowest cost
+                path, dist_to_sink = self.find_shortest_path_and_cost(flow_node, most_similar_flow.sink)
+                if path is None and best_similarity < self._identical_flow_similarity:
+                    # no such path exist
+                    self.logger.debug('less similarity {} and no such path from {} to {}'.format(best_similarity, flow_node, most_similar_flow.sink))
+                    continue
+                most_similar_flow.put_tracklet(existing_tracklet, dist_to_sink, best_similarity, shortest_path_for_debug=path)
+            elif existing_tracklet._current_flow is not None:
+                # this may have left the prev flow, and yet not identified by a new
+                # set None to reset
+                existing_tracklet._current_flow.remove_tracklet(existing_tracklet)
+                existing_tracklet.set_flow(None, 0, 0, shortest_path_for_debug=None)
 
     def finish_removed_tracklets(self, removed_tracklets):
         
@@ -881,7 +882,7 @@ class TenguFlowAnalyzer(object):
                     removed_tracklet._current_flow.remove_tracklet(removed_tracklet)
                 continue
 
-            flow_node = self.flow_node_at(*removed_tracklet.center)
+            flow_node = self.flow_node_at(*removed_tracklet.location)
             source_node = removed_tracklet.path[0]
             if flow_node == source_node:
                 self.logger.debug('same source {} and sink {}, skipped'.format(source_node, flow_node))
@@ -1224,6 +1225,8 @@ class TenguFlowAnalyzer(object):
 
         # tracklets
         for tracklet in self._last_tracklets:
+            if tracklet.has_left:
+                continue
             lines = []
             for node in tracklet.path:
                 lines.append(node.position)

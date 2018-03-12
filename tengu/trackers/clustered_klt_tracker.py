@@ -34,28 +34,14 @@ class ClusteredKLTTracklet(Tracklet):
 
     def __init__(self, tracker, keep_lost_tracklet=False, **kwargs):
         super(ClusteredKLTTracklet, self).__init__(**kwargs)
-        self._direction = None
         self.tracker = tracker
         self._keep_lost_tracklet = keep_lost_tracklet
+        self._widths = []
+        self._heights = []
         self._rect = None
         self._hist = None
         self._centers = []
         self._validated_nodes = Set([])
-
-    @property
-    def rect(self):
-        """
-        an internal rect is updated with or without assignment as follows:
-        1. with assignment
-            rect <= detection
-        2. without assignment
-            2-0: update its position by valid ndoes
-            2-1: no valid nodes anymore, only one assignment is available
-                rect <= NO UPDATE
-            2-2: 2 detections are available
-                rect <= two previous rects
-        """
-        return self._rect
 
     def similarity(self, assignment):
         """
@@ -107,24 +93,6 @@ class ClusteredKLTTracklet(Tracklet):
         flattened = hist.flatten()
         return flattened, img.copy()
 
-    def last_movement(self):
-        if len(self._centers) < self.tracker._min_length:
-            # no speed calculation possible
-            return None
-
-        pos_last = self._centers[-1]
-        pos_first = self._centers[0]
-
-        # direction
-        # atan results is between -pi and pi
-        self._direction = math.atan2(pos_last[1] - pos_first[1], pos_last[0] - pos_first[0])
-
-        return [(pos_last[0]-pos_first[0])/self.tracker._min_length, (pos_last[1]-pos_first[1])/self.tracker._min_length]
-
-    @property
-    def direction(self):
-        return self._direction
-
     def update_properties(self, lost=True):
         assignment = self._assignments[-1]
         self._movement = self.last_movement()
@@ -134,9 +102,15 @@ class ClusteredKLTTracklet(Tracklet):
             self._confidence = self._confidence * Tracklet._estimation_decay
         else:
             self._confidence = new_confidence
-        # rect has to be updated after similarity calculation
-        self._rect = assignment.detection
+        # hist is calculated at similarity
         self._hist = assignment.hist
+        # rect has to be updated after similarity calculation
+        self._widths.append(assignment.detection[2])
+        self._heights.append(assignment.detection[3])
+        if len(self._widths) > 10:
+            del self._widths[0]
+            del self._heights[0]
+        self._rect = assignment.detection
         self._centers.append(self.center)
         # to get a stable direction, keep all the centers
         #if len(self._centers) > self.tracker._min_length:
@@ -164,8 +138,10 @@ class ClusteredKLTTracklet(Tracklet):
 
         if len(self._assignments) > 0 and self.similarity(assignment) < Tracklet._min_confidence:
             # do not accept this
+            pass
+        elif self.has_left:
+            # no more update
             self.update_without_assignment()
-            self.update_location(None)
         else:
             # update
             self._assignments.append(assignment)
@@ -180,29 +156,25 @@ class ClusteredKLTTracklet(Tracklet):
     def update_without_assignment(self):
         """
         no update was available
-        so create a possible assignment to update
         """
 
         self.logger.debug('updating without {}@{}'.format(id(self), self.obj_id))
 
-        if len(self._validated_nodes) > 0:
-            empty = NodeCluster(self._validated_nodes, None)
-            next_rect = empty.estinamte_next_rect(self._rect)
-            if next_rect is None:
-                self.recent_updates_by('2-0x')
-                self.update_location(None)
-            else:
-                empty.detection = next_rect
-                self._assignments.append(empty)
-                self.update_properties()
-                self.recent_updates_by('2-0')
-                self.update_location(self._centers[-1])
-        else:
-            # pattern 2
-            self.recent_updates_by('2-1')
-            self.update_location(None)
+        self.recent_updates_by('2')
+        self.update_location(None)
         
         self.validate_nodes()
+
+    def update_location(self, z):
+        super(ClusteredKLTTracklet, self).update_location(z)
+
+        # update rect
+        location = self.location
+        w = int(sum(self._widths)/len(self._widths))
+        h = int(sum(self._heights)/len(self._heights))
+        x = location[0] - w/2
+        y = location[1] - h*3/4
+        self._rect = (x, y, w, h)
 
     def validate_nodes(self):
         """
@@ -474,6 +446,17 @@ class ClusteredKLTTracker(TenguTracker):
                 del self._tengu_flow_analyer._klt_analyzer.nodes[self._tengu_flow_analyer._klt_analyzer.nodes.index(node)]
 
         for tracklet in self._tracklets:
+            # check if it has already left
+            if tracklet.has_left:
+                continue
+            # check if any of rect corners has left
+            frame_shape = self._tengu_flow_analyer._frame_shape
+            has_left = tracklet.rect[0] <= 0 or tracklet.rect[1] <= 0 \
+                    or (tracklet.rect[0] + tracklet.rect[2] >= frame_shape[1]) \
+                    or (tracklet.rect[1] + tracklet.rect[3] >= frame_shape[0])
+            if has_left:
+                tracklet.mark_left()
+                continue
             # obsolete if one of its nodes has left
             for node in tracklet._validated_nodes:
                 if node.has_left:
@@ -508,7 +491,7 @@ class ClusteredKLTTracker(TenguTracker):
             for node in tracklet._validated_nodes:
                 cv2.circle(self.debug, node.tr[-1], 5, 256, -1)
             if tracklet.direction is not None:
-                diameter = min(50, tracklet.last_movement)
+                diameter = 50
                 color = 0 if self.ignore_tracklet(tracklet) else 255
-                cv2.arrowedLine(self.debug, tracklet.center, (tracklet.center[0] + int((math.cos(tracklet.direction) * diameter)), tracklet.center[1] + int(math.sin(tracklet.direction) * diameter)), color)
-                draw_str(self.debug, tracklet.center, '{}'.format(tracklet.direction))
+                cv2.arrowedLine(self.debug, tracklet.location, (tracklet.location[0] + int((math.cos(tracklet.direction) * diameter)), tracklet.location[1] + int(math.sin(tracklet.direction) * diameter)), color)
+                draw_str(self.debug, tracklet.location, '{}'.format(tracklet.direction))

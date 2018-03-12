@@ -30,7 +30,6 @@ class Tracklet(TenguObject):
         # incremental unique object id
         self._obj_id = Tracklet._class_obj_id
         self._last_updated_at = -1
-        self._observations = 0
         self._assignments = []
         self._rect = None
         self._movement = None
@@ -104,10 +103,6 @@ class Tracklet(TenguObject):
     def last_update_pattern(self):
         return self._recent_updates[-1]
 
-    @property
-    def observations(self):
-        return self._observations
-
     def similarity(self, assignment):
         """
         calculate similarity of assignment to self
@@ -130,7 +125,6 @@ class Tracklet(TenguObject):
         self._rect = assignment
         if not lost:
             self._last_updated_at = TenguTracker._global_updates
-            self._observations += 1
 
     def update_with_assignment(self, assignment, class_name):
         """
@@ -172,14 +166,7 @@ class Tracklet(TenguObject):
         self.recent_updates_by('2')
 
     def last_movement(self):
-        if len(self._assignments) == 1:
-            # no speed calculation possible
-            return None
-
-        prev = self._assignments[-1]
-        prev2 = self._assignments[-2]
-
-        return (Tracklet.movement_from_rects(prev, prev2))
+        return super(Tracklet, self).movement
 
     def recent_updates_by(self, update_pattern):
         self._recent_updates.append(update_pattern)

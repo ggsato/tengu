@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
+import math
 import numpy as np
 from scipy.linalg import block_diag
 from filterpy.kalman import KalmanFilter
@@ -43,6 +44,24 @@ class TenguObject(object):
 
     @property
     def direction(self):
+        """ the direction of this TenguObject instance
+
+        A direction ranges from -pi(-180) to pi(180),
+        in the OpenCV coordinate system, the upper left corner is the origin.
+
+        The difference between a direction and a heading is that 
+        heading is the current direction, which could vary frequently,
+        while direction is more stable because it is computed from the first to the last.
+
+        return a float value (-pi, pi)  
+        """
+        if len(self._xs) < 2:
+            return None
+
+        return math.atan2(self._xs[-1][3] - self._xs[0][3], self._xs[-1][0] - self._xs[0][0])
+
+    @property
+    def heading(self):
         """ the current direction of this TenguObject instance
 
         A direction ranges from -pi(-180) to pi(180),
@@ -50,7 +69,10 @@ class TenguObject(object):
 
         return a float value (-pi, pi)  
         """
-        pass
+        if len(self._xs) < 2:
+            return None
+
+        return math.atan2(self._xs[-1][3] - self._xs[-2][3], self._xs[-1][0] - self._xs[-2][0])
 
     @property
     def speed(self):
@@ -58,7 +80,22 @@ class TenguObject(object):
 
         returns a float value >= 0
         """
-        pass
+        movement = self.movement
+        print('getting speed from the last movement {}'.format(movement))
+
+        if movement is None:
+            return None
+
+        return math.sqrt(movement[0]**2 + movement[1]**2)
+
+    @property
+    def movement(self):
+        """ the last movement of x, y, which is the speed in x and y
+        """
+        if len(self._xs) == 0:
+            return None
+
+        return (self._xs[-1][1], self._xs[-1][4])
 
     def update_location(self, z):
         """ update the current location by a predicted location and the given z(observed_location)
