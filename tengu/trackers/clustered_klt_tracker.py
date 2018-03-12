@@ -428,6 +428,17 @@ class ClusteredKLTTracker(TenguTracker):
         # obsolete trackings
         super(ClusteredKLTTracker, self).obsolete_trackings()
 
+        # obsolete if not is_confirmed
+        new_tracklet = []
+        for tracklet in self._tracklets:
+            if tracklet.is_confirmed:
+                new_tracklet.append(tracklet)
+            else:
+                self.logger.info('{} is marked as obsolete, not confirmed anymore'.format(tracklet))
+        removed = len(self._tracklets) - len(new_tracklet)
+        self._tracklets = new_tracklet
+        self.logger.debug('removed {} tracked objects due to obsoletion'.format(removed))
+
         # obsolete detected nodes
         obsolete_nodes = Set([])
         for node in self.detected_node_set:
@@ -473,12 +484,6 @@ class ClusteredKLTTracker(TenguTracker):
                     break
 
         self.detected_node_set = self.detected_node_set - obsolete_nodes
-
-    def is_obsolete(self, tracklet):
-        obsolete = super(ClusteredKLTTracker, self).is_obsolete(tracklet)
-        if not obsolete and not tracklet.is_confirmed:
-            obsolete = True
-        return obsolete
 
     def ignore_tracklet(self, tracklet):
         ignore_tracklet = False
