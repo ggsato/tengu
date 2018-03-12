@@ -884,15 +884,15 @@ class TenguFlowAnalyzer(object):
                     removed_tracklet._current_flow.remove_tracklet(removed_tracklet)
                 continue
 
-            flow_node = self.flow_node_at(*removed_tracklet.location)
+            sink_node = removed_tracklet.path[-1]
             source_node = removed_tracklet.path[0]
-            if flow_node == source_node:
-                self.logger.debug('same source {} and sink {}, skipped'.format(source_node, flow_node))
+            if sink_node == source_node:
+                self.logger.debug('same source {} and sink {}, skipped'.format(source_node, sink_node))
                 if removed_tracklet._current_flow is not None:
                     removed_tracklet._current_flow.remove_tracklet(removed_tracklet)
                 return
-            flow_node.mark_sink(source_node)
-            self.logger.info('{} sink at {} through {}'.format(removed_tracklet, flow_node, removed_tracklet.path))
+            sink_node.mark_sink(source_node)
+            self.logger.debug('{} sink at {} through {}'.format(removed_tracklet, sink_node, removed_tracklet.path))
 
             # flow operations for counting
             if removed_tracklet._current_flow is None:
@@ -900,11 +900,11 @@ class TenguFlowAnalyzer(object):
                     # this has already passed a flow
                     removed_tracklet.passed_flow.put_tracklet(removed_tracklet, 0, 1, shortest_path_for_debug=None)
                     removed_tracklet.mark_removed()
-                    self.logger.info('{} has passed {}, and removed for counting'.format(removed_tracklet, removed_tracklet.passed_flow))
+                    self.logger.debug('{} has passed {}, and removed for counting'.format(removed_tracklet, removed_tracklet.passed_flow))
                 else:
                     self.logger.debug('{} will be just removed without counting, no flow assigned...'.format(removed_tracklet))
             else:
-                self.logger.info('{} was removed for counting on {}'.format(removed_tracklet, removed_tracklet._current_flow))
+                self.logger.debug('{} was removed for counting on {}'.format(removed_tracklet, removed_tracklet._current_flow))
                 removed_tracklet.mark_removed()
 
     def build_scene(self):
