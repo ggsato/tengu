@@ -123,6 +123,30 @@ class TenguObject(object):
         """
         pass
 
+    @property
+    def variance(self):
+        """ the variance of x """
+        if len(self._xs) == 0:
+            return None
+
+        return (math.sqrt(self._covs[-1][0][0]), math.sqrt(self._covs[-1][3][3]))
+
+    @property
+    def variance_speed(self):
+        """ the variance of x speed """
+        if len(self._xs) == 0:
+            return None
+
+        return (math.sqrt(self._covs[-1][1][1]), math.sqrt(self._covs[-1][4][4]))
+
+    @property
+    def variance_x_accel(self):
+        """ the variance of x accel """
+        if len(self._xs) == 0:
+            return None
+
+        return (math.sqrt(self._covs[-1][2][2]), math.sqrt(self._covs[-1][5][5]))
+
     @staticmethod
     def create_filter(R_std, Q, dt, P):
         """ creates a second order Kalman Filter

@@ -88,7 +88,7 @@ class Tracklet(TenguObject):
         return self._last_updated_at
 
     @property
-    def updated(self):
+    def uptodate(self):
         return self._last_updated_at == TenguTracker._global_updates
 
     @property
@@ -489,7 +489,7 @@ class TenguTracker(object):
 
     def update_tracklets(self):
         for tracklet in self._tracklets:
-            if not tracklet.updated:
+            if not tracklet.uptodate:
                 self.assign_new_to_tracklet(None, None, tracklet)
 
     def assign_new_to_tracklet(self, new_assignment, class_name, tracklet):

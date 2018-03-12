@@ -176,6 +176,14 @@ class ClusteredKLTTracklet(Tracklet):
         y = location[1] - h*3/4
         self._rect = (x, y, w, h)
 
+        # update confidence based on variance
+        variance = self.variance
+        if variance is None:
+            return
+        confidence_x = min(1.0, w/2 / (variance[0]*3))
+        confidence_y = min(1.0, h/2 / (variance[1]*3))
+        self._confidence = min(confidence_x, confidence_y)
+
     def validate_nodes(self):
         """
         check and merge valid nodes
