@@ -474,6 +474,12 @@ class ClusteredKLTTracker(TenguTracker):
 
         self.detected_node_set = self.detected_node_set - obsolete_nodes
 
+    def is_obsolete(self, tracklet):
+        obsolete = super(ClusteredKLTTracker, self).is_obsolete(tracklet)
+        if not obsolete and not tracklet.is_confirmed:
+            obsolete = True
+        return obsolete
+
     def ignore_tracklet(self, tracklet):
         ignore_tracklet = False
         if self._ignore_direction_ranges is not None:
