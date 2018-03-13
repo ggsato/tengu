@@ -311,29 +311,36 @@ class KLTAnalyzer(object):
     def find_corners_to_track(self, frame_gray):
         self.logger.debug('finding corners')
 
-        if self._no_detector:
-            # every pixel is tracked by default
-            mask = np.ones_like(frame_gray) * 255
-        else:
-            # every pixel is *not* tracked by default
+        do_nothing = True
+        if do_nothing:
+
             mask = np.zeros_like(frame_gray)
-            if self.last_detections is not None:
-                for detection in self.last_detections:
-                    cv2.rectangle(mask, (int(detection[0]), int(detection[1])), (int(detection[0]+detection[2]), int(detection[1]+detection[3])), 255, -1)
-        # don't pick up existing pixels
-        for x, y in [np.int32(node.tr[-1]) for node in self.nodes]:
-            cv2.circle(mask, (x, y), 20, 0, -1)
-        # find good points
-        p = cv2.goodFeaturesToTrack(frame_gray, mask = mask, **self.feature_params)
-        if p is None:
-            self.logger.debug('No good features')
+
         else:
-            for x, y in np.float32(p).reshape(-1, 2):
-                new_node = TenguNode([(x, y)], self._min_length)
-                self.nodes.append(new_node)
-                if len(self.nodes) > KLTAnalyzer._max_nodes:
-                    self._last_removed_nodes.append(self.nodes[0])
-                    del self.nodes[0]
+
+            if self._no_detector:
+                # every pixel is tracked by default
+                mask = np.ones_like(frame_gray) * 255
+            else:
+                # every pixel is *not* tracked by default
+                mask = np.zeros_like(frame_gray)
+                if self.last_detections is not None:
+                    for detection in self.last_detections:
+                        cv2.rectangle(mask, (int(detection[0]), int(detection[1])), (int(detection[0]+detection[2]), int(detection[1]+detection[3])), 255, -1)
+            # don't pick up existing pixels
+            for x, y in [np.int32(node.tr[-1]) for node in self.nodes]:
+                cv2.circle(mask, (x, y), 20, 0, -1)
+            # find good points
+            p = cv2.goodFeaturesToTrack(frame_gray, mask = mask, **self.feature_params)
+            if p is None:
+                self.logger.debug('No good features')
+            else:
+                for x, y in np.float32(p).reshape(-1, 2):
+                    new_node = TenguNode([(x, y)], self._min_length)
+                    self.nodes.append(new_node)
+                    if len(self.nodes) > KLTAnalyzer._max_nodes:
+                        self._last_removed_nodes.append(self.nodes[0])
+                        del self.nodes[0]
 
         return mask
 

@@ -36,8 +36,6 @@ class ClusteredKLTTracklet(Tracklet):
         super(ClusteredKLTTracklet, self).__init__(**kwargs)
         self.tracker = tracker
         self._keep_lost_tracklet = keep_lost_tracklet
-        self._widths = []
-        self._heights = []
         self._rect = None
         self._hist = None
         self._centers = []
@@ -104,12 +102,6 @@ class ClusteredKLTTracklet(Tracklet):
             self._confidence = new_confidence
         # hist is calculated at similarity
         self._hist = assignment.hist
-        # rect has to be updated after similarity calculation
-        self._widths.append(assignment.detection[2])
-        self._heights.append(assignment.detection[3])
-        if len(self._widths) > 10:
-            del self._widths[0]
-            del self._heights[0]
         self._rect = assignment.detection
         self._centers.append(self.center)
         # to get a stable direction, keep all the centers
@@ -170,8 +162,8 @@ class ClusteredKLTTracklet(Tracklet):
 
         # update rect
         location = self.location
-        w = int(sum(self._widths)/len(self._widths))
-        h = int(sum(self._heights)/len(self._heights))
+        w = self._rect[2]
+        h = self._rect[3]
         x = location[0] - w/2
         y = location[1] - h*3/4
         self._rect = (x, y, w, h)
@@ -336,12 +328,14 @@ class ClusteredKLTTracker(TenguTracker):
     _minimum_community_size = 2
     _minimum_node_similarity = 0.5
     
-    def __init__(self, keep_lost_tracklet=False, ignore_direction_ranges=None, **kwargs):
+    def __init__(self, keep_lost_tracklet=False, ignore_direction_ranges=None, R_std=10., P=100., **kwargs):
         super(ClusteredKLTTracker, self).__init__(**kwargs)
         self._keep_lost_tracklet = keep_lost_tracklet
         # (start, end], -pi <= ignored_range < pi
         self._ignore_direction_ranges = ignore_direction_ranges
         self._tengu_flow_analyer = None
+        self._R_std = R_std
+        self._P = P
         self.detected_node_set = Set([])
         self.detection_node_map = None
         self.debug = None
@@ -382,7 +376,8 @@ class ClusteredKLTTracker(TenguTracker):
             self._tracklets.append(self.new_tracklet(detection, class_names[d]))
 
     def new_tracklet(self, assignment, class_name):
-        to = ClusteredKLTTracklet(self, keep_lost_tracklet=self._keep_lost_tracklet)
+        # TODO: R_std and P can be set from saved values in a flow graph
+        to = ClusteredKLTTracklet(self, keep_lost_tracklet=self._keep_lost_tracklet, R_std=self._R_std, P=self._P)
         to.update_with_assignment(NodeCluster(self.detection_node_map[assignment], assignment), class_name)
         return to
 
@@ -434,7 +429,7 @@ class ClusteredKLTTracker(TenguTracker):
             if tracklet.is_confirmed:
                 new_tracklet.append(tracklet)
             else:
-                self.logger.debug('{} is marked as obsolete, not confirmed anymore'.format(tracklet))
+                self.logger.info('{} is marked as obsolete, not confirmed anymore'.format(tracklet))
         removed = len(self._tracklets) - len(new_tracklet)
         self._tracklets = new_tracklet
         self.logger.debug('removed {} tracked objects due to obsoletion'.format(removed))
