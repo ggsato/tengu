@@ -155,8 +155,8 @@ class TenguObject(object):
 
         residual_ratio = max(residual_x / residual_x_p, residual_y / residual_y_p)
 
-        # accept if the ratio is smailer than 2
-        return residual_ratio < 2.0
+        # accept if the ratio is smailer than 1
+        return residual_ratio < 1.0
 
     def similarity(self, another):
         """ calculate a similarity between self and another instance of TenguObject 
