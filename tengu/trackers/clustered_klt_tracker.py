@@ -142,7 +142,7 @@ class ClusteredKLTTracklet(Tracklet):
             pass
         elif not self.accept_measurement(Tracklet.center_from_rect((assignment.detection))):
             # not acceptable
-            self.logger.info('{} is not an acceptable measurement to update {}'.format(assignment.detection, tracklet))
+            self.logger.info('{} is not an acceptable measurement to update {}'.format(assignment.detection, self))
         elif self.has_left:
             # no more update
             self.update_without_assignment()
