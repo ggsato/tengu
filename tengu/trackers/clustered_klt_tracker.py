@@ -340,7 +340,7 @@ class ClusteredKLTTracker(TenguTracker):
     _minimum_community_size = 2
     _minimum_node_similarity = 0.5
     
-    def __init__(self, keep_lost_tracklet=False, ignore_direction_ranges=None, R_std=10., P=100., **kwargs):
+    def __init__(self, keep_lost_tracklet=False, ignore_direction_ranges=None, R_std=10., P=25., **kwargs):
         super(ClusteredKLTTracker, self).__init__(**kwargs)
         self._keep_lost_tracklet = keep_lost_tracklet
         # (start, end], -pi <= ignored_range < pi
