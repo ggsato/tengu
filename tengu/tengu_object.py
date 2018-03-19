@@ -97,6 +97,28 @@ class TenguObject(object):
 
         return (self._xs[-1][1], self._xs[-1][4])
 
+    @property
+    def observed_travel_distance(self):
+        """ the travel distance of observations
+        """
+        if len(self._zs) == 0:
+            return -1
+
+        start, end = None, None
+        for i in range(len(self._zs)):
+            if start is None:
+                start = self._zs[i]
+            if end is None:
+                end = self._zs[-1-1*i]
+            if start is not None and end is not None:
+                break
+
+        if start is None or end is None:
+            return -1
+
+        travel_distance = math.sqrt((end[0] - start[0])**2 + (end[1] - start[1])**2)
+        return travel_distance
+
     def update_location(self, z):
         """ update the current location by a predicted location and the given z(observed_location)
 
