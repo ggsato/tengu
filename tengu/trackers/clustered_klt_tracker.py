@@ -37,6 +37,8 @@ class ClusteredKLTTracklet(Tracklet):
         self.tracker = tracker
         self._keep_lost_tracklet = keep_lost_tracklet
         self._rect = None
+        self._w_hist = []
+        self._h_hist = []
         self._hist = None
         self._centers = []
         self._validated_nodes = Set([])
@@ -102,7 +104,12 @@ class ClusteredKLTTracklet(Tracklet):
             self._confidence = new_confidence
         # hist is calculated at similarity
         self._hist = assignment.hist
-        self._rect = assignment.detection
+        self._w_hist.append(assignment.detection[2])
+        if len(self._w_hist) > 10:
+            del self._w_hist[0]
+        self._h_hist.append(assignment.detection[3])
+        if len(self._h_hist) > 10:
+            del self._h_hist[0]
         self._centers.append(self.center)
         # to get a stable direction, keep all the centers
         #if len(self._centers) > self.tracker._min_length:
@@ -162,8 +169,8 @@ class ClusteredKLTTracklet(Tracklet):
 
         # update rect
         location = self.location
-        w = self._rect[2]
-        h = self._rect[3]
+        w = sum(self._w_hist) / len(self._w_hist)
+        h = sum(self._h_hist) / len(self._h_hist)
         x = location[0] - w/2
         y = location[1] - h*3/4
         self._rect = (x, y, w, h)
