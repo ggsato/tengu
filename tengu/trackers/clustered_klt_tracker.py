@@ -429,7 +429,7 @@ class ClusteredKLTTracker(TenguTracker):
             if tracklet.is_confirmed:
                 new_tracklet.append(tracklet)
             else:
-                self.logger.info('{} is marked as obsolete, not confirmed anymore'.format(tracklet))
+                self.logger.debug('{} is marked as obsolete, not confirmed anymore'.format(tracklet))
         removed = len(self._tracklets) - len(new_tracklet)
         self._tracklets = new_tracklet
         self.logger.debug('removed {} tracked objects due to obsoletion'.format(removed))
