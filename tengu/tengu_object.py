@@ -15,6 +15,7 @@ class TenguObject(object):
     
     To achieve the first purpose, this class uses a KalmanFilter.
     """
+    _max_residual_acceptable_ratio = 10
 
     def __init__(self, R_std=10., Q=.0001, dt=1, P=100.):
         self._filter = TenguObject.create_filter(R_std, Q, dt, P)
@@ -137,6 +138,23 @@ class TenguObject(object):
             self._xs.append(self._filter.x)
             self._covs.append(self._filter.P)
         self._zs.append(z)
+
+    def accept_measurement(self, z):
+        """ check if a given measurement is aacceptable
+        """
+        if len(self._zs) == 0:
+            return True
+
+        residual_x = z[0] - self.location[0]
+        residual_y = z[1] - self.location[1]
+
+        last_x = self._xs[-1]
+        residual_x_p = max(math.sqrt(self._filter.R[0][0]), last_x[1] + 0.5 * last_x[2])
+        residual_y_p = max(math.sqrt(self._filter.R[1][1]), last_x[4] + 0.5 * last_x[5])
+
+        residual_ratio = max(residual_x / residual_x_p, residual_y / residual_y_p)
+
+        return residual_ratio < TenguObject._max_residual_acceptable_ratio
 
     def similarity(self, another):
         """ calculate a similarity between self and another instance of TenguObject 
