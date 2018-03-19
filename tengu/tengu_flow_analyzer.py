@@ -956,8 +956,8 @@ class TenguFlowAnalyzer(object):
                 continue
 
             # still, the travel distance might have been done by prediction, then skip it
-            if removed_tracklet.observed_travel_distance < max(*self._flow_blocks_size):
-                self.logger.info('{} has moved, but the travel distance is {} smaller than a block size {}, so being skipped'.format(removed_tracklet, removed_tracklet.observed_travel_distance, max(*self._flow_blocks_size)))
+            if removed_tracklet.observed_travel_distance < max(*self._flow_blocks_size)*2:
+                self.logger.info('{} has moved, but the travel distance is {} smaller than a block size {}, so being skipped'.format(removed_tracklet, removed_tracklet.observed_travel_distance, max(*self._flow_blocks_size)*2))
                 if removed_tracklet._current_flow is not None:
                     removed_tracklet._current_flow.remove_tracklet(removed_tracklet)
                 continue
