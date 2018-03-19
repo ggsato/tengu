@@ -110,6 +110,8 @@ class ClusteredKLTTracklet(Tracklet):
         self._h_hist.append(assignment.detection[3])
         if len(self._h_hist) > 10:
             del self._h_hist[0]
+        # rect is temporarily set
+        self._rect = assignment.detection
         self._centers.append(self.center)
         # to get a stable direction, keep all the centers
         #if len(self._centers) > self.tracker._min_length:
