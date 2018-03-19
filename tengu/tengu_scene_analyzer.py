@@ -28,21 +28,31 @@ class TenguSceneAnalyzer(object):
                 for tracklet in tracklets:
                     if tracklet.removed:
                         # increment
-                        self.logger.info('found removed tracklet, counting {}'.format(tracklet))
-                        count_dict = self.tracklet_to_count_dict(tracklet)
-                        if count_dict is not None:
-                            count_dict['Class'] = {tracklet.obj_id: tracklet.class_name}
-                            count_dict['Group'] = {tracklet.obj_id: group}
-                            df = DataFrame.from_dict(count_dict)
-                            self.logger.debug('df = {}'.format(df))
-                            # merge
-                            if self._df is None:
-                                self._df = df
-                            else:
-                                self._df = self._df.merge(df, how='outer')
-                                self.logger.info('self df = {}'.format(self._df))
+                        self.count_tracklet(tracklet, group)
                         # remove this tracklet from tracklet
                         named_flow.remove_tracklet(tracklet)
+
+        # check direction based flows if available
+        if len(scene.direction_based_flows) > 0:
+            for direction_based_flow in scene.direction_based_flows:
+                for tracklet in direction_based_flow.tracklets:
+                    self.count_tracklet(tracklet, direction_based_flow.group)
+                    direction_based_flow.remove_tracklet(tracklet)
+
+    def count_tracklet(self, tracklet, group):
+        self.logger.info('found removed tracklet, counting {}'.format(tracklet))
+        count_dict = self.tracklet_to_count_dict(tracklet)
+        if count_dict is not None:
+            count_dict['Class'] = {tracklet.obj_id: tracklet.class_name}
+            count_dict['Group'] = {tracklet.obj_id: group}
+            df = DataFrame.from_dict(count_dict)
+            self.logger.debug('df = {}'.format(df))
+            # merge
+            if self._df is None:
+                self._df = df
+            else:
+                self._df = self._df.merge(df, how='outer')
+                self.logger.info('self df = {}'.format(self._df))
 
     def tracklet_to_count_dict(self, tracklet):
         """ returns a list of numbers to be counted of this tracklet

@@ -351,9 +351,10 @@ class TenguScene(object):
     A named TenguFlow is a set of TengFlows sharing the same name.
     """
 
-    def __init__(self):
+    def __init__(self, direction_based_flows=[]):
         super(TenguScene, self).__init__()
         self._flow_map = {}
+        self._direction_based_flows = direction_based_flows
 
     def set_flows(self, flows):
         self._flow_map = {}
@@ -373,6 +374,10 @@ class TenguScene(object):
     @property
     def flow_names(self):
         return self._flow_map.keys()
+
+    @property
+    def direction_based_flows(self):
+        return self._direction_based_flows
 
     def named_flows(self, name):
         return self._flow_map[name]
@@ -394,9 +399,74 @@ class TenguScene(object):
         flows = []
         for flow_js in flows_js:
             flows.append(TenguFlow.deserialize(flow_js, blk_node_map))
-        tengu_scene = TenguScene()
+        # direction based flows
+        direction_based_flows = []
+        if js.has_key('direction_based_flows'):
+            direction_based_flows_js = js['direction_based_flows']
+            for direction_based_flow_js in direction_based_flows_js:
+                direction_based_flow = DirectionBasedFlow.deserialize(direction_based_flow_js)
+                direction_based_flows.append(direction_based_flow)
+        tengu_scene = TenguScene(direction_based_flows=direction_based_flows)
         tengu_scene.set_flows(flows)
         return tengu_scene
+
+class DirectionBasedFlow(object):
+
+    def __init__(self, group, high_priority=False, direction_range=[]):
+        super(DirectionBasedFlow, self).__init__()
+        self._group = group
+        self._high_priority = high_priority
+        # (from, to)
+        self._direction_range = direction_range
+        self._tracklets = []
+
+    def __repr__(self):
+        return 'group={}, high_priority={}, direction_range={}'.format(self._group, self._high_priority, self._direction_range)
+
+    def serialize(self):
+        js = {}
+        js['direction_from'] = self.direction_from
+        js['direction_to'] = self.direction_to
+        js['high_priority'] = 1 if self._high_priority else 0
+        js['group'] = self._group
+        return js
+
+    @staticmethod
+    def deserialize(js):
+        logging.debug('deserializing {}'.format(js))
+        js_group = js['group']
+        js_high_priority = js['high_priority']
+        direction_range = (js['direction_from'], js['direction_to'])
+        return DirectionBasedFlow(js_group, True if js_high_priority == 1 else False, direction_range)
+
+    #### properties to resemble a TenguFlow
+
+    @property
+    def group(self):
+        return self._group
+
+    def remove_tracklet(self, tracklet):
+        del self._tracklets[self._tracklets.index(tracklet)]
+
+    # own properties
+    @property
+    def high_priority(self):
+        return self._high_priority
+
+    @property
+    def direction_from(self):
+        return self._direction_range[0]
+
+    @property
+    def direction_to(self):
+        return self._direction_range[1]
+
+    @property
+    def tracklets(self):
+        return self._tracklets
+
+    def add_tracklet(self, tracklet):
+        self._tracklets.append(tracklet)
 
 class TenguFlow(object):
 
@@ -913,6 +983,30 @@ class TenguFlowAnalyzer(object):
             else:
                 self.logger.debug('{} was removed for counting on {}'.format(removed_tracklet, removed_tracklet._current_flow))
                 removed_tracklet.mark_removed()
+
+            self.check_direction_based_flow(removed_tracklet)
+
+    def check_direction_based_flow(self, tracklet):
+        """ check direction based flow if available
+
+        A direction based flow is only characterized by a specific range of directions.
+        If its priority is high, it wins over an already assigned path based flow,
+        otherwise, it is evaluated only when no path based flow is assigned.
+        """
+        direction_based_flows = self._scene.direction_based_flows
+        for direction_based_flow in direction_based_flows:
+            check_only_high_priority = tracklet._current_flow is not None
+            if check_only_high_priority and not direction_based_flow.high_priority:
+                continue
+
+            # check d based flow
+            if direction_based_flow.direction_from < tracklet.direction and tracklet.direction <= direction_based_flow.direction_to:
+                if tracklet._current_flow is not None:
+                    tracklet._current_flow.remove_tracklet(tracklet)
+                direction_based_flow.add_tracklet(tracklet)
+                tracklet.mark_removed()
+                self.logger.info('found a matching direction based flow {} for {}'.format(direction_based_flow, tracklet))
+                break
 
     def build_scene(self):
         """
