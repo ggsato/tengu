@@ -142,7 +142,7 @@ class TenguObject(object):
     def accept_measurement(self, z):
         """ check if a given measurement is aacceptable
         """
-        if len(self._zs) == 0:
+        if len(self._xs) == 0:
             return True
 
         residual_x = z[0] - self.location[0]
