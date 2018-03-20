@@ -881,14 +881,14 @@ class TenguFlowAnalyzer(object):
             if self._scene_file is None:
                 # update edge
                 if not self._flow_graph.has_edge(prev_flow_node, flow_node):
-                    self.logger.info('making an edge from {} to {}'.format(prev_flow_node, flow_node))
+                    self.logger.debug('making an edge from {} to {}'.format(prev_flow_node, flow_node))
                     self._flow_graph.add_edge(prev_flow_node, flow_node, weight={})
                 edge = self._flow_graph[prev_flow_node][flow_node]
                 prev_prev_flow_node = existing_tracklet.path[-2]
                 if not edge['weight'].has_key(prev_prev_flow_node):
                     edge['weight'][prev_prev_flow_node] = 0
                 edge['weight'][prev_prev_flow_node] += 1
-                self.logger.info('updating weight at {}'.format(edge))
+                self.logger.debug('updating weight at {}'.format(edge))
 
             # no path available yet
             if len(existing_tracklet.path) < 5:
