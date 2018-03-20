@@ -291,6 +291,30 @@ class Tracklet(TenguObject):
     def milestones(self):
         return self._milestones
 
+    @property
+    def angle_movement(self):
+        """ returns the movement of angles
+        """
+        if len(self._milestones) < 2:
+            return 0.0
+
+        first_angle = Tracklet.get_angle(self._milestones[0][0], self._milestones[1][0])
+        last_angle = Tracklet.get_angle(self._milestones[-2][0], self._milestones[-1][0])
+
+        diff_angle = last_angle - first_angle
+        if diff_angle > math.pi:
+            diff_angle = 2*math.pi - diff_angle
+
+        return diff_angle
+
+    @staticmethod
+    def get_angle(p_from, p_to):
+        diff_x = p_to[0] - p_from[0]
+        diff_y = p_to[1] - p_from[1]
+        # angle = (-pi, pi)
+        angle = math.atan2(diff_y, diff_x)
+        return angle
+
     def mark_flow_passed(self, flow):
         self._passed_flow = flow
 

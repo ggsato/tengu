@@ -131,12 +131,12 @@ class TenguNode(object):
                 # stationally
                 angle0 = None
             else:
-                angle0 = TenguNode.get_angle(self.tr[-1 * self._min_length], self.tr[-1])
+                angle0 = Tracklet.get_angle(self.tr[-1 * self._min_length], self.tr[-1])
             if distance1 < TenguNode._min_speed:
                 # stationally
                 angle1 = None
             else:
-                angle1 = TenguNode.get_angle(another.tr[-1 * self._min_length], another.tr[-1])
+                angle1 = Tracklet.get_angle(another.tr[-1 * self._min_length], another.tr[-1])
 
             diff_angle = None
             if angle0 is None and angle1 is None:
@@ -185,14 +185,6 @@ class TenguNode(object):
         self.logger.debug('similarity = {}'.format(similarity))
 
         return similarity
-
-    @staticmethod
-    def get_angle(p_from, p_to):
-        diff_x = p_to[0] - p_from[0]
-        diff_y = p_to[1] - p_from[1]
-        # angle = (-pi, pi)
-        angle = math.atan2(diff_y, diff_x)
-        return angle
 
     def last_move(self):
         if len(self.tr) < self._min_length:
@@ -489,7 +481,7 @@ class TenguFlow(object):
         # transient attributes
 
         # direction
-        self._direction = TenguNode.get_angle(self._source.position, self._sink.position)
+        self._direction = Tracklet.get_angle(self._source.position, self._sink.position)
 
         # a set of tracklets currently on this flow
         # can be sorted by Tracklet#dist_to_sink
