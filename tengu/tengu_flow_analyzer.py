@@ -404,21 +404,25 @@ class TenguScene(object):
 
 class DirectionBasedFlow(object):
 
-    def __init__(self, group, high_priority=False, direction_range=[]):
+    def __init__(self, group, high_priority=False, direction_range=[], angle_movements=[]):
         super(DirectionBasedFlow, self).__init__()
         self._group = group
         self._high_priority = high_priority
         # (from, to)
         self._direction_range = direction_range
+        # (from, to)
+        self._angle_movements = angle_movements
         self._tracklets = []
 
     def __repr__(self):
-        return 'group={}, high_priority={}, direction_range={}'.format(self._group, self._high_priority, self._direction_range)
+        return 'group={}, high_priority={}, direction_range={}, angle_movements={}'.format(self._group, self._high_priority, self._direction_range, self._angle_movements)
 
     def serialize(self):
         js = {}
         js['direction_from'] = self.direction_from
         js['direction_to'] = self.direction_to
+        js['angle_movements_from'] = self.angle_movements_from
+        js['angle_movements_to'] = self.angle_movements_to
         js['high_priority'] = 1 if self._high_priority else 0
         js['group'] = self._group
         return js
@@ -429,7 +433,11 @@ class DirectionBasedFlow(object):
         js_group = js['group']
         js_high_priority = js['high_priority']
         direction_range = (js['direction_from'], js['direction_to'])
-        return DirectionBasedFlow(js_group, True if js_high_priority == 1 else False, direction_range)
+        if js.has_key('angle_movements_from') and js.has_key('angle_movements_to'):
+            angle_movements = (js['angle_movements_from'], js['angle_movements_to'])
+        else:
+            angle_movements = []
+        return DirectionBasedFlow(js_group, True if js_high_priority == 1 else False, direction_range, angle_movements)
 
     #### properties to resemble a TenguFlow
 
@@ -452,6 +460,18 @@ class DirectionBasedFlow(object):
     @property
     def direction_to(self):
         return self._direction_range[1]
+
+    @property
+    def angle_movements_from(self):
+        if len(self._angle_movements) == 0:
+            return None
+        return self._angle_movements[0]
+
+    @property
+    def angle_movements_to(self):
+        if len(self._angle_movements) == 0:
+            return None
+        return self._angle_movements[1]
 
     @property
     def tracklets(self):
@@ -1000,6 +1020,16 @@ class TenguFlowAnalyzer(object):
 
             # check d based flow
             if direction_based_flow.direction_from < tracklet.direction and tracklet.direction <= direction_based_flow.direction_to:
+                # check angle movements if required
+                angle_movements_ok = False
+                if direction_based_flow.angle_movements_from is not None:
+                    if direction_based_flow.angle_movements_from < tracklet.direction and tracklet.direction <= direction_based_flow.angle_movements_to:
+                        angle_movements_ok = True
+                else:
+                    angle_movements_ok = True
+                if not angle_movements_ok:
+                    self.logger.info('found a matching direction flow {}, but not angle movements, for {}'.format(direction_based_flow, tracklet))
+                    continue
                 if tracklet._current_flow is not None:
                     tracklet._current_flow.remove_tracklet(tracklet)
                 direction_based_flow.add_tracklet(tracklet)
