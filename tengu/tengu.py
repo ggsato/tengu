@@ -145,6 +145,9 @@ class Tengu(object):
             # skip if necessary
             if (every_x_frame > 1 and self._current_frame % every_x_frame != 0) or (skip_to > 0 and self._current_frame < skip_to):
                 self.logger.debug('skipping frame at {}'.format(self._current_frame))
+                event_dict[Tengu.EVENT_DETECTIONS] = []
+                event_dict[Tengu.EVENT_DETECTION_CLASSES] = []
+                event_dict[Tengu.EVENT_TRACKLETS] = []
                 self._notify_frame_analyzed(event_dict)
                 continue
 
