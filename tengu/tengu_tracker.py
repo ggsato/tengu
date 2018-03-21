@@ -295,11 +295,11 @@ class Tracklet(TenguObject):
     def angle_movement(self):
         """ returns the movement of angles
         """
-        if len(self._milestones) < 2:
+        if len(self._milestones) < 3:
             return 0.0
 
-        first_angle = Tracklet.get_angle(self._milestones[0][0], self._milestones[1][0])
-        last_angle = Tracklet.get_angle(self._milestones[-2][0], self._milestones[-1][0])
+        first_angle = Tracklet.get_angle(self._milestones[0][0], self._milestones[2][0])
+        last_angle = Tracklet.get_angle(self._milestones[-3][0], self._milestones[-1][0])
 
         diff_angle = last_angle - first_angle
 
