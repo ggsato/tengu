@@ -302,8 +302,6 @@ class Tracklet(TenguObject):
         last_angle = Tracklet.get_angle(self._milestones[-2][0], self._milestones[-1][0])
 
         diff_angle = last_angle - first_angle
-        if diff_angle > math.pi:
-            diff_angle = 2*math.pi - diff_angle
 
         return diff_angle
 
