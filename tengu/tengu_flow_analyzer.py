@@ -1023,7 +1023,9 @@ class TenguFlowAnalyzer(object):
                 # check angle movements if required
                 angle_movements_ok = False
                 if direction_based_flow.angle_movements_from is not None:
-                    if direction_based_flow.angle_movements_from < tracklet.angle_movement and tracklet.angle_movement <= direction_based_flow.angle_movements_to:
+                    if tracklet.angle_movement == Tracklet.angle_movement_not_available:
+                        pass
+                    elif direction_based_flow.angle_movements_from < tracklet.angle_movement and tracklet.angle_movement <= direction_based_flow.angle_movements_to:
                         angle_movements_ok = True
                 else:
                     angle_movements_ok = True

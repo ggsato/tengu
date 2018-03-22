@@ -23,6 +23,9 @@ class Tracklet(TenguObject):
     # see speed for details
     average_real_size = 4.5
 
+    # angle movement when not enough records exist
+    angle_movement_not_available = 9.9
+
     def __init__(self, **kwargs):
         super(Tracklet, self).__init__(**kwargs)
         self.logger = logging.getLogger(__name__)
@@ -296,7 +299,7 @@ class Tracklet(TenguObject):
         """ returns the movement of angles
         """
         if len(self._milestones) < 3:
-            return 0.0
+            return Tracklet.angle_movement_not_available
 
         first_angle = Tracklet.get_angle(self._milestones[0][0], self._milestones[2][0])
         last_angle = Tracklet.get_angle(self._milestones[-3][0], self._milestones[-1][0])
