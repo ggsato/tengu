@@ -303,6 +303,11 @@ class Tracklet(TenguObject):
 
         diff_angle = last_angle - first_angle
 
+        if diff_angle < -1 * math.pi:
+            diff_angle = 2 * math.pi + diff_angle
+        elif diff_angle > math.pi:
+            diff_angle = diff_angle - 2 * math.pi
+
         return diff_angle
 
     @staticmethod
