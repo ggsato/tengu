@@ -50,20 +50,13 @@ class Tracklet(TenguObject):
         # (center, rect, frame_no)
         self._milestones = []
         # used by flow analyzer for updating a scene
-        self._current_flow = None
-        self._dist_to_sink = 0
-        self._flow_similarity = 0
         self._removed = False
         self._left = False
-        self._passed_flow = None
         # for classification
         self._class_map = {}
 
-        # debug
-        self._shortest_path_for_debug = None
-
     def __repr__(self):
-        return 'id:{}, obj_id:{}, confidence:{}, speed:{}, flow:{}, left:{}, class:{}'.format(id(self), self._obj_id, self._confidence, self.speed, self.current_flow_name, self._left, self.class_name)
+        return 'id:{}, obj_id:{}, confidence:{}, speed:{}, left:{}, class:{}'.format(id(self), self._obj_id, self._confidence, self.speed, self._left, self.class_name)
 
     # Tracklet Properties
     @property
@@ -255,26 +248,8 @@ class Tracklet(TenguObject):
         return move_x, move_y
 
     @property
-    def current_flow_name(self):
-        if self._current_flow is None:
-            return '-'
-        return self._current_flow.name
-
-    @property
     def path(self):
         return self._path
-
-    @property
-    def source(self):
-        if len(self._path) < 1:
-            return None
-        return self._path[0]
-
-    @property
-    def sink(self):
-        if len(self._path) < 1:
-            return None
-        return self._path[-1]
 
     def add_flow_node_to_path(self, flow_node):
         self._path.append(flow_node)
@@ -327,22 +302,6 @@ class Tracklet(TenguObject):
         return self._path[-1]
 
     @property
-    def dist_to_sink(self):
-        if self._dist_to_sink is None:
-            return '-'
-        return self._dist_to_sink
-
-    @property
-    def flow_similarity(self):
-        return self._flow_similarity
-
-    def set_flow(self, flow, distance_to_sink, similarity, shortest_path_for_debug=None):
-        self._current_flow = flow
-        self._dist_to_sink = distance_to_sink
-        self._flow_similarity = similarity
-        self._shortest_path_for_debug = shortest_path_for_debug
-
-    @property
     def removed(self):
         return self._removed
 
@@ -390,13 +349,6 @@ class Tracklet(TenguObject):
         # angle = (-pi, pi)
         angle = math.atan2(diff_y, diff_x)
         return angle
-
-    def mark_flow_passed(self, flow):
-        self._passed_flow = flow
-
-    @property
-    def passed_flow(self):
-        return self._passed_flow
 
     def cropped_images(self, max_size):
         """get intermediate images

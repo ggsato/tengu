@@ -572,8 +572,6 @@ class TenguFlowAnalyzer(object):
 
             if removed_tracklet.speed < 0:
                 self.logger.debug('{} has too short path, speed is not available, not counted'.format(removed_tracklet))
-                if removed_tracklet._current_flow is not None:
-                    removed_tracklet._current_flow.remove_tracklet(removed_tracklet)
                 continue
 
             # if this tracklet is not moving, just remove
@@ -581,46 +579,27 @@ class TenguFlowAnalyzer(object):
             if max_diff < 2:
                 # within adjacent blocks, this is stationally
                 self.logger.debug('{} is removed, but not for counting, stationally'.format(removed_tracklet))
-                if removed_tracklet._current_flow is not None:
-                    removed_tracklet._current_flow.remove_tracklet(removed_tracklet)
                 continue
 
             # still, the travel distance might have been done by prediction, then skip it
             if removed_tracklet.observed_travel_distance < max(*self._flow_blocks_size)*2:
                 self.logger.info('{} has moved, but the travel distance is {} smaller than a block size {}, so being skipped'.format(removed_tracklet, removed_tracklet.observed_travel_distance, max(*self._flow_blocks_size)*2))
-                if removed_tracklet._current_flow is not None:
-                    removed_tracklet._current_flow.remove_tracklet(removed_tracklet)
                 continue
 
             if self._tracker.ignore_tracklet(removed_tracklet):
                 self.logger.debug('{} is removed, but not for counting, within ignored directions'.format(removed_tracklet))
-                if removed_tracklet._current_flow is not None:
-                    removed_tracklet._current_flow.remove_tracklet(removed_tracklet)
                 continue
 
             sink_node = removed_tracklet.path[-1]
             source_node = removed_tracklet.path[0]
             if sink_node == source_node:
                 self.logger.debug('same source {} and sink {}, skipped'.format(source_node, sink_node))
-                if removed_tracklet._current_flow is not None:
-                    removed_tracklet._current_flow.remove_tracklet(removed_tracklet)
                 return
+
             sink_node.mark_sink(source_node)
             self.logger.debug('{} sink at {} through {}'.format(removed_tracklet, sink_node, removed_tracklet.path))
 
-            # flow operations for counting
-            if removed_tracklet._current_flow is None:
-                if removed_tracklet.passed_flow is not None:
-                    # this has already passed a flow
-                    removed_tracklet.passed_flow.put_tracklet(removed_tracklet, 0, 1, shortest_path_for_debug=None)
-                    removed_tracklet.mark_removed()
-                    self.logger.debug('{} has passed {}, and removed for counting'.format(removed_tracklet, removed_tracklet.passed_flow))
-                else:
-                    self.logger.debug('{} will be just removed without counting, no flow assigned...'.format(removed_tracklet))
-            else:
-                self.logger.debug('{} was removed for counting on {}'.format(removed_tracklet, removed_tracklet._current_flow))
-                removed_tracklet.mark_removed()
-
+            # check direction baesd flow
             self.check_direction_based_flow(removed_tracklet)
 
     def check_direction_based_flow(self, tracklet):
@@ -632,9 +611,6 @@ class TenguFlowAnalyzer(object):
         """
         direction_based_flows = self._scene.direction_based_flows
         for direction_based_flow in direction_based_flows:
-            check_only_high_priority = tracklet._current_flow is not None
-            if check_only_high_priority and not direction_based_flow.high_priority:
-                continue
 
             # check d based flow
             if direction_based_flow.direction_from is not None:
@@ -653,10 +629,8 @@ class TenguFlowAnalyzer(object):
             else:
                 angle_movements_ok = True
             if not angle_movements_ok:
-                self.logger.info('found a matching direction flow {}, but not angle movements, for {}'.format(direction_based_flow, tracklet))
                 continue
-            if tracklet._current_flow is not None:
-                tracklet._current_flow.remove_tracklet(tracklet)
+                
             direction_based_flow.add_tracklet(tracklet)
             tracklet.mark_removed()
             self.logger.info('found a matching direction based flow {} for {}'.format(direction_based_flow, tracklet))
