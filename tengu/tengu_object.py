@@ -16,8 +16,10 @@ class TenguObject(object):
     To achieve the first purpose, this class uses a KalmanFilter.
     """
 
-    def __init__(self, R_std=10., Q=.0001, dt=1, P=100.):
-        self._filter = TenguObject.create_filter(R_std, Q, dt, P)
+    _very_small_value = 0.000001
+
+    def __init__(self, R_std=10., Q=.0001, dt=1, P=100., std_devs=None):
+        self._filter = TenguObject.create_filter(R_std, Q, dt, P, std_devs)
         self._zs = []
         self._xs = []
         self._covs = []
@@ -168,15 +170,15 @@ class TenguObject(object):
     @property
     def variance(self):
         """ the variance of x """
-        if len(self._xs) == 0:
+        if len(self._covs) == 0:
             return None
 
-        return (math.sqrt(self._covs[-1][0][0]), math.sqrt(self._covs[-1][3][3]))
+        return (max(TenguObject._very_small_value, math.sqrt(self._covs[-1][0][0])), max(TenguObject._very_small_value, math.sqrt(self._covs[-1][3][3])))
 
     @property
     def variance_speed(self):
         """ the variance of x speed """
-        if len(self._xs) == 0:
+        if len(self._covs) == 0:
             return None
 
         return (math.sqrt(self._covs[-1][1][1]), math.sqrt(self._covs[-1][4][4]))
@@ -184,13 +186,13 @@ class TenguObject(object):
     @property
     def variance_x_accel(self):
         """ the variance of x accel """
-        if len(self._xs) == 0:
+        if len(self._covs) == 0:
             return None
 
         return (math.sqrt(self._covs[-1][2][2]), math.sqrt(self._covs[-1][5][5]))
 
     @staticmethod
-    def create_filter(R_std, Q, dt, P):
+    def create_filter(R_std, Q, dt, P, std_devs):
         """ creates a second order Kalman Filter
 
         R_std: float, a standard deviation of measurement error
@@ -199,10 +201,24 @@ class TenguObject(object):
         P    : float, a maximum initial variance of all states to build a covariance matrix
         """
         kf = KalmanFilter(dim_x=6, dim_z=2)
-        kf.P = np.eye(6) * P
         kf.R = np.eye(2) * R_std**2
-        q = Q_discrete_white_noise(3, dt, Q)
-        kf.Q = block_diag(q, q)
+        if std_devs is None:
+            kf.P = np.eye(6) * P
+            q = Q_discrete_white_noise(3, dt, Q)
+            kf.Q = block_diag(q, q)
+        else:
+            kf.P = np.array([[std_devs[0]*3**2, 0., 0., 0., 0., 0.],
+                         [0., std_devs[1]*3**2, 0., 0., 0., 0.],
+                         [0., 0., std_devs[2]*3**2, 0., 0., 0.],
+                         [0., 0., 0., std_devs[3]*3**2, 0., 0.],
+                         [0., 0., 0., 0., std_devs[4]*3**2, 0.],
+                         [0., 0., 0., 0., 0., std_devs[5]*3**2]])
+            kf.Q = np.array([[0., 0., 0., 0., 0., 0.],
+                         [0., 0., 0., 0., 0., 0.],
+                         [0., 0., std_devs[2]*3**2, 0., 0., 0.],
+                         [0., 0., 0., 0., 0., 0.],
+                         [0., 0., 0., 0., 0., 0.],
+                         [0., 0., 0., 0., 0., std_devs[5]*3**2]])
         kf.F = np.array([[1., dt, .5*dt*dt, 0., 0., 0.],
                          [0., 1., dt, 0., 0., 0.],
                          [0., 0., 1., 0., 0., 0.],

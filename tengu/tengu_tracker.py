@@ -499,8 +499,8 @@ class TenguTracker(object):
         pass
 
     def new_tracklet(self, assignment, class_name):
-        # TODO: R_std and P can be set from saved values in a flow graph
-        to = Tracklet(self, R_std=self._R_std, P=self._P, Q=self._Q)
+        flow_node = self._tengu_flow_analyzer.flow_node_at(*Tracklet.center_from_rect(assignment))
+        to = Tracklet(self, R_std=self._R_std, P=self._P, Q=self._Q, std_devs=flow_node.std_devs)
         to.update_with_assignment(Assignment(assignment), class_name)
         return to
 

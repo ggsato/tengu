@@ -148,6 +148,23 @@ class StatsDataFrame(object):
         else:
             self._df = self._df.append(new_df)
 
+    @property
+    def std_dev_series(self):
+
+        if self._df is None:
+            return None
+
+        return self._df.std()
+
+    @property
+    def mean_series(self):
+
+        if self._df is None:
+            return None
+
+        return self._df.mean()
+
+
 class TenguFlowNode(object):
     """ A FlowNode keeps statistical information about its own region
     """
@@ -196,7 +213,15 @@ class TenguFlowNode(object):
         stats_dict['direction'] = {tracklet.obj_id: stats[6]}
         stats_dict['frame_ix'] = {tracklet.obj_id: TenguTracker._global_updates}
         self._stats.append(stats_dict)
-        print('record and updated {}'.format(self))
+
+    @property
+    def std_devs(self):
+
+        std_dev_series = self._stats.std_dev_series
+        if std_dev_series is None or std_dev_series.isnull()[0]:
+            return None
+
+        return [std_dev_series['x_p'], std_dev_series['x_v'], std_dev_series['x_a'], std_dev_series['y_p'], std_dev_series['y_v'], std_dev_series['y_a']]
 
     @staticmethod
     def max_node_diff(node1, node2):
