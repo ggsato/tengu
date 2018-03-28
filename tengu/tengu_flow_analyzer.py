@@ -193,6 +193,8 @@ class TenguFlowNode(object):
         stats_dict['y_p'] = {tracklet.obj_id: stats[3]}
         stats_dict['y_v'] = {tracklet.obj_id: stats[4]}
         stats_dict['y_a'] = {tracklet.obj_id: stats[5]}
+        stats_dict['direction'] = {tracklet.obj_id: stats[6]}
+        stats_dict['frame_ix'] = {tracklet.obj_id: TenguTracker._global_updates}
         self._stats.append(stats_dict)
         print('record and updated {}'.format(self))
 

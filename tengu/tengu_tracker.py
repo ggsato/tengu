@@ -258,10 +258,14 @@ class Tracklet(TenguObject):
 
     @property
     def stats(self):
-        if len(self._xs) == 0:
+        direction = self.direction
+        if direction is None:
             return None
-            
-        return self._xs[-1].T[0]
+
+        stats = list(self._xs[-1].T[0])
+        stats.append(direction)
+
+        return stats
 
     @property
     def speed(self):
