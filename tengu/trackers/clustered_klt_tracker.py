@@ -380,11 +380,8 @@ class ClusteredKLTTracker(TenguTracker):
     def draw_detected_node_set(self):
 
         for tracklet in self._tracklets:
-            node_cluster = tracklet.last_assignment
-            rect = node_cluster.rect_from_group()
+            rect = tracklet.rect
             cv2.rectangle(self.debug, (rect[0], rect[1]), (rect[0]+rect[2], rect[1]+rect[3]), 255, 3)
-            for node in tracklet._validated_nodes:
-                cv2.circle(self.debug, node.tr[-1], 5, 256, -1)
             if tracklet.direction is not None:
                 diameter = 50
                 color = 0 if self.ignore_tracklet(tracklet) else 255
