@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 
 import math, time
+import cv2
 import numpy as np
 import logging, copy
 from scipy.optimize import linear_sum_assignment
@@ -26,7 +27,7 @@ class Tracklet(TenguObject):
     # angle movement when not enough records exist
     angle_movement_not_available = 9.9
 
-    def __init__(self, **kwargs):
+    def __init__(self, tracker, **kwargs):
         super(Tracklet, self).__init__(**kwargs)
         self.logger = logging.getLogger(__name__)
         Tracklet._class_obj_id += 1
@@ -38,6 +39,12 @@ class Tracklet(TenguObject):
         self._movement = None
         self._confidence = 0.
         self._recent_updates = ['N/A']
+        # used by Clustered KLT Tracker
+        self.tracker = tracker
+        self._w_hist = []
+        self._h_hist = []
+        self._hist = None
+        self._centers = []
         # used by flow analyzer for building flow graph
         self._path = []
         # (center, rect, frame_no)
@@ -111,13 +118,54 @@ class Tracklet(TenguObject):
     def similarity(self, assignment):
         """
         calculate similarity of assignment to self
+        1. rect similarity(position, size similrity)
+        2. histogram similarity
         """
+
+
         if self._rect is None:
-            return 0
+            # this means this is called for the first time
+            assignment.hist, assignment.img = self.histogram(assignment.detection)
+            return 1.0
 
-        return TenguTracker.calculate_overlap_ratio(self._rect, assignment)
+        # 1. rect similarity
+        rect_similarity = TenguTracker.calculate_overlap_ratio(self._rect, assignment.detection)
 
-    def update_properties(self, lost=True):
+        # 2. histogram similarity
+        hist0 = self._hist
+        hist1, assignment.img = self.histogram(assignment.detection)
+        assignment.hist = hist1
+        hist_similarity = cv2.compareHist(hist0, hist1, cv2.HISTCMP_CORREL)
+
+        disable_similarity = False
+        if disable_similarity:
+            rect_similarity = 1.0
+            hist_similarity = 1.0
+
+        similarity = [rect_similarity, hist_similarity]
+        
+        self.logger.debug('similarity = {}'.format(similarity))
+
+        return min(similarity)
+
+    def histogram(self, rect):
+        frame = self.tracker._tengu_flow_analyzer._last_frame
+        bigger_ratio = 0.0
+        from_y = int(rect[1])
+        from_y = max(0, int(from_y - rect[3] * bigger_ratio))
+        to_y = int(rect[1]+rect[3])
+        to_y = min(frame.shape[0], int(to_y + rect[3] * bigger_ratio))
+        from_x = int(rect[0])
+        from_x = max(0, int(from_x - rect[2] * bigger_ratio))
+        to_x = int(rect[0]+rect[2])
+        to_x = min(frame.shape[1], int(to_x + rect[2] * bigger_ratio))
+        img = frame[from_y:to_y, from_x:to_x, :]
+        hist = cv2.calcHist([img], [0, 1, 2], None, [32, 32, 32], [0, 256, 0, 256, 0, 256])
+        cv2.normalize(hist, hist)
+        flattened = hist.flatten()
+        return flattened, img.copy()
+
+    def update_properties(self):
         assignment = self._assignments[-1]
         self._movement = self.last_movement()
         new_confidence = self.similarity(assignment)
@@ -126,49 +174,71 @@ class Tracklet(TenguObject):
             self._confidence = self._confidence * Tracklet._estimation_decay
         else:
             self._confidence = new_confidence
-        # rect has to be updated after similarity calculation
-        self._rect = assignment
-        if not lost:
-            self._last_updated_at = TenguTracker._global_updates
+        # hist is calculated at similarity
+        self._hist = assignment.hist
+        self._w_hist.append(assignment.detection[2])
+        if len(self._w_hist) > 10:
+            del self._w_hist[0]
+        self._h_hist.append(assignment.detection[3])
+        if len(self._h_hist) > 10:
+            del self._h_hist[0]
+        # rect is temporarily set
+        self._rect = assignment.detection
+        self._centers.append(self.center)
+        # update
+        self._last_updated_at = TenguTracker._global_updates
 
     def update_with_assignment(self, assignment, class_name):
-        """
-        update tracklet with the new assignment
-        note that this could be called multiple times in case multiple cost matrixes are used
-        """
         if len(self._assignments) > 0:
             self.logger.debug('{}@{}: updating with {} from {} at {}'.format(id(self), self.obj_id, assignment, self._assignments[-1], self._last_updated_at))
-        
-        if self._last_updated_at == TenguTracker._global_updates:
-            # nothing to do here
-            pass
 
         if len(self._assignments) > 0 and self.similarity(assignment) < Tracklet._min_confidence:
             # do not accept this
+            pass
+        elif not self.accept_measurement(Tracklet.center_from_rect((assignment.detection))):
+            # not acceptable
+            self.logger.debug('{} is not an acceptable measurement to update {}'.format(assignment.detection, self))
+        elif self.has_left:
+            # no more update
             self.update_without_assignment()
         else:
+            # update
             self._assignments.append(assignment)
-            self.update_properties(lost=False)
+            self.update_properties()
             self.recent_updates_by('1')
             if not self._class_map.has_key(class_name):
                 self._class_map[class_name] = 0
-            self._class_map[_class_map] += 1
+            self._class_map[class_name] += 1
+            self.update_location(self._centers[-1])
 
     def update_without_assignment(self):
         """
         no update was available
-        so create a possible assignment to update
         """
-        last_movement = self.last_movement()
-        if last_movement is None:
-            return
-        
-        new_x = self._rect[0] + last_movement[0] * Tracklet._estimation_decay
-        new_y = self._rect[1] + last_movement[1] * Tracklet._estimation_decay
-        possible_assignment = (new_x, new_y, self._rect[2], self._rect[3])
-        self._assignments.append(possible_assignment)
-        self.update_properties()
+
+        self.logger.debug('updating without {}@{}'.format(id(self), self.obj_id))
+
         self.recent_updates_by('2')
+        self.update_location(None)
+
+    def update_location(self, z):
+        super(Tracklet, self).update_location(z)
+
+        # update rect
+        location = self.location
+        w = sum(self._w_hist) / len(self._w_hist)
+        h = sum(self._h_hist) / len(self._h_hist)
+        x = location[0] - w/2
+        y = location[1] - h*3/4
+        self._rect = (x, y, w, h)
+
+        # update confidence based on variance
+        variance = self.variance
+        if variance is None:
+            return
+        confidence_x = min(1.0, w/2 / (variance[0]*3))
+        confidence_y = min(1.0, h/2 / (variance[1]*3))
+        self._confidence = min(confidence_x, confidence_y)
 
     def last_movement(self):
         return super(Tracklet, self).movement
@@ -328,6 +398,45 @@ class Tracklet(TenguObject):
     def passed_flow(self):
         return self._passed_flow
 
+    def cropped_images(self, max_size):
+        """get intermediate images
+        """
+        cropped_images = []
+        use_intermediate = True
+        if use_intermediate:
+            diff = len(self._assignments) - max_size
+            offset = 0
+            if diff > 0:
+                # take intermediate images
+                offset = diff / 2
+            index = 1
+            while index <= max_size and (index+offset) <= len(self._assignments):
+                assignment = self._assignments[-1*(index+offset)]
+                if hasattr(assignment, 'img') and assignment.img is not None:
+                    cropped_images.append(assignment.img)
+                index += 1
+        else:
+            # use from the first
+            index = 0
+            while len(cropped_images) < len(self._assignments) and len(cropped_images) < max_size:
+                assignment = self._assignments[index]
+                if hasattr(assignment, 'img') and assignment.img is not None:
+                    cropped_images.append(assignment.img)
+                index += 1
+
+        return cropped_images
+
+class Assignment(object):
+
+    def __init__(self, detection):
+        super(Assignment, self).__init__()
+        self.logger = logging.getLogger(__name__)
+        self.detection = detection
+        self.hist = None
+
+    def __repr__(self):
+        return 'detection={}'.format(self.detection)
+
 class TenguCostMatrix(object):
 
     def __init__(self, assignments, cost_matrix):
@@ -348,10 +457,17 @@ class TenguTracker(object):
     # 0.01 = 4.6 => 1% overlap
     _confident_min_cost = 4.6
 
-    def __init__(self, obsoletion=100):
+    def __init__(self, obsoletion=100, ignore_direction_ranges=None, R_std=10., P=25., **kwargs):
+        super(TenguTracker, self).__init__(**kwargs)
         self.logger = logging.getLogger(__name__)
         self._tracklets = []
+
         self._obsoletion = obsoletion
+        # (start, end], -pi <= ignored_range < pi
+        self._ignore_direction_ranges = ignore_direction_ranges
+        self._R_std = R_std
+        self._P = P
+
         self._tengu_flow_analyzer = None
         self._min_length = None
 
@@ -418,11 +534,15 @@ class TenguTracker(object):
         pass
 
     def new_tracklet(self, assignment, class_name):
-        to = Tracklet()
-        to.update_with_assignment(assignment, class_name)
+        # TODO: R_std and P can be set from saved values in a flow graph
+        to = Tracklet(self, R_std=self._R_std, P=self._P)
+        to.update_with_assignment(Assignment(assignment), class_name)
         return to
 
     def initialize_tracklets(self, detections, class_names):
+        
+        self.prepare_updates(detections)
+
         for d, detection in enumerate(detections):
             self._tracklets.append(self.new_tracklet(detection, class_names[d]))
 
@@ -528,7 +648,7 @@ class TenguTracker(object):
         if new_assignment is None:
             tracklet.update_without_assignment()
         else:
-            tracklet.update_with_assignment(new_assignment, class_names)
+            tracklet.update_with_assignment(Assignment(new_assignment), class_name)
 
     @staticmethod
     def rect_contains(rect_a, rect_b):
@@ -578,6 +698,30 @@ class TenguTracker(object):
             if duplicate in self._tracklets:
                 del self._tracklets[self._tracklets.index(duplicate)]
 
+        # obsolete if not is_confirmed
+        new_tracklet = []
+        for tracklet in self._tracklets:
+            if tracklet.is_confirmed:
+                new_tracklet.append(tracklet)
+            else:
+                self.logger.debug('{} is marked as obsolete, not confirmed anymore'.format(tracklet))
+        removed = len(self._tracklets) - len(new_tracklet)
+        self._tracklets = new_tracklet
+        self.logger.debug('removed {} tracked objects due to obsoletion'.format(removed))
+
+        for tracklet in self._tracklets:
+            # check if it has already left
+            if tracklet.has_left:
+                continue
+            # check if any of rect corners has left
+            frame_shape = self._tengu_flow_analyzer._frame_shape
+            has_left = tracklet.rect[0] <= 0 or tracklet.rect[1] <= 0 \
+                    or (tracklet.rect[0] + tracklet.rect[2] >= frame_shape[1]) \
+                    or (tracklet.rect[1] + tracklet.rect[3] >= frame_shape[0])
+            if has_left:
+                tracklet.mark_left()
+                continue
+
     def is_obsolete(self, tracklet):
         diff = TenguTracker._global_updates - tracklet.last_updated_at
         #if tracklet.speed < 0:
@@ -586,7 +730,18 @@ class TenguTracker(object):
 
         return diff > self._obsoletion
 
-    """ this is called from Flow Analyzer to check if this tracklet should be considered
-    """
     def ignore_tracklet(self, tracklet):
-        return False
+        """ this is called from Flow Analyzer to check if this tracklet should be considered
+        """
+        ignore_tracklet = False
+        if self._ignore_direction_ranges is not None:
+            if tracklet.direction is None:
+                self.logger.debug('{} has no direction yet, will be ignored'.format(tracklet))
+                ignore_tracklet = True
+            else:
+                for ignore_direction_range in self._ignore_direction_ranges:
+                    if tracklet.direction >= ignore_direction_range[0] and tracklet.direction < ignore_direction_range[1]:
+                        self.logger.debug('{} is moving towards the direction between ignored ranges'.format(tracklet))
+                        ignore_tracklet = True
+                        break
+        return ignore_tracklet

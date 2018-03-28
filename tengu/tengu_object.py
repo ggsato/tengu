@@ -196,10 +196,9 @@ class TenguObject(object):
         R_std: float, a standard deviation of measurement error
         Q    : float, a covariance of process noise
         dt   : int, a time unit
-        P    : float, a maximum initial covariance
+        P    : float, a maximum initial variance of all states to build a covariance matrix
         """
         kf = KalmanFilter(dim_x=6, dim_z=2)
-        kf.x = np.array([[0, 0, 0, 0, 0, 0]]).T
         kf.P = np.eye(6) * P
         kf.R = np.eye(2) * R_std**2
         q = Q_discrete_white_noise(3, dt, Q)
