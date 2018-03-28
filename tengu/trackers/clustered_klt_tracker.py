@@ -35,12 +35,10 @@ class ClusteredKLTTracklet(Tracklet):
         super(ClusteredKLTTracklet, self).__init__(**kwargs)
         self.tracker = tracker
         self._keep_lost_tracklet = keep_lost_tracklet
-        self._rect = None
         self._w_hist = []
         self._h_hist = []
         self._hist = None
         self._centers = []
-        self._validated_nodes = Set([])
 
     def similarity(self, assignment):
         """
@@ -148,7 +146,6 @@ class ClusteredKLTTracklet(Tracklet):
         else:
             # update
             self._assignments.append(assignment)
-            self._validated_nodes = Set(assignment.group)
             self.update_properties(lost=False)
             self.recent_updates_by('1')
             if not self._class_map.has_key(class_name):
@@ -165,8 +162,6 @@ class ClusteredKLTTracklet(Tracklet):
 
         self.recent_updates_by('2')
         self.update_location(None)
-        
-        self.validate_nodes()
 
     def update_location(self, z):
         super(ClusteredKLTTracklet, self).update_location(z)
@@ -186,36 +181,6 @@ class ClusteredKLTTracklet(Tracklet):
         confidence_x = min(1.0, w/2 / (variance[0]*3))
         confidence_y = min(1.0, h/2 / (variance[1]*3))
         self._confidence = min(confidence_x, confidence_y)
-
-    def validate_nodes(self):
-        """
-        check and merge valid nodes
-        """
-        latest_set = Set(self._assignments[-1].group)
-        if self._validated_nodes is None:
-            self._validated_nodes = latest_set
-            return
-
-        # check
-        validated = Set([])
-        for node in self._validated_nodes:
-            # in the first place, remove if outdated
-            if node.last_updated_at != TenguTracker._global_updates-1:
-                continue 
-            if node in validated:
-                continue
-            # then, find at least one similar node
-            for another in self._validated_nodes:
-                if node == another:
-                    continue
-                if another.last_updated_at != TenguTracker._global_updates-1:
-                    continue 
-                similarity = node.similarity(another)
-                if min(similarity) >=  ClusteredKLTTracker._minimum_node_similarity:
-                    # found one
-                    validated = validated | Set([node, another])
-                    break
-        self._validated_nodes = validated
 
     def cropped_images(self, max_size):
         """get intermediate images
@@ -397,12 +362,6 @@ class ClusteredKLTTracker(TenguTracker):
             if has_left:
                 tracklet.mark_left()
                 continue
-            # obsolete if one of its nodes has left
-            for node in tracklet._validated_nodes:
-                if node.has_left:
-                    self.logger.debug('removing {}, node {} has left'.format(tracklet, node))
-                    tracklet.mark_left()
-                    break
 
     def ignore_tracklet(self, tracklet):
         ignore_tracklet = False
