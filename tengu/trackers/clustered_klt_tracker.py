@@ -10,7 +10,6 @@ import numpy as np
 
 from scipy.optimize import linear_sum_assignment
 
-from ..tengu_flow_analyzer import KLTAnalyzer, TenguNode
 from ..tengu_tracker import TenguTracker, Tracklet, TenguCostMatrix
 from ..common import draw_str
 
@@ -77,7 +76,7 @@ class ClusteredKLTTracklet(Tracklet):
         return min(similarity)
 
     def histogram(self, rect):
-        frame = self.tracker._tengu_flow_analyer._klt_analyzer.last_frame
+        frame = self.tracker._tengu_flow_analyzer._last_frame
         bigger_ratio = 0.0
         from_y = int(rect[1])
         from_y = max(0, int(from_y - rect[3] * bigger_ratio))
@@ -345,40 +344,11 @@ class ClusteredKLTTracker(TenguTracker):
         self._keep_lost_tracklet = keep_lost_tracklet
         # (start, end], -pi <= ignored_range < pi
         self._ignore_direction_ranges = ignore_direction_ranges
-        self._tengu_flow_analyer = None
         self._R_std = R_std
         self._P = P
-        self.detected_node_set = Set([])
-        self.detection_node_map = None
-        self.debug = None
 
     def prepare_updates(self, detections):
-
-        if self._tengu_flow_analyer._klt_analyzer.draw_flows:
-            # this is a debug mode
-            self.debug = self._tengu_flow_analyer._klt_analyzer.prev_gray.copy()
-
-        start = time.time()
-
-        # update node and edge(add, remove)
-        self.update_detected_node_set()
-        lap1 = time.time()
-        self.logger.debug('udpate_detected_node_set took {} s'.format(lap1 - start))
-
-        # update weights
-        self.detection_node_map = self.update_detection_node_map(detections)
-        lap2 = time.time()
-        self.logger.debug('update_detection_node_map took {} s'.format(lap2 - lap1))
-
-        end = time.time()
-        self.logger.debug('prepare_updates took {} s'.format(end - start))
-
-        # update
-        self._tengu_flow_analyer._klt_analyzer.last_detections = detections
-
-        if self._tengu_flow_analyer._klt_analyzer.draw_flows:
-            self.draw_detected_node_set()
-            cv2.imshow('Clustered KLT Debug', self.debug)
+        pass
 
     def initialize_tracklets(self, detections, class_names):
         
@@ -390,45 +360,14 @@ class ClusteredKLTTracker(TenguTracker):
     def new_tracklet(self, assignment, class_name):
         # TODO: R_std and P can be set from saved values in a flow graph
         to = ClusteredKLTTracklet(self, keep_lost_tracklet=self._keep_lost_tracklet, R_std=self._R_std, P=self._P)
-        to.update_with_assignment(NodeCluster(self.detection_node_map[assignment], assignment), class_name)
+        to.update_with_assignment(NodeCluster([], assignment), class_name)
         return to
-
-    def update_detected_node_set(self):
-        
-        nodes = self._tengu_flow_analyer._klt_analyzer.nodes
-        self.logger.debug('updating detected_node_set with {} nodes, and {} detected_node_set nodes'.format(len(nodes), len(self.detected_node_set)))
-
-        # remove
-        removed_nodes = self._tengu_flow_analyer._klt_analyzer.last_removed_nodes
-        for removed_node in removed_nodes:
-            self.detected_node_set.discard(removed_node)
-
-    def update_detection_node_map(self, detections):
-        
-        detection_node_map = {}
-        for detection in detections:
-            detection_node_map[detection] = []
-        nodes = self._tengu_flow_analyer._klt_analyzer.nodes
-        for node in nodes:
-            for detection in detections:
-                if node.inside_rect(detection):
-                    if not node in self.detected_node_set:
-                        self.detected_node_set.add(node)
-                    else:
-                        node.update_last_detected(detection)
-                    detection_node_map[detection].append(node)
-
-        for detection in detection_node_map:
-            in_nodes = detection_node_map[detection]
-            self.logger.debug('found {} in-nodes in {}'.format(len(in_nodes), detection))
-
-        return detection_node_map
 
     def assign_new_to_tracklet(self, new_assignment, class_name, tracklet):
         if new_assignment is None:
             tracklet.update_without_assignment()
         else:
-            tracklet.update_with_assignment(NodeCluster(self.detection_node_map[new_assignment], new_assignment), class_name)
+            tracklet.update_with_assignment(NodeCluster([], new_assignment), class_name)
 
     def obsolete_trackings(self):
 
@@ -446,37 +385,12 @@ class ClusteredKLTTracker(TenguTracker):
         self._tracklets = new_tracklet
         self.logger.debug('removed {} tracked objects due to obsoletion'.format(removed))
 
-        # obsolete detected nodes
-        obsolete_nodes = Set([])
-        for node in self.detected_node_set:
-            diff = TenguTracker._global_updates - node.last_detected_at
-            if diff > self._obsoletion:
-                # node is obsolete
-                obsolete_nodes.add(node)
-                # REMARKS: THIS IS UGLY, ISOLATE ASAP
-                if node in self._tengu_flow_analyer._klt_analyzer._last_removed_nodes:
-                    # this node was already removed, nothing to do
-                    pass
-                else:
-                    # remove from sceneanalyzer as well
-                    self._tengu_flow_analyer._klt_analyzer._last_removed_nodes.append(node)
-                    del self._tengu_flow_analyer._klt_analyzer.nodes[self._tengu_flow_analyer._klt_analyzer.nodes.index(node)]
-                self.logger.debug('removed obsolete node due to diff = {}'.format(diff))
-
-        # REMARKS: THIS IS UGLY, TOO
-        for node in self._tengu_flow_analyer._klt_analyzer.nodes:
-            diff = TenguTracker._global_updates - node.last_detected_at
-            if diff > self._obsoletion:
-                # remove from sceneanalyzer as well
-                self._tengu_flow_analyer._klt_analyzer._last_removed_nodes.append(node)
-                del self._tengu_flow_analyer._klt_analyzer.nodes[self._tengu_flow_analyer._klt_analyzer.nodes.index(node)]
-
         for tracklet in self._tracklets:
             # check if it has already left
             if tracklet.has_left:
                 continue
             # check if any of rect corners has left
-            frame_shape = self._tengu_flow_analyer._frame_shape
+            frame_shape = self._tengu_flow_analyzer._frame_shape
             has_left = tracklet.rect[0] <= 0 or tracklet.rect[1] <= 0 \
                     or (tracklet.rect[0] + tracklet.rect[2] >= frame_shape[1]) \
                     or (tracklet.rect[1] + tracklet.rect[3] >= frame_shape[0])
@@ -489,8 +403,6 @@ class ClusteredKLTTracker(TenguTracker):
                     self.logger.debug('removing {}, node {} has left'.format(tracklet, node))
                     tracklet.mark_left()
                     break
-
-        self.detected_node_set = self.detected_node_set - obsolete_nodes
 
     def ignore_tracklet(self, tracklet):
         ignore_tracklet = False
@@ -507,8 +419,6 @@ class ClusteredKLTTracker(TenguTracker):
         return ignore_tracklet
 
     def draw_detected_node_set(self):
-        for node in self._tengu_flow_analyer._klt_analyzer.nodes:
-            cv2.circle(self.debug, node.tr[-1], 5, 128, -1)
 
         for tracklet in self._tracklets:
             node_cluster = tracklet.last_assignment

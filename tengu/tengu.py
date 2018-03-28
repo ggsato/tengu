@@ -110,10 +110,6 @@ class Tengu(object):
             self._current_frame += 1
             event_dict[Tengu.EVENT_FRAME_NO] = self._current_frame
 
-            # debug
-            #if self._current_frame > 1000:
-            #    break
-
             # rotate
             if rotation != 0:
                 rows, cols, channels = frame.shape
