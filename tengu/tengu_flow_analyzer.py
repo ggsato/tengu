@@ -23,52 +23,19 @@ class TenguScene(object):
 
     def __init__(self, direction_based_flows=[]):
         super(TenguScene, self).__init__()
-        self._flow_map = {}
         self._direction_based_flows = direction_based_flows
-
-    def set_flows(self, flows):
-        self._flow_map = {}
-        for flow in flows:
-            if not self._flow_map.has_key(flow.name):
-                self._flow_map[flow.name] = []
-            self._flow_map[flow.name].append(flow)
-
-    @property
-    def flows(self):
-        flows = []
-        for name in self.flow_names:
-            for flow in self.named_flows(name):
-                flows.append(flow)
-        return flows
-
-    @property
-    def flow_names(self):
-        return self._flow_map.keys()
 
     @property
     def direction_based_flows(self):
         return self._direction_based_flows
 
-    def named_flows(self, name):
-        return self._flow_map[name]
-
     def serialize(self):
         js = {}
-        flows_js = []
-        for name in self._flow_map:
-            flows = self._flow_map[name]
-            for flow in flows:
-                flows_js.append(flow.serialize())
-        js['flows'] = flows_js
         return js
 
     @staticmethod
     def deserialize(js, blk_node_map):
         logging.debug('deserializing {}'.format(js))
-        flows_js = js['flows']
-        flows = []
-        for flow_js in flows_js:
-            flows.append(TenguFlow.deserialize(flow_js, blk_node_map))
         # direction based flows
         direction_based_flows = []
         if js.has_key('direction_based_flows'):
@@ -77,7 +44,6 @@ class TenguScene(object):
                 direction_based_flow = DirectionBasedFlow.deserialize(direction_based_flow_js)
                 direction_based_flows.append(direction_based_flow)
         tengu_scene = TenguScene(direction_based_flows=direction_based_flows)
-        tengu_scene.set_flows(flows)
         return tengu_scene
 
 class DirectionBasedFlow(object):
@@ -165,170 +131,6 @@ class DirectionBasedFlow(object):
     def add_tracklet(self, tracklet):
         self._tracklets.append(tracklet)
 
-class TenguFlow(object):
-
-    """
-    TenguFlow represents a flow of typical movments by a particular type of objects,
-    and whichi is characterized by its source, path, and sink.
-    """
-    min_source_sink_similarity_dist = 2.0
-
-    def __init__(self, source=None, sink=None, path=[], name='default', group='default', directions=None):
-        super(TenguFlow, self).__init__()
-        self._source = source
-        self._sink = sink
-        self._path = path
-        self._name = name
-        self._group = group
-        # if exists, tracklets within this directions are allowed, otherwise, such a similarity should return 0
-        self._directions = directions
-
-        # transient attributes
-
-        # direction
-        self._direction = Tracklet.get_angle(self._source.position, self._sink.position)
-
-        # a set of tracklets currently on this flow
-        # can be sorted by Tracklet#dist_to_sink
-        self._tracklets = Set([])
-
-    def __repr__(self):
-        return 'id={}, name={}, group={}'.format(id(self), self._name, self._group)
-
-    def serialize(self):
-        js = {}
-        js['source'] = self._source.serialize()
-        js['sink'] = self._sink.serialize()
-        js_path = []
-        for node in self._path:
-            js_path.append(node.serialize())
-        js['path'] = js_path
-        js['name'] = self._name
-        js['group'] = self._group
-        return js
-
-    @staticmethod
-    def deserialize(js, blk_node_map):
-        logging.debug('deserializing {}'.format(js))
-        path = []
-        for js_node in js['path']:
-            path.append(blk_node_map[js_node['y_blk']][js_node['x_blk']])
-        js_source = js['source']
-        js_sink = js['sink']
-        directions = None
-        if js.has_key('directions'):
-            directions = js['directions']
-        return TenguFlow(source=blk_node_map[js_source['y_blk']][js_source['x_blk']], sink=blk_node_map[js_sink['y_blk']][js_sink['x_blk']], path=path, name=js['name'], group=js['group'], directions=directions)
-
-    @property
-    def source(self):
-        return self._source
-
-    @property
-    def sink(self):
-        return self._sink
-
-    @property
-    def path(self):
-        return self._path
-
-    @property
-    def name(self):
-        return self._name
-
-    @property
-    def group(self):
-        return self._group
-
-    @property
-    def direction(self):
-        return self._direction
-
-    def similarity(self, another_flow):
-        # check directions first
-        if self._directions is not None and another_flow.direction is not None:
-            allowed = self._directions[0] < another_flow.direction and another_flow.direction < self._directions[1]
-            logging.debug('checking directions between {} and {}, allowed? {}'.format(self.name, another_flow, allowed))
-            if not allowed:
-                return 0.0
-        # path similarity
-        shorter = self if len(self.path) < len(another_flow.path) else another_flow
-        longer = self if another_flow == shorter else another_flow
-        flow_node_similarities = 0.0
-        flow_nodes_in_longer_path = copy.copy(longer.path)
-        for flow_node in shorter.path:
-            if flow_node in longer.path:
-                flow_node_similarities += 1.0
-            else:
-                nearest = None
-                nearest_node = None
-                for another_node in flow_nodes_in_longer_path:
-                    distance = flow_node.distance(another_node)
-                    if nearest is None:
-                        nearest = distance
-                        nearest_node = another_node
-                    elif distance < nearest:
-                        nearest = distance
-                        nearest_node = another_node
-                # if diff is only 1, similarity = 1.0, otherwise, 0 ~ 1.0
-                flow_node_similarities += 1.0 / nearest
-                del flow_nodes_in_longer_path[flow_nodes_in_longer_path.index(nearest_node)]
-
-        path_similarity = flow_node_similarities / len(shorter.path)
-
-        # source and sink similarity
-        source_dist = TenguFlow.max_node_diff(self.source, another_flow.source)
-        source_similarity = TenguFlow.min_source_sink_similarity_dist / max(TenguFlow.min_source_sink_similarity_dist, source_dist)
-        sink_dist = TenguFlow.max_node_diff(self.sink, another_flow.sink)
-        sink_similarity = TenguFlow.min_source_sink_similarity_dist / max(TenguFlow.min_source_sink_similarity_dist, sink_dist)
-        source_sink_similarity = (source_similarity + sink_similarity) / 2
-
-        # direction similarity
-        direction_similarity = 0.0
-        # a tracklet may not have its directoin, then ignore this
-        if another_flow.direction is None:
-            direction_similarity = 1.0
-        else:
-            diff_angle = math.fabs(self._direction - another_flow.direction)
-            # make the diff between 0 and pi
-            if diff_angle > math.pi:
-                diff_angle = 2*math.pi - diff_angle
-            # calculate
-            if diff_angle > math.pi/2:
-                # no similarity, no change
-                pass
-            elif diff_angle == 0:
-                direction_similarity = 1.0
-            else:
-                # 1.0 if diff is within +-pi/18(10 degrees), otherwise, between 0.1(1/9) ~ 1.0
-                direction_similarity = min(1.0, math.pi/18 / diff_angle)
-
-        logging.debug('flow similarity of {} to {}: path={}, source={}, sink={}, direction={}'.format(self, another_flow, path_similarity, source_similarity, sink_similarity, direction_similarity))
-
-        return (path_similarity + source_sink_similarity + direction_similarity) / 3
-
-    @staticmethod
-    def max_node_diff(node1, node2):
-        return max(abs(node1._y_blk-node2._y_blk), abs(node1._x_blk-node2._x_blk))
-
-    def put_tracklet(self, tracklet, dist_to_sink, similarity, shortest_path_for_debug=None):
-        if tracklet._current_flow is not None and tracklet._current_flow != self:
-            # move to a different flow
-            tracklet._current_flow._tracklets.remove(tracklet)
-        if not tracklet in self._tracklets:
-            self._tracklets.add(tracklet)
-        # set flow
-        tracklet.set_flow(self, dist_to_sink, similarity, shortest_path_for_debug=shortest_path_for_debug)
-
-    def tracklets_by_dist(self):
-        """ return tracklets ordered by distance to sink in an ascending order
-        """
-        return sorted(self._tracklets, key=attrgetter('dist_to_sink'))
-
-    def remove_tracklet(self, tracklet):
-        if tracklet in self._tracklets:
-            self._tracklets.remove(tracklet)
-
 class TenguFlowNode(object):
 
     def __init__(self, y_blk, x_blk, position):
@@ -337,12 +139,6 @@ class TenguFlowNode(object):
         self._x_blk = x_blk
         # position has to be tuple
         self._position = position
-        self._source_count = 0
-        self._sink_count = 0
-        # pair of source, count
-        self._sources = {}
-        # pair of sink, count
-        self._sinks = {}
 
     def __repr__(self):
         return json.dumps(self.serialize())
@@ -356,28 +152,6 @@ class TenguFlowNode(object):
         return js
 
     @property
-    def source_count(self):
-        return self._source_count
-
-    def mark_source(self):
-        self._source_count += 1
-
-    @property
-    def sink_count(self):
-        return self._sink_count
-
-    def mark_sink(self, source):
-        self._sink_count += 1
-
-        if not self._sources.has_key(source):
-            self._sources[source] = 0
-        self._sources[source] += 1
-
-        if not source._sinks.has_key(self):
-            source._sinks[self] = 0
-        source._sinks[self] += 1
-
-    @property
     def position(self):
         return self._position
 
@@ -386,6 +160,10 @@ class TenguFlowNode(object):
 
     def distance(self, another_flow):
         return max(abs(self._y_blk - another_flow._y_blk), abs(self._x_blk - another_flow._x_blk))
+
+    @staticmethod
+    def max_node_diff(node1, node2):
+        return max(abs(node1._y_blk-node2._y_blk), abs(node1._x_blk-node2._x_blk))
 
 class TenguFlowAnalyzer(object):
 
@@ -417,15 +195,11 @@ class TenguFlowAnalyzer(object):
         self._flow_blocks = flow_blocks
         self._show_graph = show_graph
         self._majority_in_percent = majority_in_percent
-        self._initial_weight = initial_weight
-        self._weight_func = lambda u, v, d, prev_prev_node, s=self: s.calculate_weight(u, v, d, prev_prev_node)
-        self._min_sink_count_for_flow = min_sink_count_for_flow
         self._allow_non_adjacent_edge = allow_non_adjacent_edge
         self._identical_flow_similarity = identical_flow_similarity
         # the folowings will be initialized
         self._scene = None
         self._frame_shape = None
-        self._flow_graph = None
         self._flow_blocks_size = None
         self._blk_node_map = None
         # transient
@@ -532,9 +306,7 @@ class TenguFlowAnalyzer(object):
         
         for new_tracklet in new_tracklets:
             flow_node = self.flow_node_at(*new_tracklet.location)
-            flow_node.mark_source()
             new_tracklet.add_flow_node_to_path(flow_node)
-            self.logger.debug('source at {}'.format(flow_node))
 
     def update_existing_tracklets(self, existing_tracklets):
         
@@ -575,7 +347,7 @@ class TenguFlowAnalyzer(object):
                 continue
 
             # if this tracklet is not moving, just remove
-            max_diff = TenguFlow.max_node_diff(removed_tracklet.path[0], removed_tracklet.path[-1])
+            max_diff = TenguFlowNode.max_node_diff(removed_tracklet.path[0], removed_tracklet.path[-1])
             if max_diff < 2:
                 # within adjacent blocks, this is stationally
                 self.logger.debug('{} is removed, but not for counting, stationally'.format(removed_tracklet))
@@ -596,7 +368,6 @@ class TenguFlowAnalyzer(object):
                 self.logger.debug('same source {} and sink {}, skipped'.format(source_node, sink_node))
                 return
 
-            sink_node.mark_sink(source_node)
             self.logger.debug('{} sink at {} through {}'.format(removed_tracklet, sink_node, removed_tracklet.path))
 
             # check direction baesd flow
@@ -630,7 +401,7 @@ class TenguFlowAnalyzer(object):
                 angle_movements_ok = True
             if not angle_movements_ok:
                 continue
-                
+
             direction_based_flow.add_tracklet(tracklet)
             tracklet.mark_removed()
             self.logger.info('found a matching direction based flow {} for {}'.format(direction_based_flow, tracklet))
@@ -695,23 +466,8 @@ class TenguFlowAnalyzer(object):
         for y_blk in xrange(self._flow_blocks[0]):
             for x_blk in xrange(self._flow_blocks[1]):
                 flow_node = self._blk_node_map[y_blk][x_blk]
-                if self._scene_file is None:
-                    is_source = flow_node.source_count > flow_node.sink_count
-                    if is_source:
-                        source_count = flow_node.source_count
-                        if source_count == 0:
-                            continue
-                        grayness = min(255, 128+source_count)
-                    else:
-                        sink_count = flow_node.sink_count
-                        if sink_count == 0:
-                            continue
-                        grayness = max(0, 128-sink_count)
-                    color = (grayness, grayness, grayness)
-                else:
-                    color = (0, 0, 0)
+                color = (0, 0, 0)
                 r = int(diameter/8)
-
                 cv2.circle(img, flow_node.position, r, color, -1)
 
         # tracklets

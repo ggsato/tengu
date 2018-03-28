@@ -20,18 +20,6 @@ class TenguSceneAnalyzer(object):
         CLASS 0     | CLASS N     | ... | CLASS N 
         cA0-1 cA0-2 | cAN-1 cAN-2 | ... | cZN-1 cZN-2
         """
-        for name in scene.flow_names:
-            for named_flow in scene.named_flows(name):
-                group = named_flow.group
-                # check removed tracklets
-                tracklets = named_flow.tracklets_by_dist()
-                for tracklet in tracklets:
-                    if tracklet.removed:
-                        # increment
-                        self.count_tracklet(tracklet, group)
-                        # remove this tracklet from tracklet
-                        named_flow.remove_tracklet(tracklet)
-
         # check direction based flows if available
         if len(scene.direction_based_flows) > 0:
             for direction_based_flow in scene.direction_based_flows:
