@@ -254,6 +254,14 @@ class Tracklet(TenguObject):
     def add_flow_node_to_path(self, flow_node):
         self._path.append(flow_node)
         self._milestones.append([self.center, self.rect, TenguTracker._global_updates])
+        flow_node.record_tracklet(self)
+
+    @property
+    def stats(self):
+        if len(self._xs) == 0:
+            return None
+            
+        return self._xs[-1].T[0]
 
     @property
     def speed(self):

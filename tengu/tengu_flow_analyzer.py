@@ -6,13 +6,10 @@ import numpy as np
 from operator import attrgetter
 from sets import Set
 import StringIO
-import seaborn as sns
-# dijkstra
-from heapq import heappush, heappop
-from itertools import count
+from pandas import DataFrame
+import pandas as pd
 
 from .tengu_tracker import TenguTracker, Tracklet, TenguCostMatrix
-from .common import draw_str
 
 class TenguScene(object):
 
@@ -131,7 +128,29 @@ class DirectionBasedFlow(object):
     def add_tracklet(self, tracklet):
         self._tracklets.append(tracklet)
 
+class StatsDataFrame(object):
+    """ A wraper object of stats DataFrame
+    """
+
+    def __init__(self):
+        super(StatsDataFrame, self).__init__()
+        self._df = None
+
+    def __repr__(self):
+        return '{}'.format('Empty' if self._df is None else self._df.describe())
+
+    def append(self, stats_dict):
+        """ append an array of predicated values
+        """
+        new_df = DataFrame.from_dict(stats_dict)
+        if self._df is None:
+            self._df = new_df
+        else:
+            self._df = self._df.append(new_df)
+
 class TenguFlowNode(object):
+    """ A FlowNode keeps statistical information about its own region
+    """
 
     def __init__(self, y_blk, x_blk, position):
         super(TenguFlowNode, self).__init__()
@@ -139,9 +158,11 @@ class TenguFlowNode(object):
         self._x_blk = x_blk
         # position has to be tuple
         self._position = position
+        # stats
+        self._stats = StatsDataFrame()
 
     def __repr__(self):
-        return json.dumps(self.serialize())
+        return 'FlowNode@[{},{}], {}\n{}'.format(self._y_blk, self._x_blk, self._position, self._stats)
 
     def serialize(self):
         js = {}
@@ -160,6 +181,20 @@ class TenguFlowNode(object):
 
     def distance(self, another_flow):
         return max(abs(self._y_blk - another_flow._y_blk), abs(self._x_blk - another_flow._x_blk))
+
+    def record_tracklet(self, tracklet):
+        stats = tracklet.stats
+        if stats is None:
+            return
+        stats_dict = {}
+        stats_dict['x_p'] = {tracklet.obj_id: stats[0]}
+        stats_dict['x_v'] = {tracklet.obj_id: stats[1]}
+        stats_dict['x_a'] = {tracklet.obj_id: stats[2]}
+        stats_dict['y_p'] = {tracklet.obj_id: stats[3]}
+        stats_dict['y_v'] = {tracklet.obj_id: stats[4]}
+        stats_dict['y_a'] = {tracklet.obj_id: stats[5]}
+        self._stats.append(stats_dict)
+        print('record and updated {}'.format(self))
 
     @staticmethod
     def max_node_diff(node1, node2):
