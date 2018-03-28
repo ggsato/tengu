@@ -457,7 +457,7 @@ class TenguTracker(object):
     # 0.01 = 4.6 => 1% overlap
     _confident_min_cost = 4.6
 
-    def __init__(self, obsoletion=100, ignore_direction_ranges=None, R_std=10., P=25., **kwargs):
+    def __init__(self, obsoletion=100, ignore_direction_ranges=None, R_std=10., P=25., Q=0.01, **kwargs):
         super(TenguTracker, self).__init__(**kwargs)
         self.logger = logging.getLogger(__name__)
         self._tracklets = []
@@ -467,6 +467,7 @@ class TenguTracker(object):
         self._ignore_direction_ranges = ignore_direction_ranges
         self._R_std = R_std
         self._P = P
+        self._Q = Q
 
         self._tengu_flow_analyzer = None
         self._min_length = None
@@ -535,7 +536,7 @@ class TenguTracker(object):
 
     def new_tracklet(self, assignment, class_name):
         # TODO: R_std and P can be set from saved values in a flow graph
-        to = Tracklet(self, R_std=self._R_std, P=self._P)
+        to = Tracklet(self, R_std=self._R_std, P=self._P, Q=self._Q)
         to.update_with_assignment(Assignment(assignment), class_name)
         return to
 
