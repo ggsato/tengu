@@ -18,8 +18,8 @@ class TenguObject(object):
 
     _very_small_value = 0.000001
 
-    def __init__(self, R_std=10., Q=.0001, dt=1, P=100., std_devs=None):
-        self._filter = TenguObject.create_filter(R_std, Q, dt, P, std_devs)
+    def __init__(self, x0, R_std=10., Q=.0001, dt=1, P=100., std_devs=None):
+        self._filter = TenguObject.create_filter(x0, R_std, Q, dt, P, std_devs)
         self._zs = []
         self._xs = []
         self._covs = []
@@ -123,21 +123,13 @@ class TenguObject(object):
 
     def update_location(self, z):
         """ update the current location by a predicted location and the given z(observed_location)
-
-
         """
-        if len(self._zs) == 0:
-            if z is None:
-                return
-            # initialize
-            self._filter.x = np.array([[z[0], 0., 0., z[1], 0., 0.,]]).T
-        else:
-            # predict
-            self._filter.predict()
-            if z is not None:
-                self._filter.update(z)
-            self._xs.append(self._filter.x)
-            self._covs.append(self._filter.P)
+        # predict
+        self._filter.predict()
+        if z is not None:
+            self._filter.update(z)
+        self._xs.append(self._filter.x)
+        self._covs.append(self._filter.P)
         self._zs.append(z)
 
     def accept_measurement(self, z):
@@ -192,7 +184,7 @@ class TenguObject(object):
         return (math.sqrt(self._covs[-1][2][2]), math.sqrt(self._covs[-1][5][5]))
 
     @staticmethod
-    def create_filter(R_std, Q, dt, P, std_devs):
+    def create_filter(x0, R_std, Q, dt, P, std_devs):
         """ creates a second order Kalman Filter
 
         R_std: float, a standard deviation of measurement error
@@ -227,4 +219,6 @@ class TenguObject(object):
                          [0., 0., 0., 0., 0., 1.]])
         kf.H = np.array([[1., 0., 0., 0., 0., 0.],
                          [0., 0., 0., 1., 0., 0.]])
+        # initial x
+        kf.x = np.array([x0]).T
         return kf

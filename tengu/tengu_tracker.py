@@ -27,8 +27,8 @@ class Tracklet(TenguObject):
     # angle movement when not enough records exist
     angle_movement_not_available = 9.9
 
-    def __init__(self, tracker, **kwargs):
-        super(Tracklet, self).__init__(**kwargs)
+    def __init__(self, tracker, x0, **kwargs):
+        super(Tracklet, self).__init__(x0, **kwargs)
         self.logger = logging.getLogger(__name__)
         Tracklet._class_obj_id += 1
         # incremental unique object id
@@ -202,7 +202,12 @@ class Tracklet(TenguObject):
             if not self._class_map.has_key(class_name):
                 self._class_map[class_name] = 0
             self._class_map[class_name] += 1
-            self.update_location(self._centers[-1])
+            if len(self._assignments) == 1:
+                # this is the new Tracklet, which was already given the initial x0
+                pass
+            else:
+                # update
+                self.update_location(self._centers[-1])
 
     def update_without_assignment(self):
         """
@@ -421,7 +426,7 @@ class TenguTracker(object):
     # 0.01 = 4.6 => 1% overlap
     _confident_min_cost = 4.6
 
-    def __init__(self, obsoletion=100, ignore_direction_ranges=None, R_std=10., P=25., Q=0.01, **kwargs):
+    def __init__(self, obsoletion=100, ignore_direction_ranges=None, P=25., Q=0.01, **kwargs):
         super(TenguTracker, self).__init__(**kwargs)
         self.logger = logging.getLogger(__name__)
         self._tracklets = []
@@ -429,7 +434,6 @@ class TenguTracker(object):
         self._obsoletion = obsoletion
         # (start, end], -pi <= ignored_range < pi
         self._ignore_direction_ranges = ignore_direction_ranges
-        self._R_std = R_std
         self._P = P
         self._Q = Q
 
@@ -499,10 +503,22 @@ class TenguTracker(object):
         pass
 
     def new_tracklet(self, assignment, class_name):
-        flow_node = self._tengu_flow_analyzer.flow_node_at(*Tracklet.center_from_rect(assignment))
-        to = Tracklet(self, R_std=self._R_std, P=self._P, Q=self._Q, std_devs=flow_node.std_devs)
+        center = Tracklet.center_from_rect(assignment)
+        flow_node = self._tengu_flow_analyzer.flow_node_at(*center)
+        means = flow_node.means
+        if means is None:
+            x0 = [center[0], 0., 0., center[1], 0., 0.]
+        else:
+            x0 = [center[0], means[1], means[2], center[1], means[4], means[5]]
+        R_std = self.R_std_from_rect(assignment)
+        to = Tracklet(self, x0, R_std=R_std, P=self._P, Q=self._Q, std_devs=flow_node.std_devs)
         to.update_with_assignment(Assignment(assignment), class_name)
         return to
+
+    def R_std_from_rect(self, rect):
+        """ caclculate a standard deviation of measurement error from rect
+        """
+        return max(*rect[2:]) * 1/2 * 1/3
 
     def initialize_tracklets(self, detections, class_names):
         

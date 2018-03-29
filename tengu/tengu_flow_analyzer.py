@@ -223,6 +223,15 @@ class TenguFlowNode(object):
 
         return [std_dev_series['x_p'], std_dev_series['x_v'], std_dev_series['x_a'], std_dev_series['y_p'], std_dev_series['y_v'], std_dev_series['y_a']]
 
+    @property
+    def means(self):
+
+        mean_series = self._stats.mean_series
+        if mean_series is None or mean_series.isnull()[0]:
+            return None
+
+        return [mean_series['x_p'], mean_series['x_v'], mean_series['x_a'], mean_series['y_p'], mean_series['y_v'], mean_series['y_a']]
+
     @staticmethod
     def max_node_diff(node1, node2):
         return max(abs(node1._y_blk-node2._y_blk), abs(node1._x_blk-node2._x_blk))
