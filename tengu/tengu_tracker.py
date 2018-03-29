@@ -47,7 +47,7 @@ class Tracklet(TenguObject):
         self._centers = []
         # used by flow analyzer for building flow graph
         self._path = []
-        # (center, rect, frame_no)
+        # (center, rect, frame_no, hist)
         self._milestones = []
         # used by flow analyzer for updating a scene
         self._removed = False
@@ -118,7 +118,6 @@ class Tracklet(TenguObject):
 
         if self._rect is None:
             # this means this is called for the first time
-            assignment.hist, assignment.img = self.histogram(assignment.detection)
             return 1.0
 
         # 1. rect similarity
@@ -139,17 +138,18 @@ class Tracklet(TenguObject):
 
         return rect_similarity
 
-    def histogram(self, rect):
+    @property
+    def histogram(self):
         frame = self.tracker._tengu_flow_analyzer._last_frame
         bigger_ratio = 0.0
-        from_y = int(rect[1])
-        from_y = max(0, int(from_y - rect[3] * bigger_ratio))
-        to_y = int(rect[1]+rect[3])
-        to_y = min(frame.shape[0], int(to_y + rect[3] * bigger_ratio))
-        from_x = int(rect[0])
-        from_x = max(0, int(from_x - rect[2] * bigger_ratio))
-        to_x = int(rect[0]+rect[2])
-        to_x = min(frame.shape[1], int(to_x + rect[2] * bigger_ratio))
+        from_y = int(self._rect[1])
+        from_y = max(0, int(from_y - self._rect[3] * bigger_ratio))
+        to_y = int(self._rect[1]+self._rect[3])
+        to_y = min(frame.shape[0], int(to_y + self._rect[3] * bigger_ratio))
+        from_x = int(self._rect[0])
+        from_x = max(0, int(from_x - self._rect[2] * bigger_ratio))
+        to_x = int(self._rect[0]+self._rect[2])
+        to_x = min(frame.shape[1], int(to_x + self._rect[2] * bigger_ratio))
         img = frame[from_y:to_y, from_x:to_x, :]
         hist = cv2.calcHist([img], [0, 1, 2], None, [32, 32, 32], [0, 256, 0, 256, 0, 256])
         cv2.normalize(hist, hist)
@@ -256,7 +256,7 @@ class Tracklet(TenguObject):
 
     def add_flow_node_to_path(self, flow_node):
         self._path.append(flow_node)
-        self._milestones.append([self.center, self.rect, TenguTracker._global_updates])
+        self._milestones.append([self.center, self.rect, TenguTracker._global_updates, self.histogram])
         flow_node.record_tracklet(self)
 
     @property
