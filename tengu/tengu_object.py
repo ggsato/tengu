@@ -187,10 +187,11 @@ class TenguObject(object):
     def create_filter(x0, R_std, Q, dt, P, std_devs):
         """ creates a second order Kalman Filter
 
-        R_std: float, a standard deviation of measurement error
-        Q    : float, a covariance of process noise
+        R_std: float, a standard deviation of measurement errors
+        Q    : float, a covariance of process noises
         dt   : int, a time unit
         P    : float, a maximum initial variance of all states to build a covariance matrix
+        x0   : 1x6 array, initial values of x(x0)
         """
         kf = KalmanFilter(dim_x=6, dim_z=2)
         kf.R = np.eye(2) * R_std**2

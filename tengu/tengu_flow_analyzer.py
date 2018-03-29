@@ -275,6 +275,12 @@ class TenguFlowAnalyzer(object):
         self._blk_node_map = None
         # transient
         self._last_frame = None
+        # this value is updated whenever a new tracklet is seen by a Tracker
+        self._last_new_tracklet_seen_at = -1
+
+    def new_tracklet_observed(self):
+        if self._last_new_tracklet_seen_at < TenguTracker._global_updates:
+            self._last_new_tracklet_seen_at = TenguTracker._global_updates
 
     def analyze_flow(self, frame, frame_no):
 
@@ -290,8 +296,8 @@ class TenguFlowAnalyzer(object):
         tracklets = []
         
         if self._detector is not None:
-            # B) detections
-            detections, class_names = self._detector.detect(frame)
+            force_detection = (TenguTracker._global_updates - self._last_new_tracklet_seen_at) < 3
+            detections, class_names = self._detector.detect(frame, force_detection=force_detection)
 
             if self._tracker is not None:
                 # C) update existing tracklets with new detections

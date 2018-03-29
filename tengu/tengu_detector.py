@@ -21,7 +21,7 @@ class TenguDetector(object):
     def class_names():
         return [TenguDetector.DETECTION_CLASS_ANY]
     
-    def detect(self, frame):
+    def detect(self, frame, force_detection=True):
         """ detect objects in a frame, then retrun their detections as rectangle by their class
         when there are one or more classes are supported, such detections should include all the classes with an empty array for not found classes
         """
@@ -38,7 +38,7 @@ class TenguBackgroundSubtractionDetector(TenguDetector):
         self.use_dilation = use_dilation
         self.debug = debug
 
-    def detect(self, frame):
+    def detect(self, frame, force_detection=True):
         start = cv2.getTickCount()
 
         # gray and blur

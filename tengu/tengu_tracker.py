@@ -513,6 +513,7 @@ class TenguTracker(object):
         R_std = self.R_std_from_rect(assignment)
         to = Tracklet(self, x0, R_std=R_std, P=self._P, Q=self._Q, std_devs=flow_node.std_devs)
         to.update_with_assignment(Assignment(assignment), class_name)
+        self._tengu_flow_analyzer.new_tracklet_observed()
         return to
 
     def R_std_from_rect(self, rect):
