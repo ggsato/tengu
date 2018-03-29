@@ -144,8 +144,9 @@ class TenguObject(object):
         residual_y = z[1] - self.location[1]
 
         last_x = self._xs[-1]
-        residual_x_p = max(math.sqrt(self._filter.R[0][0]), last_x[1] + 0.5 * last_x[2])
-        residual_y_p = max(math.sqrt(self._filter.R[1][1]), last_x[4] + 0.5 * last_x[5])
+        variance = self.variance
+        residual_x_p = max(variance[0]*3, last_x[1] + 0.5 * last_x[2])
+        residual_y_p = max(variance[1]*3, last_x[4] + 0.5 * last_x[5])
 
         residual_ratio = max(residual_x / residual_x_p, residual_y / residual_y_p)
 

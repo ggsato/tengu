@@ -296,8 +296,8 @@ class TenguFlowAnalyzer(object):
         tracklets = []
         
         if self._detector is not None:
-            force_detection = (TenguTracker._global_updates - self._last_new_tracklet_seen_at) < 3
-            detections, class_names = self._detector.detect(frame, force_detection=force_detection)
+            #force_detection = (TenguTracker._global_updates - self._last_new_tracklet_seen_at) < 2
+            detections, class_names = self._detector.detect(frame, force_detection=False)
 
             if self._tracker is not None:
                 # C) update existing tracklets with new detections

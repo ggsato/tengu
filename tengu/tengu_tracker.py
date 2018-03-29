@@ -17,7 +17,7 @@ If the currently tracked object's rectangle overlaps over a threshold is conside
 class Tracklet(TenguObject):
 
     _class_obj_id = -1
-    _min_confidence = 0.5
+    _min_confidence = 0.2
     _estimation_decay = 0.9
     _recent_updates_length = 2
 
@@ -125,21 +125,19 @@ class Tracklet(TenguObject):
         rect_similarity = TenguTracker.calculate_overlap_ratio(self._rect, assignment.detection)
 
         # 2. histogram similarity
-        hist0 = self._hist
-        hist1, assignment.img = self.histogram(assignment.detection)
-        assignment.hist = hist1
-        hist_similarity = cv2.compareHist(hist0, hist1, cv2.HISTCMP_CORREL)
+        #hist0 = self._hist
+        #hist1, assignment.img = self.histogram(assignment.detection)
+        #assignment.hist = hist1
+        #hist_similarity = cv2.compareHist(hist0, hist1, cv2.HISTCMP_CORREL)
 
-        disable_similarity = False
-        if disable_similarity:
-            rect_similarity = 1.0
-            hist_similarity = 1.0
-
-        similarity = [rect_similarity, hist_similarity]
+        #disable_similarity = False
+        #if disable_similarity:
+        #    rect_similarity = 1.0
+        #    hist_similarity = 1.0
         
-        self.logger.debug('similarity = {}'.format(similarity))
+        self.logger.debug('similarity = {} of {} for {}'.format(rect_similarity, assignment.detection, self.obj_id))
 
-        return min(similarity)
+        return rect_similarity
 
     def histogram(self, rect):
         frame = self.tracker._tengu_flow_analyzer._last_frame
@@ -168,12 +166,12 @@ class Tracklet(TenguObject):
         else:
             self._confidence = new_confidence
         # hist is calculated at similarity
-        self._hist = assignment.hist
+        #self._hist = assignment.hist
         self._w_hist.append(assignment.detection[2])
-        if len(self._w_hist) > 10:
+        if len(self._w_hist) > 1:
             del self._w_hist[0]
         self._h_hist.append(assignment.detection[3])
-        if len(self._h_hist) > 10:
+        if len(self._h_hist) > 1:
             del self._h_hist[0]
         # rect is temporarily set
         self._rect = assignment.detection
@@ -190,7 +188,7 @@ class Tracklet(TenguObject):
             pass
         elif not self.accept_measurement(Tracklet.center_from_rect((assignment.detection))):
             # not acceptable
-            self.logger.debug('{} is not an acceptable measurement to update {}'.format(assignment.detection, self))
+            self.logger.info('{} is not an acceptable measurement to update {}'.format(assignment.detection, self))
         elif self.has_left:
             # no more update
             self.update_without_assignment()
@@ -367,34 +365,6 @@ class Tracklet(TenguObject):
         angle = math.atan2(diff_y, diff_x)
         return angle
 
-    def cropped_images(self, max_size):
-        """get intermediate images
-        """
-        cropped_images = []
-        use_intermediate = True
-        if use_intermediate:
-            diff = len(self._assignments) - max_size
-            offset = 0
-            if diff > 0:
-                # take intermediate images
-                offset = diff / 2
-            index = 1
-            while index <= max_size and (index+offset) <= len(self._assignments):
-                assignment = self._assignments[-1*(index+offset)]
-                if hasattr(assignment, 'img') and assignment.img is not None:
-                    cropped_images.append(assignment.img)
-                index += 1
-        else:
-            # use from the first
-            index = 0
-            while len(cropped_images) < len(self._assignments) and len(cropped_images) < max_size:
-                assignment = self._assignments[index]
-                if hasattr(assignment, 'img') and assignment.img is not None:
-                    cropped_images.append(assignment.img)
-                index += 1
-
-        return cropped_images
-
 class Assignment(object):
 
     def __init__(self, detection):
@@ -519,7 +489,7 @@ class TenguTracker(object):
     def R_std_from_rect(self, rect):
         """ caclculate a standard deviation of measurement error from rect
         """
-        return max(*rect[2:]) * 1/2 * 1/3
+        return max(*rect[2:]) * 1/2 * 1/10
 
     def initialize_tracklets(self, detections, class_names):
         
