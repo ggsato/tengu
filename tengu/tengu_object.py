@@ -8,17 +8,16 @@ from filterpy.kalman import KalmanFilter
 from filterpy.common import Q_discrete_white_noise
 
 class TenguObject(object):
-    """ TenguObject is a base class of any travelling object classes.
+    """ TenguObject is a base class of any travelling object classes in Tengu framework.
 
     The purpose of this class is to give the best estimate of a current location based on a predicted location and an observed location.
-    Also, this class provides subclasses with additional benefits such as speed and direction that can be calculated from a time series of locations.
-    
-    To achieve the first purpose, this class uses a KalmanFilter.
+    To achieve this purpose, this class uses a KalmanFilter.
     """
 
     _very_small_value = 0.000001
 
     def __init__(self, x0, R_std=10., Q=.0001, dt=1, P=100., std_devs=None):
+        super(TenguObject, self).__init__()
         self._filter = TenguObject.create_filter(x0, R_std, Q, dt, P, std_devs)
         self._zs = []
         self._xs = []
