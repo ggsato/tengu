@@ -253,28 +253,19 @@ class TenguFlowAnalyzer(object):
 
     rebuild_scene_ratio = 10
 
-    def __init__(self, detector, tracker, min_length=10, scene_file=None, flow_blocks=(20, 30), show_graph=True, majority_in_percent=5, initial_weight=200, min_sink_count_for_flow=10, allow_non_adjacent_edge=False, identical_flow_similarity=0.5, **kwargs):
+    def __init__(self, min_length=10, scene_file=None, flow_blocks=(20, 30), **kwargs):
         super(TenguFlowAnalyzer, self).__init__()
         self.logger= logging.getLogger(__name__)
         self._initialized = False
         self._last_tracklets = Set([])
-        self._detector = detector
-        self._tracker = tracker
-        if self._tracker is not None:
-            self._tracker.set_flow_analyzer(self, min_length)
+        self._tracker = TenguTracker(self, min_length)
         self._scene_file = scene_file
         self._flow_blocks = flow_blocks
-        self._show_graph = show_graph
-        self._majority_in_percent = majority_in_percent
-        self._allow_non_adjacent_edge = allow_non_adjacent_edge
-        self._identical_flow_similarity = identical_flow_similarity
         # the folowings will be initialized
         self._scene = None
         self._frame_shape = None
         self._flow_blocks_size = None
         self._blk_node_map = None
-        # transient
-        self._last_frame = None
         # this value is updated whenever a new tracklet is seen by a Tracker
         self._last_new_tracklet_seen_at = -1
 
@@ -282,41 +273,24 @@ class TenguFlowAnalyzer(object):
         if self._last_new_tracklet_seen_at < TenguTracker._global_updates:
             self._last_new_tracklet_seen_at = TenguTracker._global_updates
 
-    def analyze_flow(self, frame, frame_no):
+    def update_model(self, frame_shape, detections, class_names):
+        self.logger.info('updating model for the shape {}, detections = {}, class_names = {}'.format(frame_shape, detections, class_names))
 
         if not self._initialized:
             # this means new src came in
-            self.initialize(frame.shape)
+            self.initialize(frame_shape)
             self._initialized = True
 
-        self._last_frame = frame
+        # update tracklets with new detections
+        tracklets = self._tracker.resolve_tracklets(detections, class_names)
+        self.update_flow_graph(tracklets)
 
-        detections = []
-        class_names = []
-        tracklets = []
-        
-        if self._detector is not None:
-            #force_detection = (TenguTracker._global_updates - self._last_new_tracklet_seen_at) < 2
-            detections, class_names = self._detector.detect(frame, force_detection=False)
-
-            if self._tracker is not None:
-                # C) update existing tracklets with new detections
-                tracklets = self._tracker.resolve_tracklets(detections, class_names)
-                self.update_flow_graph(tracklets)
-
-                img = self.draw_graph()
-                self._last_graph_img = img
-
-                if self._show_graph:
-                    # show
-                    cv2.imshow('TenguFlowAnalyzer Graph', img)
-
-        if self._show_graph:
-            ch = 0xFF & cv2.waitKey(1)
-
-        return detections, class_names, tracklets, self._scene
+        return tracklets, self._scene
 
     def initialize(self, frame_shape):
+        if self._initialized:
+            self.logger.info('already initialized')
+            return
         # flow graph
         # gray scale
         self._frame_shape = frame_shape
@@ -337,7 +311,9 @@ class TenguFlowAnalyzer(object):
             self.build_scene_from_file()
         else:
             self._scene = TenguScene()
-        #self.print_graph()
+        
+        self._initialized = True
+        self.logger.info('flow analyzer initialized')
 
     def update_flow_graph(self, tracklets):
         """
@@ -404,7 +380,7 @@ class TenguFlowAnalyzer(object):
             # if flow_node is not adjacent of prev, skip it
             # but this could happen by a quickly moving tracklet
             # so check this only when building scene
-            if self._scene_file is None and not self._allow_non_adjacent_edge and not flow_node.adjacent(prev_flow_node):
+            if self._scene_file is None and not flow_node.adjacent(prev_flow_node):
                 self.logger.debug('skipping update of {}, {} is not adjacent of {}'.format(existing_tracklet, flow_node, prev_flow_node))
                 continue
 
@@ -535,26 +511,3 @@ class TenguFlowAnalyzer(object):
     def build_scene_from_file(self):
         self.load()
         self.logger.info('build from file {}'.format(self._scene_file))
-
-    def draw_graph(self):
-        img = np.ones(self._frame_shape, dtype=np.uint8) * 128
-        diameter = min(*self._flow_blocks_size)
-        # choose colors for each flow
-        for y_blk in xrange(self._flow_blocks[0]):
-            for x_blk in xrange(self._flow_blocks[1]):
-                flow_node = self._blk_node_map[y_blk][x_blk]
-                color = (0, 0, 0)
-                r = int(diameter/8)
-                cv2.circle(img, flow_node.position, r, color, -1)
-
-        # tracklets
-        for tracklet in self._last_tracklets:
-            if tracklet.has_left:
-                continue
-            lines = []
-            for node in tracklet.path:
-                lines.append(node.position)
-            color = (192, 192, 192)
-            cv2.polylines(img, [np.int32(lines)], False, color, thickness=1)
-
-        return img

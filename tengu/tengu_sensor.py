@@ -68,9 +68,9 @@ class TenguObjectDetectionSensor(TenguSensor):
                 sensor_input = self._input_queue.get_nowait()
                 sensored += 1
                 try:
-                    img = cv2.imread(sensor_input.sensor_item)
-                    detections = self._detector.detect(img)
-                    sensor_output = TenguSensorItem(sensor_input.t, detections)
+                    img = cv2.imread(sensor_input.item)
+                    detections, class_names = self._detector.detect(img)
+                    sensor_output = TenguSensorItem(sensor_input.t, {'d': detections, 'n': class_names,'h': img.shape[1], 'w': img.shape[0]})
                     done = False
                     start = time.time()
                     elapsed = 0
@@ -82,7 +82,7 @@ class TenguObjectDetectionSensor(TenguSensor):
                             time.sleep(0.001)
                         elapsed = (time.time() - start) / 1000
                 except:
-                    self.logger.error('sensor {} failed to get an image from {}'.format(self, sensor_input.sensor_item))
+                    self.logger.error('sensor {} failed to get an image from {}'.format(self, sensor_input.item))
                     self.logger.exception('Unknow Exception {}'.format(sys.exc_info()))
                 if self._finished.value == 1:
                     break
@@ -102,12 +102,12 @@ class TenguSensorItem(object):
         self._t = t
 
         # a list of items
-        self._sensor_item = sensor_item
+        self._item = sensor_item
 
     @property
     def t(self):
         return self._t
 
     @property
-    def sensor_item(self):
-        return self._sensor_item
+    def item(self):
+        return self._item

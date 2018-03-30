@@ -256,7 +256,7 @@ class Tracklet(TenguObject):
 
     def add_flow_node_to_path(self, flow_node):
         self._path.append(flow_node)
-        self._milestones.append([self.center, self.rect, TenguTracker._global_updates, self.histogram])
+        self._milestones.append([self.center, self.rect, TenguTracker._global_updates])
         flow_node.record_tracklet(self)
 
     @property
@@ -396,7 +396,7 @@ class TenguTracker(object):
     # 0.01 = 4.6 => 1% overlap
     _confident_min_cost = 4.6
 
-    def __init__(self, obsoletion=100, ignore_direction_ranges=None, P=25., Q=0.01, **kwargs):
+    def __init__(self, tengu_flow_analyzer, min_length, obsoletion=100, ignore_direction_ranges=None, P=25., Q=0.01, **kwargs):
         super(TenguTracker, self).__init__(**kwargs)
         self.logger = logging.getLogger(__name__)
         self._tracklets = []
@@ -407,10 +407,6 @@ class TenguTracker(object):
         self._P = P
         self._Q = Q
 
-        self._tengu_flow_analyzer = None
-        self._min_length = None
-
-    def set_flow_analyzer(self, tengu_flow_analyzer, min_length):
         self._tengu_flow_analyzer = tengu_flow_analyzer
         self._min_length = min_length
 

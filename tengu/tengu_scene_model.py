@@ -5,6 +5,7 @@ import logging
 import time
 from multiprocessing import Process, Queue, Value
 
+from tengu_flow_analyzer import TenguFlowAnalyzer
 from tengu_sensor import TenguSensorItem
 
 class TenguSceneModel(Process):
@@ -20,8 +21,7 @@ class TenguSceneModel(Process):
         self._frame_sensors = []
         self._extra_sensors = []
 
-        # managed tracklets
-        self._tracklets = []
+        self._flow_analyzer = TenguFlowAnalyzer()
 
         # queues
         self._intput_queue = Queue(maxsize=input_queue_max_size)
@@ -54,6 +54,7 @@ class TenguSceneModel(Process):
         """
         while self._finished.value == 0:
             model_updated = False
+            sensor_outputs = []
             if not self._intput_queue.empty():
                 self.logger.info('getting a frame img path from an input queue')
                 frame_img_path = self._intput_queue.get_nowait()
@@ -73,8 +74,7 @@ class TenguSceneModel(Process):
                     if sensor_output is None:
                         continue
 
-                    # associate tracklets to sensor inputs
-                    self.associate(sensor_output)
+                    sensor_outputs.append(sensor_output)
 
                 # frame fist
                 for frame_sensor in self._frame_sensors:
@@ -83,11 +83,10 @@ class TenguSceneModel(Process):
                     if sensor_output is None:
                         continue
 
-                    # associate tracklets to sensor inputs
-                    self.associate(sensor_output)
+                    sensor_outputs.append(sensor_output)
 
                 # update the model
-                self.update_model()
+                self.update_model(sensor_outputs)
 
                 model_updated = True
 
@@ -109,7 +108,7 @@ class TenguSceneModel(Process):
                 sensor_item = sensor.output_queue.get_nowait()
                 self.logger.info('got an item {}'.format(sensor_item))
                 if sensor_item.t == self._t:
-                    self.logger.info('found the matching item with time {}'.format(self._t))
+                    self.logger.info('found the matching item {} with time {}'.format(sensor_item.item, self._t))
                     sensor_output = sensor_item
                 else:
                     self.logger.info('this is not the one looked for, this is time {}'.format(self._t))
@@ -120,19 +119,17 @@ class TenguSceneModel(Process):
 
         return sensor_output
 
-    def associate(self, sensor_output):
-        """ associate a sensor output for a tracklet if available
-
-        returns a dictionary of {tracklet, a sensor output}
-        """
-        associations = {}
-        return associations
-
-    def update_model(self):
+    def update_model(self, sensor_outputs):
         
-        # update each Tracklet
-        for tracklet in self._tracklets:
-            tracklet.update()
+        # TODO: how to update various outputs??
+        detection_dict = sensor_outputs[0].item
+        detections = detection_dict['d']
+        class_names = detection_dict['n']
+        h = detection_dict['h']
+        w = detection_dict['w']
+
+        # update model
+        tracklets, scene = self._flow_analyzer.update_model((h, w), detections, class_names)
 
         # then, increment by one
         self._t += 1
