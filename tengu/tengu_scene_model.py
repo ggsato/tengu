@@ -94,7 +94,7 @@ class TenguSceneModel(Process):
                 done = False
                 start = time.time()
                 elapsed = 0
-                output_dict = {'d': detections, 'n': class_names, 't': []}
+                output_dict = {'d': detections, 'c': class_names, 't': [], 'n': self._t}
                 while not done and elapsed < self._output_queue_timeout_in_secs and self._finished.value == 0:
                     try:
                         self.logger.debug('putting output dict {} to an output queue'.format(output_dict))
@@ -112,6 +112,9 @@ class TenguSceneModel(Process):
             if not model_updated:
                 self.logger.debug('no frame img is avaialble in an input queue, sleeping, finished? {}'.format(self._finished.value == 1))
                 time.sleep(0.001)
+            else:
+                # then, increment by one
+                self._t += 1
 
         self.logger.info('exitted loop {}'.format(self._finished.value))
 
@@ -150,10 +153,7 @@ class TenguSceneModel(Process):
         # update model
         tracklets, scene = self._flow_analyzer.update_model((h, w), detections, class_names)
 
-        # then, increment by one
-        self._t += 1
-
-        self.logger.info('model was updated to time {}'.format(self._t))
+        self.logger.info('model was updated at time {}'.format(self._t))
 
         return detections, class_names, tracklets, scene
 
