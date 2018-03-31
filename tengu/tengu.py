@@ -41,9 +41,10 @@ class Tengu(object):
         self._tmpfs_cleanup_interval_in_frames = tmpfs_cleanup_interval_in_frames
 
         self._observers = WeakValueDictionary()
-        self._current_frame = -1
 
         self._scene_model = TenguSceneModel()
+
+        self._camera_reader = None
 
         """ terminate if True
         TODO: this works only in the same process.
@@ -53,7 +54,7 @@ class Tengu(object):
 
     @property
     def frame_no(self):
-        return self._current_frame
+        return self._camera_reader.current_frame
 
     def add_observer(self, observer):
         if observer == None:
@@ -85,16 +86,14 @@ class Tengu(object):
 
     """ start running analysis on src
     """
-    def run(self, src=None, roi=None, scale=None, every_x_frame=1, rotation=0, queue=None, max_queue_wait=10, skip_to=-1, sensors=[], frame_queue_timeout_in_secs=10):
-        self.logger.info('running with roi={}, scale={}, skipping to {}'.format(roi, scale, skip_to))
-        
+    def run(self, src=None, roi=None, scale=1.0, every_x_frame=1, rotation=0, skip_to=-1, frame_queue_timeout_in_secs=10, sensors=[], queue=None):
+
         if src is None:
             self.logger.error('src has to be set')
             return
 
         # start camera
-        camera_queue = Queue(10)
-        camera_reader = CameraReader(camera_queue, src)
+        self._camera_reader = CameraReader(src, roi, scale, every_x_frame, rotation, skip_to, frame_queue_timeout_in_secs, queue, self._scene_model.input_queue)
 
         # check tmpfs directory exists
         shutil.rmtree(Tengu.TMPFS_DIR)
@@ -102,7 +101,7 @@ class Tengu(object):
 
         try:
             # start reading camera
-            camera_reader.start()
+            self._camera_reader.start()
 
             # initialize scene model
             self._scene_model.initialize(sensors)
@@ -113,94 +112,16 @@ class Tengu(object):
 
                 frame_analysis_start = time.time()
 
-                self.logger.debug('reading the next frame')
-                start = time.time()
-                elapsed = 0
-                frame = None
-                while frame is None and not self._stopped:
-                    try:
-                        frame = camera_queue.get_nowait()
-                    except:
-                        # max 100 FPS
-                        time.sleep(0.01)
-
-                    elapsed = (time.time() - start) / 1000
-                    if elapsed > frame_queue_timeout_in_secs:
-                        self.logger.error('failed to get a new frame from camera queue within {} seconds'.format(elapsed))
-                        break
-                        
-                if frame is None:
-                    break
-
+                # output event dictionary
+                # input event dictionary is separately set from camera reader
                 event_dict = {}
-
-                # increment
-                self._current_frame += 1
-                event_dict[Tengu.EVENT_FRAME_NO] = self._current_frame
-
-                # rotate
-                if rotation != 0:
-                    rows, cols, channels = frame.shape
-                    M = cv2.getRotationMatrix2D((cols/2, rows/2), rotation, 1)
-                    frame = cv2.warpAffine(frame, M, (cols, rows))
-
-                # use copy for gui use, which is done asynchronously, meaning may corrupt buffer during camera updates
-                event_dict[Tengu.EVENT_FRAME] = frame.copy()
-
-                # preprocess
-                cropped = self.preprocess(frame, roi, scale)
-                cropped_copy = cropped.copy()
-                event_dict[Tengu.EVENT_FRAME_CROPPED] = cropped_copy
-
-                # skip if necessary
-                if (every_x_frame > 1 and self._current_frame % every_x_frame != 0) or (skip_to > 0 and self._current_frame < skip_to):
-                    self.logger.debug('skipping frame at {}'.format(self._current_frame))
-                    event_dict[Tengu.EVENT_DETECTIONS] = []
-                    event_dict[Tengu.EVENT_DETECTION_CLASSES] = []
-                    event_dict[Tengu.EVENT_TRACKLETS] = []
-                    self._notify_frame_analyzed(event_dict)
-                    continue
-
-                # # flow analysis
-                # if tengu_flow_analyzer is not None:
-                #     detections, class_names, tracklets, scene = tengu_flow_analyzer.analyze_flow(cropped, self._current_frame)
-                #     event_dict[Tengu.EVENT_DETECTIONS] = detections
-                #     event_dict[Tengu.EVENT_DETECTION_CLASSES] = class_names
-                #     event_dict[Tengu.EVENT_TRACKLETS] = tracklets
-                #     event_dict[Tengu.EVENT_SCENE] = scene
-
-                #     # scene analysis
-                #     if tengu_scene_analyzer is not None:
-                #         self.logger.debug('calling scene analyzer')
-                #         tengu_scene_analyzer.analyze_scene(cropped, scene)
-
-                #     else:
-                #         self.logger.debug('skip calling scene analyzer')
-
-                # create a sensor input to pass an image as a file
-                img_path = os.path.join(Tengu.TMPFS_DIR, 'frame-{}.jpg'.format(self._current_frame))
-                cv2.imwrite(img_path, cropped_copy)
-                self.logger.debug('wrote a frame image {}'.format(img_path))
-
-                done = False
-                start = time.time()
-                elapsed = 0
-                while not done and elapsed < frame_queue_timeout_in_secs:
-                    try:
-                        self.logger.debug('putting a frame image path {} in a queue'.format(img_path))
-                        self._scene_model.input_queue.put_nowait(img_path)
-                        done = True
-                    except:
-                        self.logger.debug('failed to put {} in a queue, sleeping'.format(img_path))
-                        time.sleep(0.001)
-                    elapsed = (time.time() - start) / 1000
                 
                 # get an output
                 done = False
                 start = time.time()
                 elapsed = 0
                 output_dict = None
-                while not done and elapsed < frame_queue_timeout_in_secs:
+                while not done and elapsed < frame_queue_timeout_in_secs and not self._stopped:
                     try:
                         self.logger.debug('getting an output dict from a queue')
                         output_dict = self._scene_model.output_queue.get_nowait()
@@ -223,7 +144,7 @@ class Tengu(object):
                 done = False
                 start = time.time()
                 elapsed = 0
-                while not done and elapsed < frame_queue_timeout_in_secs:
+                while not done and elapsed < frame_queue_timeout_in_secs and not self._stopped:
                     try:
                         self.logger.debug('putting an event dict to a queue')
                         queue.put_nowait(event_dict)
@@ -237,9 +158,9 @@ class Tengu(object):
                     self.logger.error('failed to put an output dict in a queue within {} seconds'.format(frame_queue_timeout_in_secs))
                     break
 
-                self.logger.info('analyzed frame no {} in {} ms'.format(self._current_frame, (time.time() - frame_analysis_start)))
+                self.logger.info('analyzed frame no {} in {} ms'.format(self.frame_no, (time.time() - frame_analysis_start)))
 
-                if self._current_frame % self._tmpfs_cleanup_interval_in_frames == 0:
+                if self.frame_no % self._tmpfs_cleanup_interval_in_frames == 0:
                     self.logger.info('cleaning up tmp images')
                     self.cleanup_tmp_images()
 
@@ -247,28 +168,12 @@ class Tengu(object):
             self.logger.exception('Unknow Exception {}'.format(sys.exc_info()))
 
         self.logger.info('exitted run loop, exitting...')
-        camera_reader.finish()
-        camera_reader.join()
+        if self._camera_reader is not None:
+            self._camera_reader.finish()
+            self._camera_reader.join()
         self._scene_model.finish()
         self._scene_model.join()
         self._stopped = True
-
-    def preprocess(self, frame, roi, scale):
-
-        cropped = None
-        
-        if scale == 1.0:
-            resized = frame
-        else:
-            resized = cv2.resize(frame, None, fx=scale, fy=scale, interpolation=cv2.INTER_AREA)
-
-        if roi is not None:
-            # crop
-            cropped = resized[roi[1]:roi[1]+roi[3], roi[0]:roi[0]+roi[2]]
-        else:
-            cropped = resized
-        
-        return cropped
 
     def cleanup_tmp_images(self):
         # delete image files created before the last interval
@@ -277,7 +182,7 @@ class Tengu(object):
             if not file.endswith('.jpg'):
                 continue
             img_frame_no = int(file[file.index('-')+1:file.index('.')])
-            if (self._current_frame - img_frame_no) > self._tmpfs_cleanup_interval_in_frames:
+            if (self.frame_no - img_frame_no) > self._tmpfs_cleanup_interval_in_frames:
                 self.logger.info('removing tmp image file {}'.format(file))
                 os.remove(os.path.join(Tengu.TMPFS_DIR, file))
             else:
@@ -291,17 +196,31 @@ class Tengu(object):
 
     def stop(self):
         self.logger.info('stopping...')
+        self._camera_reader.finish()
         self._stopped = True
 
 class CameraReader(threading.Thread):
-    def __init__(self, camera_queue, video_src, camera_queue_timeout_in_secs=10):
+    def __init__(self, video_src, roi, scale, every_x_frame, rotation, skip_to, frame_queue_timeout_in_secs, queue, scene_input_queue):
         super(CameraReader, self).__init__()
         self.logger= logging.getLogger(__name__)
-        self._camera_queue = camera_queue
         self._video_src = video_src
-        self._camera_queue_timeout_in_secs = camera_queue_timeout_in_secs
+        # TODO: check these values are correct
+        self._roi = roi
+        self._scale = scale
+        self._every_x_frame = every_x_frame
+        self._rotation = rotation
+        self._skip_to = skip_to
+        self._frame_queue_timeout_in_secs = frame_queue_timeout_in_secs
+        self._queue = queue
+        self._scene_input_queue = scene_input_queue
+        # transient
         self._cam = None
+        self._current_frame = 0
         self._finished = False
+
+    @property
+    def current_frame(self):
+        return self._current_frame
 
     def setup(self):
         try:
@@ -322,6 +241,7 @@ class CameraReader(threading.Thread):
         # read frames
         while not self._finished:
             
+            self.logger.info('reading the next frame')
             ret, frame = self._cam.read()
 
             # finished
@@ -329,24 +249,89 @@ class CameraReader(threading.Thread):
                 self.logger.info('no frame is avaiable')
                 break
 
+            # camera event dictionary
+            event_dict = {Tengu.EVENT_FRAME_NO: self._current_frame}
+
+            # rotate
+            if self._rotation != 0:
+                rows, cols, channels = frame.shape
+                M = cv2.getRotationMatrix2D((cols/2, rows/2), self._rotation, 1)
+                frame = cv2.warpAffine(frame, M, (cols, rows))
+
+            # use copy for gui use, which is done asynchronously, meaning may corrupt buffer during camera updates
+            event_dict[Tengu.EVENT_FRAME] = frame.copy()
+
+            # preprocess
+            cropped = self.preprocess(frame, self._roi, self._scale)
+            cropped_copy = cropped.copy()
+            event_dict[Tengu.EVENT_FRAME_CROPPED] = cropped_copy
+
+            # put in a queue
+            done = False
             start = time.time()
             elapsed = 0
-            done = False
-            while not done and not self._finished:
+            while not done and elapsed < self._frame_queue_timeout_in_secs and not self._finished:
                 try:
-                    self._camera_queue.put_nowait(frame)
+                    self.logger.info('putting a frame image in a queue')
+                    self._queue.put_nowait(event_dict)
                     done = True
                 except:
-                    # max 100 FPS
-                    time.sleep(0.01)
-
+                    self.logger.info('failed to put event dict in a queue, sleeping')
+                    time.sleep(0.001)
                 elapsed = (time.time() - start) / 1000
-                if elapsed > self._camera_queue_timeout_in_secs:
-                    self.logger.error('failed to put a new frame in a camera queue withint {} seconds'.format(self._camera_queue_timeout_in_secs))
-                    break
+
+            # skip if necessary
+            if (self._every_x_frame > 1 and self._current_frame % self._every_x_frame != 0) or (self._skip_to > 0 and self._current_frame < self._skip_to):
+
+                self.logger.debug('skipping frame at {}'.format(self._current_frame))
+                continue
+
+            img_path = os.path.join(Tengu.TMPFS_DIR, 'frame-{}.jpg'.format(self._current_frame))
+            cv2.imwrite(img_path, cropped_copy)
+            self.logger.debug('wrote a frame image {}'.format(img_path))
+
+            done = False
+            start = time.time()
+            elapsed = 0
+            while not done and elapsed < self._frame_queue_timeout_in_secs and not self._finished:
+                try:
+                    self.logger.info('putting a frame image path {} in a queue'.format(img_path))
+                    self._scene_input_queue.put_nowait(img_path)
+                    done = True
+                except:
+                    self.logger.info('failed to put {} in a queue, sleeping'.format(img_path))
+                    time.sleep(0.001)
+                elapsed = (time.time() - start) / 1000
+
+            # increment
+            self._current_frame += 1
 
         self._finished = True
+        # cleanup queues
+        self.logger.info('cleaning up queue')
+        while not self._queue.empty():
+            self._queue.get_nowait()
+            self.logger.info('cleaning up scene input queue')
+        while not self._scene_input_queue.empty():
+            self._scene_input_queue.get_nowait()
         self.logger.info('finished reading camera')
+
+    def preprocess(self, frame, roi, scale):
+
+        cropped = None
+        
+        if scale == 1.0:
+            resized = frame
+        else:
+            resized = cv2.resize(frame, None, fx=scale, fy=scale, interpolation=cv2.INTER_AREA)
+
+        if roi is not None:
+            # crop
+            cropped = resized[roi[1]:roi[1]+roi[3], roi[0]:roi[0]+roi[2]]
+        else:
+            cropped = resized
+        
+        return cropped
 
     def finish(self):
         self.logger.info('finishing camera reading')
