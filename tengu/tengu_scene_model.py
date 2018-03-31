@@ -66,7 +66,7 @@ class TenguSceneModel(Process):
                     try:
                         frame_sensor.input_queue.put_nowait(frame_sensor_item)
                     except:
-                        self.logger.info('failed to put a new frame in {}'.format(frame_sensor))
+                        self.logger.debug('failed to put a new frame in {}'.format(frame_sensor))
 
                 # get sensor outputs, and associate it to a tracklet if available
                 # extra sensor first
@@ -94,14 +94,17 @@ class TenguSceneModel(Process):
                 done = False
                 start = time.time()
                 elapsed = 0
-                output_dict = {'d': detections, 'c': class_names, 't': [], 'n': self._t}
+                tracklet_dicts = []
+                for tracklet in tracklets:
+                    tracklet_dicts.append(tracklet.to_dict())
+                output_dict = {'d': detections, 'c': class_names, 't': tracklet_dicts, 'n': self._t}
                 while not done and elapsed < self._output_queue_timeout_in_secs and self._finished.value == 0:
                     try:
                         self.logger.debug('putting output dict {} to an output queue'.format(output_dict))
                         self._output_queue.put_nowait(output_dict)
                         done = True
                     except:
-                        self.logger.info('failed to put in the output queue, sleeping')
+                        self.logger.debug('failed to put in the output queue, sleeping')
                         time.sleep(0.001)
                     elapsed = (time.time() - start) / 1000
 
@@ -135,7 +138,7 @@ class TenguSceneModel(Process):
                 else:
                     self.logger.debug('this is not the one looked for, this is time {}'.format(self._t))
             else:
-                self.logger.info('not yet sensor item of {} is available, sleeping'.format(sensor))
+                self.logger.debug('not yet sensor item of {} is available, sleeping'.format(sensor))
                 # wait a bit
                 time.sleep(0.001)
 
@@ -149,6 +152,8 @@ class TenguSceneModel(Process):
         class_names = detection_dict['n']
         h = detection_dict['h']
         w = detection_dict['w']
+
+        self.logger.debug('detections at scene model = {}'.format(detections))
 
         # update model
         tracklets, scene = self._flow_analyzer.update_model((h, w), detections, class_names)

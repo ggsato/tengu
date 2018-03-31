@@ -58,6 +58,25 @@ class Tracklet(TenguObject):
     def __repr__(self):
         return 'id:{}, obj_id:{}, confidence:{}, speed:{}, left:{}, class:{}'.format(id(self), self._obj_id, self._confidence, self.speed, self._left, self.class_name)
 
+    def to_dict(self):
+        tracklet_dict = {}
+
+        tracklet_dict['obj_id'] = self._obj_id
+        tracklet_dict['last_updated_at'] = self._last_updated_at
+        tracklet_dict['class_name'] = self.class_name
+        tracklet_dict['is_confirmed'] = self.is_confirmed
+        tracklet_dict['confidence'] = self._confidence
+        tracklet_dict['speed'] = self.speed
+        tracklet_dict['direction'] = -1 if self.direction is None else self.direction
+        tracklet_dict['angle_movement'] = self.angle_movement
+        tracklet_dict['rect'] = self.rect
+        tracklet_dict['center'] = self.center
+        tracklet_dict['location'] = self.location
+        tracklet_dict['has_left'] = self.has_left
+        tracklet_dict['variance'] = self.variance
+
+        return tracklet_dict
+
     # Tracklet Properties
     @property
     def obj_id(self):
@@ -82,7 +101,7 @@ class Tracklet(TenguObject):
         center = (int(self._rect[0]+self._rect[2]/2), int(self._rect[1]+self._rect[3]/2))
         location is a bit lower than the center y by 1/4 of the hight
         """
-        return (int(rect[0]+rect[2]/2), int(rect[1]+rect[3]/2+rect[3]/4))
+        return [int(rect[0]+rect[2]/2), int(rect[1]+rect[3]/2+rect[3]/4)]
 
     @property
     def confidence(self):
@@ -226,7 +245,7 @@ class Tracklet(TenguObject):
         h = sum(self._h_hist) / len(self._h_hist)
         x = location[0] - w/2
         y = location[1] - h*3/4
-        self._rect = (x, y, w, h)
+        self._rect = [x, y, w, h]
 
         # update confidence based on variance
         variance = self.variance
@@ -479,13 +498,12 @@ class TenguTracker(object):
         R_std = self.R_std_from_rect(assignment)
         to = Tracklet(self, x0, R_std=R_std, P=self._P, Q=self._Q, std_devs=flow_node.std_devs)
         to.update_with_assignment(Assignment(assignment), class_name)
-        self._tengu_flow_analyzer.new_tracklet_observed()
         return to
 
     def R_std_from_rect(self, rect):
         """ caclculate a standard deviation of measurement error from rect
         """
-        return max(*rect[2:]) * 1/2 * 1/10
+        return max(rect[2], rect[3]) * 1/2 * 1/10
 
     def initialize_tracklets(self, detections, class_names):
         
@@ -506,11 +524,12 @@ class TenguTracker(object):
         cost_matrix = TenguTracker.create_empty_cost_matrix(len(self._tracklets), len(detections))
         for t, tracklet in enumerate(self._tracklets):
             if tracklet.has_left:
+                self.logger.debug('tracklet id {} has left, no cost calculation'.format(tracklet.obj_id))
                 continue
             for d, detection in enumerate(detections):
                 cost = self.calculate_cost_by_overlap_ratio(tracklet.rect, detection)
                 cost_matrix[t][d] = cost
-                self.logger.debug('cost at [{}][{}] of ({}, {}) = {}'.format(t, d, id(tracklet), id(detection), cost))
+                self.logger.debug('cost at [{}][{}] = {}'.format(tracklet.obj_id, detection, cost))
         return TenguCostMatrix(detections, cost_matrix)
 
     @staticmethod
@@ -567,7 +586,7 @@ class TenguTracker(object):
                 self.logger.debug('{} is not updated due to too high cost {}'.format(tracklet.obj_id, cost))
                 continue
             assigned.append(new_assignment)
-            self.logger.debug('updating tracked object {} of id={} having {} with {} at {}'.format(id(tracklet), tracklet.obj_id, tracklet.rect, new_assignment, TenguTracker._global_updates))
+            self.logger.debug('updating tracked object id {} of rect {} with {} at {}'.format(tracklet.obj_id, tracklet.rect, new_assignment, TenguTracker._global_updates))
             self.assign_new_to_tracklet(new_assignment, class_names[tengu_cost_matrix.assignments.index(new_assignment)], tracklet)
 
         # create new ones

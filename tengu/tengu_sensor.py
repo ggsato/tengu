@@ -70,7 +70,8 @@ class TenguObjectDetectionSensor(TenguSensor):
                 try:
                     img = cv2.imread(sensor_input.item)
                     detections, class_names = self._detector.detect(img)
-                    sensor_output = TenguSensorItem(sensor_input.t, {'d': detections, 'n': class_names,'h': img.shape[1], 'w': img.shape[0]})
+                    sensor_output = TenguSensorItem(sensor_input.t, {'d': detections, 'n': class_names,'h': img.shape[0], 'w': img.shape[1]})
+                    self.logger.debug('detections at sensor = {}'.format(detections))
                     done = False
                     start = time.time()
                     elapsed = 0

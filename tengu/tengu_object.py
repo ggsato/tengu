@@ -34,14 +34,14 @@ class TenguObject(object):
         if len(self._xs) == 0:
             return (self._filter.x[0], self._filter.x[3])
 
-        return (self._xs[-1][0], self._xs[-1][3])
+        return [self._xs[-1][0], self._xs[-1][3]]
 
     @property
     def measurement(self):
         if len(self._zs) == 0:
             return (self._filter.x[0], self._filter.x[3])
 
-        return (self._zs[-1][0], self._zs[-1][1])
+        return [self._zs[-1][0], self._zs[-1][1]]
 
     @property
     def direction(self):
@@ -165,7 +165,7 @@ class TenguObject(object):
         if len(self._covs) == 0:
             return None
 
-        return (max(TenguObject._very_small_value, math.sqrt(self._covs[-1][0][0])), max(TenguObject._very_small_value, math.sqrt(self._covs[-1][3][3])))
+        return [max(TenguObject._very_small_value, math.sqrt(self._covs[-1][0][0])), max(TenguObject._very_small_value, math.sqrt(self._covs[-1][3][3]))]
 
     @property
     def variance_speed(self):
@@ -173,7 +173,7 @@ class TenguObject(object):
         if len(self._covs) == 0:
             return None
 
-        return (math.sqrt(self._covs[-1][1][1]), math.sqrt(self._covs[-1][4][4]))
+        return [math.sqrt(self._covs[-1][1][1]), math.sqrt(self._covs[-1][4][4])]
 
     @property
     def variance_x_accel(self):
@@ -181,7 +181,7 @@ class TenguObject(object):
         if len(self._covs) == 0:
             return None
 
-        return (math.sqrt(self._covs[-1][2][2]), math.sqrt(self._covs[-1][5][5]))
+        return [math.sqrt(self._covs[-1][2][2]), math.sqrt(self._covs[-1][5][5])]
 
     @staticmethod
     def create_filter(x0, R_std, Q, dt, P, std_devs):

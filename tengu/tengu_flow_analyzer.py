@@ -266,12 +266,6 @@ class TenguFlowAnalyzer(object):
         self._frame_shape = None
         self._flow_blocks_size = None
         self._blk_node_map = None
-        # this value is updated whenever a new tracklet is seen by a Tracker
-        self._last_new_tracklet_seen_at = -1
-
-    def new_tracklet_observed(self):
-        if self._last_new_tracklet_seen_at < TenguTracker._global_updates:
-            self._last_new_tracklet_seen_at = TenguTracker._global_updates
 
     def update_model(self, frame_shape, detections, class_names):
         self.logger.debug('updating model for the shape {}, detections = {}, class_names = {}'.format(frame_shape, detections, class_names))
