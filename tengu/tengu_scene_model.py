@@ -54,6 +54,7 @@ class TenguSceneModel(Process):
         """ start running the model until no sensor input arrives
         """
         while self._finished.value == 0:
+            model_update_start = time.time()
             model_updated = False
             sensor_outputs = []
             if not self._intput_queue.empty():
@@ -100,11 +101,13 @@ class TenguSceneModel(Process):
                         self._output_queue.put_nowait(output_dict)
                         done = True
                     except:
-                        self.logger.debug('failed to put in the output queue, sleeping')
+                        self.logger.info('failed to put in the output queue, sleeping')
                         time.sleep(0.001)
                     elapsed = (time.time() - start) / 1000
 
                 model_updated = True
+
+                self.logger.info('model update took {} ms with {} detections'.format((time.time() - model_update_start), len(detections)))
 
             if not model_updated:
                 self.logger.debug('no frame img is avaialble in an input queue, sleeping, finished? {}'.format(self._finished.value == 1))
@@ -129,7 +132,7 @@ class TenguSceneModel(Process):
                 else:
                     self.logger.debug('this is not the one looked for, this is time {}'.format(self._t))
             else:
-                self.logger.debug('not yet sensor item of {} is available, sleeping'.format(sensor))
+                self.logger.info('not yet sensor item of {} is available, sleeping'.format(sensor))
                 # wait a bit
                 time.sleep(0.001)
 

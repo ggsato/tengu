@@ -8,6 +8,8 @@ import time
 import math
 import logging
 import os, shutil
+import threading
+from Queue import Queue
 
 from weakref import WeakValueDictionary
 
@@ -90,24 +92,18 @@ class Tengu(object):
             self.logger.error('src has to be set')
             return
 
-        try:
-            cam = cv2.VideoCapture(int(src))
-        except:
-            cam = cv2.VideoCapture(src)        
-        if cam is None or not cam.isOpened():
-            self.logger.debug(self._src + ' is not available')
-            return
-
-        if Tengu.PREFERRED_CAMERA_SETTINGS is not None:
-            for key in Tengu.PREFERRED_CAMERA_SETTINGS:
-                self.logger.info('set a user defined camera setting {} of {}'.format(Tengu.PREFERRED_CAMERA_SETTINGS[key], key))
-                cam.set(key, Tengu.PREFERRED_CAMERA_SETTINGS[key])
+        # start camera
+        camera_queue = Queue(10)
+        camera_reader = CameraReader(camera_queue, src)
 
         # check tmpfs directory exists
         shutil.rmtree(Tengu.TMPFS_DIR)
         os.makedirs(Tengu.TMPFS_DIR)
 
         try:
+            # start reading camera
+            camera_reader.start()
+
             # initialize scene model
             self._scene_model.initialize(sensors)
             self._scene_model.start()
@@ -115,11 +111,25 @@ class Tengu(object):
             # run loop
             while not self._stopped:
 
+                frame_analysis_start = time.time()
+
                 self.logger.debug('reading the next frame')
-                ret, frame = cam.read()
-                #self.logger.info('frame shape = {}'.format(frame.shape))
-                if not ret:
-                    self.logger.info('no frame is avaiable')
+                start = time.time()
+                elapsed = 0
+                frame = None
+                while frame is None and not self._stopped:
+                    try:
+                        frame = camera_queue.get_nowait()
+                    except:
+                        # max 100 FPS
+                        time.sleep(0.01)
+
+                    elapsed = (time.time() - start) / 1000
+                    if elapsed > frame_queue_timeout_in_secs:
+                        self.logger.error('failed to get a new frame from camera queue within {} seconds'.format(elapsed))
+                        break
+                        
+                if frame is None:
                     break
 
                 event_dict = {}
@@ -227,7 +237,7 @@ class Tengu(object):
                     self.logger.error('failed to put an output dict in a queue within {} seconds'.format(frame_queue_timeout_in_secs))
                     break
 
-                self.logger.info('analyzed frame no {}'.format(self._current_frame))
+                self.logger.info('analyzed frame no {} in {} ms'.format(self._current_frame, (time.time() - frame_analysis_start)))
 
                 if self._current_frame % self._tmpfs_cleanup_interval_in_frames == 0:
                     self.logger.info('cleaning up tmp images')
@@ -237,6 +247,8 @@ class Tengu(object):
             self.logger.exception('Unknow Exception {}'.format(sys.exc_info()))
 
         self.logger.info('exitted run loop, exitting...')
+        camera_reader.finish()
+        camera_reader.join()
         self._scene_model.finish()
         self._scene_model.join()
         self._stopped = True
@@ -280,6 +292,65 @@ class Tengu(object):
     def stop(self):
         self.logger.info('stopping...')
         self._stopped = True
+
+class CameraReader(threading.Thread):
+    def __init__(self, camera_queue, video_src, camera_queue_timeout_in_secs=10):
+        super(CameraReader, self).__init__()
+        self.logger= logging.getLogger(__name__)
+        self._camera_queue = camera_queue
+        self._video_src = video_src
+        self._camera_queue_timeout_in_secs = camera_queue_timeout_in_secs
+        self._cam = None
+        self._finished = False
+
+    def setup(self):
+        try:
+            self._cam = cv2.VideoCapture(int(self._video_src))
+        except:
+            self._cam = cv2.VideoCapture(self._video_src)        
+        if self._cam is None or not self._cam.isOpened():
+            self.logger.error(self._video_src + ' is not available')
+            return False
+
+        if Tengu.PREFERRED_CAMERA_SETTINGS is not None:
+            for key in Tengu.PREFERRED_CAMERA_SETTINGS:
+                self.logger.info('set a user defined camera setting {} of {}'.format(Tengu.PREFERRED_CAMERA_SETTINGS[key], key))
+                self._cam.set(key, Tengu.PREFERRED_CAMERA_SETTINGS[key])
+
+    def run(self):
+        self.setup()
+        # read frames
+        while not self._finished:
+            
+            ret, frame = self._cam.read()
+
+            # finished
+            if not ret:
+                self.logger.info('no frame is avaiable')
+                break
+
+            start = time.time()
+            elapsed = 0
+            done = False
+            while not done and not self._finished:
+                try:
+                    self._camera_queue.put_nowait(frame)
+                    done = True
+                except:
+                    # max 100 FPS
+                    time.sleep(0.01)
+
+                elapsed = (time.time() - start) / 1000
+                if elapsed > self._camera_queue_timeout_in_secs:
+                    self.logger.error('failed to put a new frame in a camera queue withint {} seconds'.format(self._camera_queue_timeout_in_secs))
+                    break
+
+        self._finished = True
+        self.logger.info('finished reading camera')
+
+    def finish(self):
+        self.logger.info('finishing camera reading')
+        self._finished = True
 
 def main():
     print(sys.argv)
