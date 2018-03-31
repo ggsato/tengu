@@ -64,7 +64,7 @@ class TenguObjectDetectionSensor(TenguSensor):
         while self._finished.value == 0:
             sensored = 0
             while not self._input_queue.empty() and self._finished.value == 0:
-                self.logger.info('got an input from a queue')
+                self.logger.debug('got an input from a queue')
                 sensor_input = self._input_queue.get_nowait()
                 sensored += 1
                 try:
@@ -87,7 +87,7 @@ class TenguObjectDetectionSensor(TenguSensor):
                 if self._finished.value == 1:
                     break
             if sensored == 0:
-                self.logger.info('no input available, sleeping, finished? {}'.format(self._finished.value == 1))
+                self.logger.debug('no input available, sleeping, finished? {}'.format(self._finished.value == 1))
                 # no inputs were available, sleep a bit
                 time.sleep(0.001)
 

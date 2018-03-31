@@ -115,7 +115,7 @@ class Tengu(object):
             # run loop
             while not self._stopped:
 
-                self.logger.info('reading the next frame')
+                self.logger.debug('reading the next frame')
                 ret, frame = cam.read()
                 #self.logger.info('frame shape = {}'.format(frame.shape))
                 if not ret:
@@ -141,24 +141,6 @@ class Tengu(object):
                 cropped = self.preprocess(frame, roi, scale)
                 cropped_copy = cropped.copy()
                 event_dict[Tengu.EVENT_FRAME_CROPPED] = cropped_copy
-
-                # synchronize with a client if necessary
-                if queue is not None:
-                    done = False
-                    while not done and not self._stopped:
-                        # wait until queue becomes ready
-                        # NOTE: this queue is from Queue module, not from multiprocessing
-                        try:
-                            self.logger.info('putting a cropped copy in to a queue')
-                            queue.put_nowait(cropped_copy)
-                            done = True
-                        except:
-                            self.logger.info('queue is full, sleeping...')
-                            # max 100 FPS
-                            time.sleep(0.01)
-
-                    if self._stopped:
-                        break
 
                 # skip if necessary
                 if (every_x_frame > 1 and self._current_frame % every_x_frame != 0) or (skip_to > 0 and self._current_frame < skip_to):
@@ -188,35 +170,68 @@ class Tengu(object):
                 # create a sensor input to pass an image as a file
                 img_path = os.path.join(Tengu.TMPFS_DIR, 'frame-{}.jpg'.format(self._current_frame))
                 cv2.imwrite(img_path, cropped_copy)
-                self.logger.info('wrote a frame image {}'.format(img_path))
+                self.logger.debug('wrote a frame image {}'.format(img_path))
 
                 done = False
                 start = time.time()
                 elapsed = 0
                 while not done and elapsed < frame_queue_timeout_in_secs:
                     try:
-                        self.logger.info('putting a frame image path {} in a queue'.format(img_path))
+                        self.logger.debug('putting a frame image path {} in a queue'.format(img_path))
                         self._scene_model.input_queue.put_nowait(img_path)
                         done = True
                     except:
-                        self.logger.info('failed to put {} in a queue, sleeping'.format(img_path))
+                        self.logger.debug('failed to put {} in a queue, sleeping'.format(img_path))
                         time.sleep(0.001)
                     elapsed = (time.time() - start) / 1000
                 
-                # then??
+                # get an output
+                done = False
+                start = time.time()
+                elapsed = 0
+                output_dict = None
+                while not done and elapsed < frame_queue_timeout_in_secs:
+                    try:
+                        self.logger.debug('getting an output dict from a queue')
+                        output_dict = self._scene_model.output_queue.get_nowait()
+                        self.logger.debug('got an output dict {}'.format(output_dict))
+                        done = True
+                    except:
+                        self.logger.debug('failed to get an output dict from a queue, sleeping')
+                        time.sleep(0.001)
+                    elapsed = (time.time() - start) / 1000
+
+                if output_dict is None:
+                    self.logger.error('failed to get any output from an output queue within {} seconds'.format(frame_queue_timeout_in_secs))
+                    break
+                else:
+                    event_dict[Tengu.EVENT_DETECTIONS] = output_dict['d']
+                    event_dict[Tengu.EVENT_DETECTION_CLASSES] = output_dict['n']
+                    event_dict[Tengu.EVENT_TRACKLETS] = output_dict['t']
+
+                # put in the queue
+                done = False
+                start = time.time()
+                elapsed = 0
+                while not done and elapsed < frame_queue_timeout_in_secs:
+                    try:
+                        self.logger.debug('putting an event dict to a queue')
+                        queue.put_nowait(event_dict)
+                        done = True
+                    except:
+                        self.logger.debug('failed to put an event dict in a queue, sleeping')
+                        time.sleep(0.001)
+                    elapsed = (time.time() - start) / 1000
+
+                if not done:
+                    self.logger.error('failed to put an output dict in a queue within {} seconds'.format(frame_queue_timeout_in_secs))
+                    break
+
+                self.logger.info('analyzed frame no {}'.format(self._current_frame))
 
                 if self._current_frame % self._tmpfs_cleanup_interval_in_frames == 0:
                     self.logger.info('cleaning up tmp images')
                     self.cleanup_tmp_images()
-
-                # temporary
-                event_dict[Tengu.EVENT_DETECTIONS] = []
-                event_dict[Tengu.EVENT_DETECTION_CLASSES] = []
-                event_dict[Tengu.EVENT_TRACKLETS] = []
-
-                # notify observers
-                self._notify_frame_analyzed(event_dict)
-                self.logger.info('analyzed frame no {}'.format(self._current_frame))
 
         except:
             self.logger.exception('Unknow Exception {}'.format(sys.exc_info()))

@@ -274,7 +274,7 @@ class TenguFlowAnalyzer(object):
             self._last_new_tracklet_seen_at = TenguTracker._global_updates
 
     def update_model(self, frame_shape, detections, class_names):
-        self.logger.info('updating model for the shape {}, detections = {}, class_names = {}'.format(frame_shape, detections, class_names))
+        self.logger.debug('updating model for the shape {}, detections = {}, class_names = {}'.format(frame_shape, detections, class_names))
 
         if not self._initialized:
             # this means new src came in

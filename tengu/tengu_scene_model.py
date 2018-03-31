@@ -12,7 +12,7 @@ class TenguSceneModel(Process):
     """ TenguSceneModel repreesnts a model of scene, where a movement of each travelling Tracklet is predicted by a continuous sensor update respectively. 
     """
 
-    def __init__(self, input_queue_max_size=20, output_queue_max_size=10, **kwargs):
+    def __init__(self, input_queue_max_size=20, output_queue_max_size=10, output_queue_timeout_in_secs=10, **kwargs):
         super(TenguSceneModel, self).__init__(**kwargs)
 
         self.logger= logging.getLogger(__name__)
@@ -26,6 +26,7 @@ class TenguSceneModel(Process):
         # queues
         self._intput_queue = Queue(maxsize=input_queue_max_size)
         self._output_queue = Queue(maxsize=output_queue_max_size)
+        self._output_queue_timeout_in_secs = output_queue_timeout_in_secs
 
         # time, incremented one by delta_t
         self._t = 0
@@ -56,7 +57,7 @@ class TenguSceneModel(Process):
             model_updated = False
             sensor_outputs = []
             if not self._intput_queue.empty():
-                self.logger.info('getting a frame img path from an input queue')
+                self.logger.debug('getting a frame img path from an input queue')
                 frame_img_path = self._intput_queue.get_nowait()
                 frame_sensor_item = TenguSensorItem(self._t, frame_img_path)
                 # feed first
@@ -86,12 +87,27 @@ class TenguSceneModel(Process):
                     sensor_outputs.append(sensor_output)
 
                 # update the model
-                self.update_model(sensor_outputs)
+                detections, class_names, tracklets, scene = self.update_model(sensor_outputs)
+
+                # put in an output queue
+                done = False
+                start = time.time()
+                elapsed = 0
+                output_dict = {'d': detections, 'n': class_names, 't': []}
+                while not done and elapsed < self._output_queue_timeout_in_secs and self._finished.value == 0:
+                    try:
+                        self.logger.debug('putting output dict {} to an output queue'.format(output_dict))
+                        self._output_queue.put_nowait(output_dict)
+                        done = True
+                    except:
+                        self.logger.debug('failed to put in the output queue, sleeping')
+                        time.sleep(0.001)
+                    elapsed = (time.time() - start) / 1000
 
                 model_updated = True
 
             if not model_updated:
-                self.logger.info('no frame img is avaialble in an input queue, sleeping, finished? {}'.format(self._finished.value == 1))
+                self.logger.debug('no frame img is avaialble in an input queue, sleeping, finished? {}'.format(self._finished.value == 1))
                 time.sleep(0.001)
 
         self.logger.info('exitted loop {}'.format(self._finished.value))
@@ -99,19 +115,19 @@ class TenguSceneModel(Process):
     def get_sensor_output(self, sensor):
         """ get a sensor output given at a paricular time
         """
-        self.logger.info('getting a sensor input from {}'.format(sensor))
+        self.logger.debug('getting a sensor input from {}'.format(sensor))
         sensor_output = None
 
         while sensor_output is None and self._finished.value == 0:
             if not sensor.output_queue.empty():
                 # get one by one until a sensor output taken at the time is taken
                 sensor_item = sensor.output_queue.get_nowait()
-                self.logger.info('got an item {}'.format(sensor_item))
+                self.logger.debug('got an item {}'.format(sensor_item))
                 if sensor_item.t == self._t:
-                    self.logger.info('found the matching item {} with time {}'.format(sensor_item.item, self._t))
+                    self.logger.debug('found the matching item {} with time {}'.format(sensor_item.item, self._t))
                     sensor_output = sensor_item
                 else:
-                    self.logger.info('this is not the one looked for, this is time {}'.format(self._t))
+                    self.logger.debug('this is not the one looked for, this is time {}'.format(self._t))
             else:
                 self.logger.debug('not yet sensor item of {} is available, sleeping'.format(sensor))
                 # wait a bit
@@ -133,6 +149,10 @@ class TenguSceneModel(Process):
 
         # then, increment by one
         self._t += 1
+
+        self.logger.info('model was updated to time {}'.format(self._t))
+
+        return detections, class_names, tracklets, scene
 
     def finish(self):
         self._finished.value = 1
