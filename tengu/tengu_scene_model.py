@@ -99,7 +99,7 @@ class TenguSceneModel(Process):
 
                 model_updated = True
 
-                self.logger.info('model update took {} ms with {} detections'.format((time.time() - model_update_start), len(detections)))
+                self.logger.info('model update at time {} took {} ms with {} detections'.format(self._t, (time.time() - model_update_start), len(detections)))
 
             if not model_updated:
                 self.logger.info('no frame img is avaialble in an input queue, sleeping, finished? {}'.format(self._finished.value == 1))
@@ -134,11 +134,13 @@ class TenguSceneModel(Process):
                 # wait a bit
                 time.sleep(0.001)
 
-        self.logger.info('got an sensor output of {} in {} ms'.format(self._t, time.time() - start))
+        self.logger.info('got an sensor output at time {} in {} ms'.format(self._t, time.time() - start))
 
         return sensor_output
 
-    def update_model(self, sensor_output):        
+    def update_model(self, sensor_output):
+        start = time.time()
+
         detection_dict = sensor_output.item
         detections = detection_dict['d']
         class_names = detection_dict['n']
@@ -150,7 +152,7 @@ class TenguSceneModel(Process):
         # update model
         tracklets, scene = self._flow_analyzer.update_model((h, w), detections, class_names)
 
-        self.logger.info('model was updated at time {}'.format(self._t))
+        self.logger.info('model was updated at time {} in {} ms'.format(self._t, time.time() - start))
 
         return detections, class_names, tracklets, scene
 
