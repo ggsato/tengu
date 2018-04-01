@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-import logging, math, json, sys, traceback, copy
+import logging, math, json, sys, traceback, copy, time
 import cv2
 import numpy as np
 from operator import attrgetter
@@ -277,6 +277,7 @@ class TenguFlowAnalyzer(object):
 
         # update tracklets with new detections
         tracklets = self._tracker.resolve_tracklets(detections, class_names)
+
         self.update_flow_graph(tracklets)
 
         return tracklets, self._scene
@@ -312,6 +313,7 @@ class TenguFlowAnalyzer(object):
     def update_flow_graph(self, tracklets):
         """
         """
+        start = time.time()
         current_tracklets = Set(tracklets)
 
         if len(self._last_tracklets) == 0:
@@ -335,6 +337,8 @@ class TenguFlowAnalyzer(object):
         self.finish_removed_tracklets(removed_tracklets)
 
         self._last_tracklets = current_tracklets
+
+        self.logger.info('update flow graph took {} s'.format(time.time() - start))
 
     def flow_node_at(self, x, y):
         y_blk = self.get_y_blk(y)

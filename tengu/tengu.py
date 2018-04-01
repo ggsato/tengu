@@ -122,7 +122,7 @@ class Tengu(object):
                     self.logger.error('failed to put an output dict in a queue within {} seconds'.format(frame_queue_timeout_in_secs))
                     break
 
-                self.logger.info('analyzed frame no {} in {} ms'.format(event_dict[Tengu.EVENT_FRAME_NO], (time.time() - frame_analysis_start)))
+                self.logger.info('analyzed frame no {} in {} s'.format(event_dict[Tengu.EVENT_FRAME_NO], (time.time() - frame_analysis_start)))
 
         except:
             info = sys.exc_info()

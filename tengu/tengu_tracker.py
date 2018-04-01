@@ -457,19 +457,19 @@ class TenguTracker(object):
 
             self.prepare_updates(detections)
             lap1 = time.time()
-            self.logger.debug('prepare_updates took {} s'.format(lap1 - start))
+            self.logger.info('prepare_updates took {} s'.format(lap1 - start))
 
             tengu_cost_matrix = self.calculate_cost_matrix(detections)
             lap2 = time.time()
-            self.logger.debug('calculate_cost_matrix took {} s'.format(lap2 - lap1))
+            self.logger.info('calculate_cost_matrix took {} s'.format(lap2 - lap1))
 
             TenguTracker.optimize_and_assign(tengu_cost_matrix)
             lap3 = time.time()
-            self.logger.debug('optimize_and_assign took {} s'.format(lap3 - lap2))
+            self.logger.info('optimize_and_assign took {} s'.format(lap3 - lap2))
 
             self.update_trackings_with_optimized_assignments(tengu_cost_matrix, class_names)
             lap4 = time.time()
-            self.logger.debug('update_trackings_with_optimized_assignments took {} s'.format(lap4 - lap3))
+            self.logger.info('update_trackings_with_optimized_assignments took {} s'.format(lap4 - lap3))
 
         # update without detections
         self.update_tracklets()
@@ -477,10 +477,10 @@ class TenguTracker(object):
         # Obsolete old ones
         self.obsolete_trackings()
         lap5 = time.time()
-        self.logger.debug('obsolete_trackings took {} s'.format(lap5 - lap4 if len(detections) > 0 else start))
+        self.logger.info('obsolete_trackings took {} s'.format(lap5 - (lap4 if len(detections) > 0 else start)))
 
         end = time.time()
-        self.logger.debug('resolved, and now {} tracked objects at {}, executed in {} s'.format(len(self._tracklets), TenguTracker._global_updates, end-start))
+        self.logger.info('resolved, and now {} tracked objects at {}, executed in {} s'.format(len(self._tracklets), TenguTracker._global_updates, end-start))
 
         return self.tracklets
 
