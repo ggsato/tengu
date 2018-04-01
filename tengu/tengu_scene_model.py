@@ -5,8 +5,9 @@ import logging
 import time
 from multiprocessing import Process, Queue, Value
 
+from detectnet_detector import DetectNetDetector
 from tengu_flow_analyzer import TenguFlowAnalyzer
-from tengu_sensor import TenguSensorItem
+from tengu_sensor import TenguSensorItem, TenguObjectDetectionSensor
 
 class TenguSceneModel(Process):
     """ TenguSceneModel repreesnts a model of scene, where a movement of each travelling Tracklet is predicted by a continuous sensor update respectively. 
@@ -18,8 +19,8 @@ class TenguSceneModel(Process):
         self.logger= logging.getLogger(__name__)
 
         # a list of sensors
-        self._frame_sensors = []
-        self._extra_sensors = []
+        detector = DetectNetDetector(8890, interval=Value('i', 1))
+        self._frame_sensor = TenguObjectDetectionSensor(detector=detector)
 
         self._flow_analyzer = TenguFlowAnalyzer()
 
@@ -42,60 +43,40 @@ class TenguSceneModel(Process):
     def output_queue(self):
         return self._output_queue
 
-    def initialize(self, sensors):
-        for sensor in sensors:
-            if sensor.needs_frame_input:
-                self._frame_sensors.append(sensor)
-            else:
-                self._extra_sensors.append(sensor)
-            sensor.start()
+    def start_sensor(self):
+        # start sensor
+        self.logger.info('starting sensor')
+        self._frame_sensor.start()
 
     def run(self):
         """ start running the model until no sensor input arrives
         """
+        self.logger.info('start running scene model')
         while self._finished.value == 0:
             model_update_start = time.time()
             model_updated = False
-            sensor_outputs = []
+            sensor_output = None
             if not self._intput_queue.empty():
-                self.logger.debug('getting a frame img path from an input queue')
+                self.logger.info('getting a frame img path from an input queue')
                 frame_img_path = self._intput_queue.get_nowait()
                 frame_sensor_item = TenguSensorItem(self._t, frame_img_path)
                 # feed first
-                for frame_sensor in self._frame_sensors:
-                    try:
-                        frame_sensor.input_queue.put_nowait(frame_sensor_item)
-                    except:
-                        self.logger.debug('failed to put a new frame in {}'.format(frame_sensor))
+                try:
+                    self._frame_sensor.input_queue.put_nowait(frame_sensor_item)
+                except:
+                    self.logger.debug('failed to put a new frame in frame sensor queue')
 
-                # get sensor outputs, and associate it to a tracklet if available
-                # extra sensor first
-                for extra_sensor in self._extra_sensors:
-                    # get a sensor output
-                    sensor_output = self.get_sensor_output(extra_sensor)
-                    if sensor_output is None:
-                        continue
-
-                    sensor_outputs.append(sensor_output)
-
-                # frame fist
-                for frame_sensor in self._frame_sensors:
-                    # get a sensor input
-                    sensor_output = self.get_sensor_output(frame_sensor)
-                    if sensor_output is None:
-                        continue
-
-                    sensor_outputs.append(sensor_output)
-
-                if len(sensor_outputs) == 0:
-                    self.logger.info('shutdown in progress..., finished = {}'.format(self._finished))
-                    break
+                # get sensor output
+                sensor_output = self.get_sensor_output(self._frame_sensor)
+                if sensor_output is None:
+                    continue
 
                 # update the model
-                detections, class_names, tracklets, scene = self.update_model(sensor_outputs)
+                detections, class_names, tracklets, scene = self.update_model(sensor_output)
 
-                if detections is None:
+                if detections is None and self._finished.value != 0:
                     # shutdown in progress
+                    self.logger.info('None detections found, shutting down...')
                     break
 
                 # put in an output queue
@@ -121,18 +102,20 @@ class TenguSceneModel(Process):
                 self.logger.info('model update took {} ms with {} detections'.format((time.time() - model_update_start), len(detections)))
 
             if not model_updated:
-                self.logger.debug('no frame img is avaialble in an input queue, sleeping, finished? {}'.format(self._finished.value == 1))
+                self.logger.info('no frame img is avaialble in an input queue, sleeping, finished? {}'.format(self._finished.value == 1))
                 time.sleep(0.001)
             else:
                 # then, increment by one
                 self._t += 1
 
-        self.logger.info('exitted loop {}'.format(self._finished.value))
+        self._finished.value = 2
+
+        self.logger.info('exitted scene model loop {}'.format(self._finished.value))
 
     def get_sensor_output(self, sensor):
         """ get a sensor output given at a paricular time
         """
-        self.logger.debug('getting a sensor input from {}'.format(sensor))
+        self.logger.info('getting a sensor input from {}'.format(sensor))
         sensor_output = None
         start = time.time()
 
@@ -155,9 +138,8 @@ class TenguSceneModel(Process):
 
         return sensor_output
 
-    def update_model(self, sensor_outputs):        
-        # TODO: how to update various outputs??
-        detection_dict = sensor_outputs[0].item
+    def update_model(self, sensor_output):        
+        detection_dict = sensor_output.item
         detections = detection_dict['d']
         class_names = detection_dict['n']
         h = detection_dict['h']
@@ -181,12 +163,8 @@ class TenguSceneModel(Process):
             self._intput_queue.get_nowait()
 
         # finish all
-        self.logger.info('finishing frame sensors')
-        for frame_sensor in self._frame_sensors:
-            frame_sensor.finish()
-        self.logger.info('finishing extra sensors')
-        for extra_sensor in self._extra_sensors:
-            extra_sensor.finish()
+        self.logger.info('finishing frame sensor')
+        self._frame_sensor.finish()
 
         self.logger.info('cleaning up scene model output queue')
         while not self._output_queue.empty():
@@ -194,8 +172,9 @@ class TenguSceneModel(Process):
 
         # join sensors
         self.logger.info('joinning frame sensors')
-        for frame_sensor in self._frame_sensors:
-            frame_sensor.join()
-        self.logger.info('joinning extra sensors')
-        for extra_sensor in self._extra_sensors:
-            extra_sensor.join()
+        self._frame_sensor.join()
+
+        # wait
+        while self._finished.value != 2:
+            self.logger.debug('waiting for exitting scene model loop, finished = {}'.format(self._finished.value))
+            time.sleep(0.001)

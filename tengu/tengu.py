@@ -52,7 +52,7 @@ class Tengu(object):
 
     """ start running analysis on src
     """
-    def run(self, src=None, roi=None, scale=1.0, every_x_frame=1, rotation=0, skip_to=-1, frame_queue_timeout_in_secs=10, sensors=[], queue=None):
+    def run(self, src=None, roi=None, scale=1.0, every_x_frame=1, rotation=0, skip_to=-1, frame_queue_timeout_in_secs=10, queue=None):
 
         if src is None:
             self.logger.error('src has to be set')
@@ -66,7 +66,8 @@ class Tengu(object):
             self._camera_reader.start()
 
             # initialize scene model
-            self._scene_model.initialize(sensors)
+            self.logger.info('starting scene model')
+            self._scene_model.start_sensor()
             self._scene_model.start()
 
             # run loop
@@ -194,7 +195,7 @@ class CameraReader(threading.Thread):
         # read frames
         while not self._finished:
             
-            self.logger.debug('reading the next frame')
+            self.logger.info('reading the next frame')
             ret, frame = self._cam.read()
 
             # finished
@@ -225,11 +226,11 @@ class CameraReader(threading.Thread):
             elapsed = 0
             while not done and elapsed < self._frame_queue_timeout_in_secs and not self._finished:
                 try:
-                    self.logger.debug('putting a frame image in a queue')
+                    self.logger.info('putting a frame image in a queue')
                     self._queue.put_nowait(event_dict)
                     done = True
                 except:
-                    self.logger.debug('failed to put event dict in a queue, sleeping')
+                    self.logger.info('failed to put event dict in a queue, sleeping')
                     time.sleep(0.001)
                 elapsed = (time.time() - start) / 1000
 
@@ -241,18 +242,18 @@ class CameraReader(threading.Thread):
 
             img_path = os.path.join(Tengu.TMPFS_DIR, 'frame-{}.jpg'.format(self._current_frame))
             cv2.imwrite(img_path, cropped_copy)
-            self.logger.debug('wrote a frame image {}'.format(img_path))
+            self.logger.info('wrote a frame image {}'.format(img_path))
 
             done = False
             start = time.time()
             elapsed = 0
             while not done and elapsed < self._frame_queue_timeout_in_secs and not self._finished:
                 try:
-                    self.logger.debug('putting a frame image path {} in a queue'.format(img_path))
+                    self.logger.info('putting a frame image path {} in a queue'.format(img_path))
                     self._scene_input_queue.put_nowait(img_path)
                     done = True
                 except:
-                    self.logger.debug('failed to put {} in a queue, sleeping'.format(img_path))
+                    self.logger.info('failed to put {} in a queue, sleeping'.format(img_path))
                     time.sleep(0.001)
                 elapsed = (time.time() - start) / 1000
 
