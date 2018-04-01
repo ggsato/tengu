@@ -8,9 +8,7 @@ Installation
 
 $ pip install -e .   
 
-$ pip install networkx==2.0   
-
-$ conda install seaborn   
+$ pip install filterpy
 
 # if opencv is not available   
 
