@@ -9,6 +9,7 @@ import math
 import logging
 import os, shutil
 import threading
+import traceback
 from Queue import Queue
 
 from tengu_scene_model import TenguSceneModel
@@ -123,7 +124,9 @@ class Tengu(object):
                 self.logger.info('analyzed frame no {} in {} ms'.format(event_dict[Tengu.EVENT_FRAME_NO], (time.time() - frame_analysis_start)))
 
         except:
-            self.logger.exception('Unknow Exception {}'.format(sys.exc_info()))
+            info = sys.exc_info()
+            self.logger.exception('Unknow Exception {}, {}, {}'.format(info[0], info[1], info[2]))
+            traceback.print_tb(info[2])
 
         self.logger.info('exitted run loop, exitting...')
         if self._camera_reader is not None:
@@ -191,7 +194,7 @@ class CameraReader(threading.Thread):
         # read frames
         while not self._finished:
             
-            self.logger.info('reading the next frame')
+            self.logger.debug('reading the next frame')
             ret, frame = self._cam.read()
 
             # finished
@@ -254,7 +257,6 @@ class CameraReader(threading.Thread):
                 elapsed = (time.time() - start) / 1000
 
             if self._current_frame % self._tmpfs_cleanup_interval_in_frames == 0:
-                self.logger.info('cleaning up tmp images')
                 self.cleanup_tmp_images()
 
             # increment
@@ -289,6 +291,7 @@ class CameraReader(threading.Thread):
 
     def cleanup_tmp_images(self):
         # delete image files created before the last interval
+        start = time.time()
         files = os.listdir(Tengu.TMPFS_DIR)
         for file in files:
             if not file.endswith('.jpg'):
@@ -299,6 +302,7 @@ class CameraReader(threading.Thread):
                 os.remove(os.path.join(Tengu.TMPFS_DIR, file))
             else:
                 self.logger.info('keep tmp image file {}'.format(file))
+        self.logger.info('cleaned up tmp images in {} ms'.format(time.time() - start))
 
     def finish(self):
         self.logger.info('finishing camera reading')

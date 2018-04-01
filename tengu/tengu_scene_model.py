@@ -134,6 +134,7 @@ class TenguSceneModel(Process):
         """
         self.logger.debug('getting a sensor input from {}'.format(sensor))
         sensor_output = None
+        start = time.time()
 
         while sensor_output is None and self._finished.value == 0:
             if not sensor.output_queue.empty():
@@ -149,6 +150,8 @@ class TenguSceneModel(Process):
                 self.logger.debug('not yet sensor item of {} is available, sleeping'.format(sensor))
                 # wait a bit
                 time.sleep(0.001)
+
+        self.logger.info('got an sensor output of {} in {} ms'.format(self._t, time.time() - start))
 
         return sensor_output
 

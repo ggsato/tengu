@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 import logging
-import time, sys
+import time, sys, traceback
 import cv2
 from multiprocessing import Process, Queue, Value
 
@@ -84,7 +84,9 @@ class TenguObjectDetectionSensor(TenguSensor):
                         elapsed = (time.time() - start) / 1000
                 except:
                     self.logger.error('sensor {} failed to get an image from {}'.format(self, sensor_input.item))
-                    self.logger.exception('Unknow Exception {}'.format(sys.exc_info()))
+                    info = sys.exc_info()
+                    self.logger.exception('Unknow Exception {}, {}, {}'.format(info[0], info[1], info[2]))
+                    traceback.print_tb(info[2])
                 if self._finished.value == 1:
                     break
             if sensored == 0:
