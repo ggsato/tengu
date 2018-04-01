@@ -11,7 +11,6 @@ import os, shutil
 import threading
 from Queue import Queue
 
-from tengu_observer import TenguObserver
 from tengu_scene_model import TenguSceneModel
 
 class Tengu(object):
