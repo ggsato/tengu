@@ -182,7 +182,8 @@ class CameraReader(threading.Thread):
                 self._cam.set(key, Tengu.PREFERRED_CAMERA_SETTINGS[key])
 
         # check tmpfs directory exists
-        shutil.rmtree(Tengu.TMPFS_DIR)
+        if os.path.exists(Tengu.TMPFS_DIR):
+            shutil.rmtree(Tengu.TMPFS_DIR)
         os.makedirs(Tengu.TMPFS_DIR)
 
     def run(self):

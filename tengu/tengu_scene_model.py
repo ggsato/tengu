@@ -87,8 +87,16 @@ class TenguSceneModel(Process):
 
                     sensor_outputs.append(sensor_output)
 
+                if len(sensor_outputs) == 0:
+                    self.logger.info('shutdown in progress..., finished = {}'.format(self._finished))
+                    break
+
                 # update the model
                 detections, class_names, tracklets, scene = self.update_model(sensor_outputs)
+
+                if detections is None:
+                    # shutdown in progress
+                    break
 
                 # put in an output queue
                 done = False
@@ -144,8 +152,7 @@ class TenguSceneModel(Process):
 
         return sensor_output
 
-    def update_model(self, sensor_outputs):
-        
+    def update_model(self, sensor_outputs):        
         # TODO: how to update various outputs??
         detection_dict = sensor_outputs[0].item
         detections = detection_dict['d']
