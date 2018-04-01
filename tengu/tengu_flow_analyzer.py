@@ -354,12 +354,18 @@ class TenguFlowAnalyzer(object):
         return min(int(y / self._flow_blocks_size[0]), self._flow_blocks[0]-1)
 
     def add_new_tracklets(self, new_tracklets):
+
+        start = time.time()
         
         for new_tracklet in new_tracklets:
             flow_node = self.flow_node_at(*new_tracklet.location)
             new_tracklet.add_flow_node_to_path(flow_node)
 
+        self.logger.info('added new {} tracklet in {} s'.format(len(new_tracklets), time.time() - start))
+
     def update_existing_tracklets(self, existing_tracklets):
+
+        start = time.time()
         
         for existing_tracklet in existing_tracklets:
             if existing_tracklet.has_left or not existing_tracklet.is_confirmed:
@@ -389,7 +395,11 @@ class TenguFlowAnalyzer(object):
             # add flow
             existing_tracklet.add_flow_node_to_path(flow_node)
 
+        self.logger.info('updated existing {} tracklet in {} s'.format(len(existing_tracklets), time.time() - start))
+
     def finish_removed_tracklets(self, removed_tracklets):
+
+        start = time.time()
         
         for removed_tracklet in removed_tracklets:
 
@@ -423,6 +433,8 @@ class TenguFlowAnalyzer(object):
 
             # check direction baesd flow
             self.check_direction_based_flow(removed_tracklet)
+
+        self.logger.info('finished removed {} tracklet in {} s'.format(len(removed_tracklets), time.time() - start))
 
     def check_direction_based_flow(self, tracklet):
         """ check direction based flow if available
