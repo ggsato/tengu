@@ -368,6 +368,7 @@ class TenguFlowAnalyzer(object):
         start = time.time()
         
         for existing_tracklet in existing_tracklets:
+            self.logger.info('checking {} in {} s'.format(existing_tracklet.obj_id, time.time() - start))
             if existing_tracklet.has_left or not existing_tracklet.is_confirmed:
                 self.logger.info('non-qualified tracklet check done in {} s'.format(time.time() - start))
                 continue
