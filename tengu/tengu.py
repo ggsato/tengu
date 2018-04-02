@@ -58,12 +58,6 @@ class Tengu(object):
             self.logger.error('src has to be set')
             return
 
-        # camera reader
-        self._camera_reader = CameraReader(src, roi, scale, every_x_frame, rotation, skip_to, frame_queue_timeout_in_secs, queue, self._scene_model.input_queue)
-
-        # tmp cleanup
-        self._tmp_image_cleaner = TmpImageCleaner(tmpfs_cleanup_interval_in_frames)
-
         # check tmpfs directory exists
         if os.path.exists(Tengu.TMPFS_DIR):
             shutil.rmtree(Tengu.TMPFS_DIR)
@@ -77,6 +71,7 @@ class Tengu(object):
 
             # start reading camera
             self.logger.info('starting camera reader')
+            self._camera_reader = CameraReader(src, roi, scale, every_x_frame, rotation, skip_to, frame_queue_timeout_in_secs, queue, self._scene_model.input_queue)
             self._camera_reader.start()
             while self._camera_reader._finished.value == -1:
                 # this means not started yet
@@ -85,6 +80,8 @@ class Tengu(object):
 
             # start cleaner
             self.logger.info('starting tmp image cleaner')
+            # tmp cleanup
+            self._tmp_image_cleaner = TmpImageCleaner(tmpfs_cleanup_interval_in_frames)
             self._tmp_image_cleaner.start()
 
             # run loop
