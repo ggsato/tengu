@@ -702,6 +702,7 @@ class TenguTracker(object):
     def ignore_tracklet(self, tracklet):
         """ this is called from Flow Analyzer to check if this tracklet should be considered
         """
+        start = time.time()
         ignore_tracklet = False
         if self._ignore_direction_ranges is not None:
             if tracklet.direction is None:
@@ -713,4 +714,5 @@ class TenguTracker(object):
                         self.logger.debug('{} is moving towards the direction between ignored ranges'.format(tracklet))
                         ignore_tracklet = True
                         break
+        self.logger.info('checked if ignore tracklet in {} s'.format(time.time() - start))
         return ignore_tracklet
