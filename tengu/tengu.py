@@ -226,11 +226,11 @@ class CameraReader(threading.Thread):
             elapsed = 0
             while not done and elapsed < self._frame_queue_timeout_in_secs and not self._finished:
                 try:
-                    self.logger.info('putting a frame image in a queue')
+                    self.logger.debug('putting a frame image in a queue')
                     self._queue.put_nowait(event_dict)
                     done = True
                 except:
-                    self.logger.info('failed to put event dict in a queue, sleeping')
+                    self.logger.debug('failed to put event dict in a queue, sleeping')
                     time.sleep(0.001)
                 elapsed = (time.time() - start) / 1000
 

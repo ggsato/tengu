@@ -95,7 +95,7 @@ class TenguObjectDetectionSensor(TenguSensor):
                 if self._finished.value == 1:
                     break
             if sensored == 0:
-                self.logger.info('no sensor input available, sleeping, finished? {}'.format(self._finished.value == 1))
+                self.logger.debug('no sensor input available, sleeping, finished? {}'.format(self._finished.value == 1))
                 # no inputs were available, sleep a bit
                 time.sleep(0.001)
 
