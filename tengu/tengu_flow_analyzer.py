@@ -445,6 +445,7 @@ class TenguFlowAnalyzer(object):
         If its priority is high, it wins over an already assigned path based flow,
         otherwise, it is evaluated only when no path based flow is assigned.
         """
+        start = time.time()
         direction_based_flows = self._scene.direction_based_flows
         for direction_based_flow in direction_based_flows:
 
@@ -471,6 +472,8 @@ class TenguFlowAnalyzer(object):
             tracklet.mark_removed()
             self.logger.info('found a matching direction based flow {} for {}'.format(direction_based_flow, tracklet))
             break
+
+        self.logger.info('checked direction based flow in {} s'.format(time.time() - start))
 
     def save(self, file):
         """
