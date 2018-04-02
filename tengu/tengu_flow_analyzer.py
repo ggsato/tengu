@@ -405,6 +405,7 @@ class TenguFlowAnalyzer(object):
         start = time.time()
         
         for removed_tracklet in removed_tracklets:
+            self.logger.info('checking removed tracklet {} in {} s'.format(removed_tracklet.obj_id, time.time() - start))
 
             if removed_tracklet.speed < 0:
                 self.logger.debug('{} has too short path, speed is not available, not counted'.format(removed_tracklet))
