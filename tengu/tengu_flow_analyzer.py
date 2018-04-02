@@ -407,30 +407,31 @@ class TenguFlowAnalyzer(object):
         for removed_tracklet in removed_tracklets:
             self.logger.info('checking removed tracklet {} in {} s'.format(removed_tracklet.obj_id, time.time() - start))
 
+            check_start = time.time()
             if removed_tracklet.speed < 0:
-                self.logger.debug('{} has too short path, speed is not available, not counted'.format(removed_tracklet))
+                self.logger.debug('{} has too short path, speed is not available, not counted, check done in {} s'.format(removed_tracklet, time.time() - check_start))
                 continue
 
             # if this tracklet is not moving, just remove
             max_diff = TenguFlowNode.max_node_diff(removed_tracklet.path[0], removed_tracklet.path[-1])
             if max_diff < 2:
                 # within adjacent blocks, this is stationally
-                self.logger.debug('{} is removed, but not for counting, stationally'.format(removed_tracklet))
+                self.logger.debug('{} is removed, but not for counting, stationally, done in {} s'.format(removed_tracklet, time.time() - check_start))
                 continue
 
             # still, the travel distance might have been done by prediction, then skip it
             if removed_tracklet.observed_travel_distance < max(*self._flow_blocks_size)*2:
-                self.logger.info('{} has moved, but the travel distance is {} smaller than a block size {}, so being skipped'.format(removed_tracklet, removed_tracklet.observed_travel_distance, max(*self._flow_blocks_size)*2))
+                self.logger.info('{} has moved, but the travel distance is {} smaller than a block size {}, so being skipped, check done in {} s'.format(removed_tracklet, removed_tracklet.observed_travel_distance, max(*self._flow_blocks_size)*2), time.time() - check_start)
                 continue
 
             if self._tracker.ignore_tracklet(removed_tracklet):
-                self.logger.debug('{} is removed, but not for counting, within ignored directions'.format(removed_tracklet))
+                self.logger.debug('{} is removed, but not for counting, within ignored directions, check done in {} s'.format(removed_tracklet, time.time() - check_start))
                 continue
 
             sink_node = removed_tracklet.path[-1]
             source_node = removed_tracklet.path[0]
             if sink_node == source_node:
-                self.logger.debug('same source {} and sink {}, skipped'.format(source_node, sink_node))
+                self.logger.debug('same source {} and sink {}, skipped, check done in {} s'.format(source_node, sink_node, time.time() - check_start))
                 return
 
             self.logger.debug('{} sink at {} through {}'.format(removed_tracklet, sink_node, removed_tracklet.path))
