@@ -388,7 +388,7 @@ class TenguFlowAnalyzer(object):
 
             # if flow_node is not adjacent of prev, skip it
             if not flow_node.adjacent(prev_flow_node):
-                self.logger.info('skipping update of {}, {} is not adjacent of {}, check done in {} s'.format(existing_tracklet.obj_id, flow_node, prev_flow_node, time.time() - start_check))
+                self.logger.info('skipping update of {}, not adjacent move, check done in {} s'.format(existing_tracklet.obj_id, time.time() - start_check))
                 continue
 
             if self._tracker.ignore_tracklet(existing_tracklet):
