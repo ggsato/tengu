@@ -64,10 +64,6 @@ class Tengu(object):
         os.makedirs(Tengu.TMPFS_DIR)
 
         try:
-            # initialize scene model
-            self.logger.info('starting scene model')
-            self._scene_model.start_sensor()
-            self._scene_model.start()
 
             # start reading camera
             self.logger.info('starting camera reader')
@@ -77,6 +73,11 @@ class Tengu(object):
                 # this means not started yet
                 self.logger.info('waiting for camera running, process alive = {}, exitcode = {}'.format(self._camera_reader.is_alive(), self._camera_reader.exitcode))
                 time.sleep(0.1)
+
+            # initialize scene model
+            self.logger.info('starting scene model')
+            self._scene_model.start_sensor()
+            self._scene_model.start()
 
             # start cleaner
             self.logger.info('starting tmp image cleaner')
@@ -155,11 +156,12 @@ class Tengu(object):
             if self._camera_reader is not None:
                 self._camera_reader.finish()
                 self._camera_reader.join()
+            if self._scene_model is not None:
+                self._scene_model.finish()
+                self._scene_model.join()
             if self._tmp_image_cleaner is not None:
                 self._tmp_image_cleaner.finish()
                 self._tmp_image_cleaner.join()
-            self._scene_model.finish()
-            self._scene_model.join()
 
             self._stopped.value = 2
             self.logger.info('exitted run loop, exitting... {}'.format(self._stopped.value))
@@ -348,7 +350,7 @@ class TmpImageCleaner(Process):
         super(TmpImageCleaner, self).__init__(**kwargs)
         self.logger= logging.getLogger(__name__)
         self._current_frame = Value('i', 0)
-        self._tmpfs_cleanup_interval_in_frames = tmpfs_cleanup_interval_in_frames
+        self._tmpfs_cleanup_interval_in_frames = Value('i', tmpfs_cleanup_interval_in_frames)
         self._finished = Value('i', 0)
 
     @property
@@ -365,7 +367,11 @@ class TmpImageCleaner(Process):
 
                 self.cleanup_tmp_images()
 
-                time.sleep(1.0)
+                start = time.time()
+                elapsed = 0
+                while elapsed < 10 and self._finished.value == 0:
+                    time.sleep(0.1)
+                    elapsed = time.time() - start
         except:
             info = sys.exc_info()
             self.logger.exception('Unknow Exception {}, {}, {}'.format(info[0], info[1], info[2]))
@@ -375,6 +381,7 @@ class TmpImageCleaner(Process):
             self.logger.info('exitting cleanup tmp image loop {}'.format(self._finished.value))
 
     def cleanup_tmp_images(self):
+        self.logger.info('cleaning up tmp images...')
         # delete image files created before the last interval
         start = time.time()
         files = os.listdir(Tengu.TMPFS_DIR)
