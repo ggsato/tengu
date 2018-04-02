@@ -52,69 +52,73 @@ class TenguSceneModel(Process):
         """ start running the model until no sensor input arrives
         """
         self.logger.info('running scene model')
-        while self._finished.value == 0:
-            model_update_start = time.time()
-            model_updated = False
-            sensor_output = None
-            frame_img_path = None
-            try:
-                frame_img_path = self._intput_queue.get_nowait()
-            except:
-                pass
-            if frame_img_path is not None:
-                self.logger.info('got a frame img path from an input queue')
-                frame_sensor_item = TenguSensorItem(self._t, frame_img_path)
-                # feed first
+        try:
+            while self._finished.value == 0:
+                model_update_start = time.time()
+                model_updated = False
+                sensor_output = None
+                frame_img_path = None
                 try:
-                    self._frame_sensor.input_queue.put_nowait(frame_sensor_item)
+                    frame_img_path = self._intput_queue.get_nowait()
                 except:
-                    self.logger.debug('failed to put a new frame in frame sensor queue')
-
-                # get sensor output
-                sensor_output = self.get_sensor_output(self._frame_sensor)
-                if sensor_output is None:
-                    continue
-
-                # update the model
-                detections, class_names, tracklets, scene = self.update_model(sensor_output)
-
-                if detections is None and self._finished.value != 0:
-                    # shutdown in progress
-                    self.logger.info('None detections found, shutting down...')
-                    break
-
-                # put in an output queue
-                done = False
-                start = time.time()
-                elapsed = 0
-                tracklet_dicts = []
-                for tracklet in tracklets:
-                    tracklet_dicts.append(tracklet.to_dict())
-                output_dict = {'d': detections, 'c': class_names, 't': tracklet_dicts, 'n': self._t}
-                while not done and elapsed < self._output_queue_timeout_in_secs and self._finished.value == 0:
+                    pass
+                if frame_img_path is not None:
+                    self.logger.info('got a frame img path from an input queue')
+                    frame_sensor_item = TenguSensorItem(self._t, frame_img_path)
+                    # feed first
                     try:
-                        self.logger.debug('putting output dict {} to an output queue'.format(output_dict))
-                        self._output_queue.put_nowait(output_dict)
-                        done = True
+                        self._frame_sensor.input_queue.put_nowait(frame_sensor_item)
                     except:
-                        self.logger.debug('failed to put in the output queue, sleeping')
-                        time.sleep(0.001)
-                    elapsed = time.time() - start
+                        self.logger.debug('failed to put a new frame in frame sensor queue')
 
-                model_updated = True
+                    # get sensor output
+                    sensor_output = self.get_sensor_output(self._frame_sensor)
+                    if sensor_output is None:
+                        continue
 
-                self.logger.info('model update at time {} took {} s with {} detections'.format(self._t, (time.time() - model_update_start), len(detections)))
+                    # update the model
+                    detections, class_names, tracklets, scene = self.update_model(sensor_output)
 
-            if not model_updated:
-                self.logger.info('no frame img is avaialble in an input queue, queue size = {}, finished? {}'.format(self._intput_queue.qsize(), self._finished.value == 1))
-                time.sleep(0.001)
-            else:
-                # then, increment by one
-                self._t += 1
+                    if detections is None and self._finished.value != 0:
+                        # shutdown in progress
+                        self.logger.info('None detections found, shutting down...')
+                        break
 
-        self._finished.value = 2
+                    # put in an output queue
+                    done = False
+                    start = time.time()
+                    elapsed = 0
+                    tracklet_dicts = []
+                    for tracklet in tracklets:
+                        tracklet_dicts.append(tracklet.to_dict())
+                    output_dict = {'d': detections, 'c': class_names, 't': tracklet_dicts, 'n': self._t}
+                    while not done and elapsed < self._output_queue_timeout_in_secs and self._finished.value == 0:
+                        try:
+                            self.logger.debug('putting output dict {} to an output queue'.format(output_dict))
+                            self._output_queue.put_nowait(output_dict)
+                            done = True
+                        except:
+                            self.logger.debug('failed to put in the output queue, sleeping')
+                            time.sleep(0.001)
+                        elapsed = time.time() - start
 
-        self.logger.info('exitted scene model loop {}'.format(self._finished.value))
+                    model_updated = True
+
+                    self.logger.info('model update at time {} took {} s with {} detections'.format(self._t, (time.time() - model_update_start), len(detections)))
+
+                if not model_updated:
+                    self.logger.info('no frame img is avaialble in an input queue, queue size = {}, finished? {}'.format(self._intput_queue.qsize(), self._finished.value > 0))
+                    time.sleep(0.001)
+                else:
+                    # then, increment by one
+                    self._t += 1
+        except:
+            info = sys.exc_info()
+            self.logger.exception('Unknow Exception {}, {}, {}'.format(info[0], info[1], info[2]))
+            traceback.print_tb(info[2])
+        finally:
+            self._finished.value = 2
+            self.logger.info('exitted scene model loop {}'.format(self._finished.value))
 
     def get_sensor_output(self, sensor):
         """ get a sensor output given at a paricular time
@@ -165,10 +169,12 @@ class TenguSceneModel(Process):
         return detections, class_names, tracklets, scene
 
     def finish(self):
-        self._finished.value = 1
+        if self._finished.value == 0:
+            self._finished.value = 1
 
         # at first, cleanup all the items in queues
         self.logger.info('cleaning up scene model input queue')
+        self._intput_queue.close()
         while not self._intput_queue.empty():
             self._intput_queue.get_nowait()
 
@@ -177,6 +183,7 @@ class TenguSceneModel(Process):
         self._frame_sensor.finish()
 
         self.logger.info('cleaning up scene model output queue')
+        self._output_queue.close()
         while not self._output_queue.empty():
             self._output_queue.get_nowait()
 
@@ -186,5 +193,5 @@ class TenguSceneModel(Process):
 
         # wait
         while self._finished.value != 2:
-            self.logger.debug('waiting for exitting scene model loop, finished = {}'.format(self._finished.value))
+            self.logger.info('waiting for exitting scene model loop, finished = {}'.format(self._finished.value))
             time.sleep(0.001)

@@ -39,20 +39,23 @@ class TenguSensor(Process):
 
     def finish(self):
         # then, mark finished
-        self._finished.value = 1
+        if self._finished.value == 0:
+            self._finished.value = 1
         # consume all the items in both queues
         # input first
         self.logger.info('cleaning up input queue')
+        self._input_queue.close()
         while not self._input_queue.empty():
             self._input_queue.get_nowait()
         # output queue
         self.logger.info('cleaning up output queue')
+        self._output_queue.close()
         while not self._output_queue.empty():
             self._output_queue.get_nowait()
 
         # wait
         while self._finished.value != 2:
-            self.logger.debug('waiting for exitting sensor loop, finished = {}'.format(self._finished.value))
+            self.logger.info('waiting for exitting sensor loop, finished = {}'.format(self._finished.value))
             time.sleep(0.001)
 
 class TenguObjectDetectionSensor(TenguSensor):

@@ -132,7 +132,10 @@ class Tengu(object):
                     elapsed = time.time() - start
 
                 if not done:
-                    self.logger.error('failed to put an output dict in a queue within {} seconds'.format(frame_queue_timeout_in_secs))
+                    if self._stopped.value == 1:
+                        self.logger.info('breaking tengu loop...')
+                    else:
+                        self.logger.error('failed to put an output dict in a queue within {} seconds'.format(frame_queue_timeout_in_secs))
                     break
 
                 self.logger.info('analyzed frame no {} in {} s'.format(event_dict[Tengu.EVENT_FRAME_NO], (time.time() - frame_analysis_start)))
@@ -146,17 +149,19 @@ class Tengu(object):
             info = sys.exc_info()
             self.logger.exception('Unknow Exception {}, {}, {}'.format(info[0], info[1], info[2]))
             traceback.print_tb(info[2])
+        finally:
 
-        self._stopped.value = 2
-        self.logger.info('exitted run loop, exitting... {}'.format(self._stopped.value))
-        if self._camera_reader is not None:
-            self._camera_reader.finish()
-            self._camera_reader.join()
-        if self._tmp_image_cleaner is not None:
-            self._tmp_image_cleaner.finish()
-            self._tmp_image_cleaner.join()
-        self._scene_model.finish()
-        self._scene_model.join()
+            if self._camera_reader is not None:
+                self._camera_reader.finish()
+                self._camera_reader.join()
+            if self._tmp_image_cleaner is not None:
+                self._tmp_image_cleaner.finish()
+                self._tmp_image_cleaner.join()
+            self._scene_model.finish()
+            self._scene_model.join()
+
+            self._stopped.value = 2
+            self.logger.info('exitted run loop, exitting... {}'.format(self._stopped.value))
 
     def save(self, model_folder):
         self.logger.debug('saving current models in {}...'.format(model_folder))
@@ -166,8 +171,13 @@ class Tengu(object):
 
     def stop(self):
         self.logger.info('stopping...')
-        self._camera_reader.finish()
-        self._stopped.value = 1
+        if self._stopped.value == 0:
+            self._stopped.value = 1
+
+        while self._stopped.value != 2:
+            self.logger.info('waiting for exitting tengu loop {}'.format(self._stopped.value))
+            time.sleep(0.01)
+
 
 class CameraReader(Process):
     def __init__(self, video_src, roi, scale, every_x_frame, rotation, skip_to, frame_queue_timeout_in_secs, queue, scene_input_queue, **kwargs):
@@ -211,86 +221,94 @@ class CameraReader(Process):
         self.logger.info('running camera reader')
         self.setup()
         # read frames
-        while self._finished.value == 0:
+        try:
+            while self._finished.value == 0:
 
-            frame_start = time.time()
-            
-            self.logger.info('reading the next frame')
-            ret, frame = self._cam.read()
+                frame_start = time.time()
+                
+                self.logger.info('reading the next frame')
+                ret, frame = self._cam.read()
 
-            # finished
-            if not ret:
-                self.logger.info('no frame is avaiable')
-                break
+                # finished
+                if not ret:
+                    self.logger.info('no frame is avaiable')
+                    break
 
-            # camera event dictionary
-            event_dict = {Tengu.EVENT_FRAME_NO: self._current_frame.value}
+                # camera event dictionary
+                event_dict = {Tengu.EVENT_FRAME_NO: self._current_frame.value}
 
-            # rotate
-            if self._rotation != 0:
-                rows, cols, channels = frame.shape
-                M = cv2.getRotationMatrix2D((cols/2, rows/2), self._rotation, 1)
-                frame = cv2.warpAffine(frame, M, (cols, rows))
+                # rotate
+                if self._rotation != 0:
+                    rows, cols, channels = frame.shape
+                    M = cv2.getRotationMatrix2D((cols/2, rows/2), self._rotation, 1)
+                    frame = cv2.warpAffine(frame, M, (cols, rows))
 
-            # preprocess
-            cropped = self.preprocess(frame, self._roi, self._scale)
+                # preprocess
+                cropped = self.preprocess(frame, self._roi, self._scale)
 
-            # write an image to exchange between processes
-            start = time.time()
-            img_path = os.path.join(Tengu.TMPFS_DIR, 'frame-{}.jpg'.format(self._current_frame.value))
-            cv2.imwrite(img_path, cropped)
-            self.logger.info('wrote a frame image {} in {} s'.format(img_path, time.time() - start))
+                # write an image to exchange between processes
+                start = time.time()
+                img_path = os.path.join(Tengu.TMPFS_DIR, 'frame-{}.jpg'.format(self._current_frame.value))
+                cv2.imwrite(img_path, cropped)
+                self.logger.info('wrote a frame image {} in {} s'.format(img_path, time.time() - start))
 
-            event_dict[Tengu.EVENT_FRAME_CROPPED] = img_path
+                event_dict[Tengu.EVENT_FRAME_CROPPED] = img_path
 
-            # put in a queue, this is shared with a GUI client
-            done = False
-            start = time.time()
-            elapsed = 0
-            while not done and elapsed < self._frame_queue_timeout_in_secs and self._finished.value == 0:
-                try:
-                    self.logger.info('putting a frame image path {} in a queue'.format(img_path))
-                    self._queue.put_nowait(event_dict)
-                    done = True
-                except:
-                    self.logger.debug('failed to put event dict in a queue, sleeping')
-                    time.sleep(0.001)
-                elapsed = time.time() - start
+                # put in a queue, this is shared with a GUI client
+                done = False
+                start = time.time()
+                elapsed = 0
+                while not done and elapsed < self._frame_queue_timeout_in_secs and self._finished.value == 0:
+                    try:
+                        self.logger.info('putting a frame image path {} in a queue'.format(img_path))
+                        self._queue.put_nowait(event_dict)
+                        done = True
+                    except:
+                        self.logger.debug('failed to put event dict in a queue, sleeping')
+                        time.sleep(0.001)
+                    elapsed = time.time() - start
 
-            # skip if necessary
-            if (self._every_x_frame > 1 and self._current_frame.value % self._every_x_frame != 0) or (self._skip_to > 0 and self._current_frame.value < self._skip_to):
+                # skip if necessary
+                if (self._every_x_frame > 1 and self._current_frame.value % self._every_x_frame != 0) or (self._skip_to > 0 and self._current_frame.value < self._skip_to):
 
-                self.logger.info('skipping frame at {}'.format(self._current_frame.value))
-                continue
+                    self.logger.info('skipping frame at {}'.format(self._current_frame.value))
+                    continue
 
-            # put in a scene input queue, this is shared with scene model
-            done = False
-            start = time.time()
-            elapsed = 0
-            while not done and elapsed < self._frame_queue_timeout_in_secs and self._finished.value == 0:
-                try:
-                    self.logger.info('putting a frame image path {} in a queue'.format(img_path))
-                    self._scene_input_queue.put_nowait(img_path)
-                    done = True
-                except:
-                    self.logger.info('failed to put {} in a queue, sleeping'.format(img_path))
-                    time.sleep(0.001)
-                elapsed = time.time() - start
+                # put in a scene input queue, this is shared with scene model
+                done = False
+                start = time.time()
+                elapsed = 0
+                while not done and elapsed < self._frame_queue_timeout_in_secs and self._finished.value == 0:
+                    try:
+                        self.logger.info('putting a frame image path {} in a queue'.format(img_path))
+                        self._scene_input_queue.put_nowait(img_path)
+                        done = True
+                    except:
+                        self.logger.info('failed to put {} in a queue, sleeping'.format(img_path))
+                        time.sleep(0.001)
+                    elapsed = time.time() - start
 
-            self.logger.info('put frame img and its path at time {} in {} s'.format(self._current_frame.value, time.time() - frame_start))
+                self.logger.info('put frame img and its path at time {} in {} s'.format(self._current_frame.value, time.time() - frame_start))
 
-            # increment
-            self._current_frame.value += 1
-
-        self._finished.value = 2
-        self.logger.info('exitted camera loop {}'.format(self._finished.value))
-        # cleanup queues
-        self.logger.info('cleaning up queue')
-        while not self._queue.empty():
-            self._queue.get_nowait()
+                # increment
+                self._current_frame.value += 1
+        except:
+            info = sys.exc_info()
+            self.logger.exception('Unknow Exception {}, {}, {}'.format(info[0], info[1], info[2]))
+            traceback.print_tb(info[2])
+        finally:
+            # cleanup queues
+            self.logger.info('cleaning up queue')
+            self._queue.close()
+            while not self._queue.empty():
+                self._queue.get_nowait()
             self.logger.info('cleaning up scene input queue')
-        while not self._scene_input_queue.empty():
-            self._scene_input_queue.get_nowait()
+            self._scene_input_queue.close()
+            while not self._scene_input_queue.empty():
+                self._scene_input_queue.get_nowait()
+            # mark exit
+            self._finished.value = 2
+            self.logger.info('exitted camera loop {}'.format(self._finished.value))
         self.logger.info('finished reading camera')
 
     def preprocess(self, frame, roi, scale):
@@ -316,7 +334,12 @@ class CameraReader(Process):
 
     def finish(self):
         self.logger.info('finishing camera reading')
-        self._finished.value = 1
+        if self._finished.value == 0:
+            self._finished.value = 1
+
+        while self._finished.value != 2:
+            self.logger.info('waiting for exitting camera loop, finished = {}'.format(self._finished.value))
+            time.sleep(0.001)
 
 class TmpImageCleaner(Process):
 
@@ -336,14 +359,19 @@ class TmpImageCleaner(Process):
 
     def run(self):
         self.logger.info('running tmp image cleaner')
-        while self._finished.value == 0:
+        try:
+            while self._finished.value == 0:
 
-            self.cleanup_tmp_images()
+                self.cleanup_tmp_images()
 
-            time.sleep(1.0)
-
-        self._finished.value = 2
-        self.logger.info('exitting cleanup tmp image loop {}'.format(self._finished.value))
+                time.sleep(1.0)
+        except:
+            info = sys.exc_info()
+            self.logger.exception('Unknow Exception {}, {}, {}'.format(info[0], info[1], info[2]))
+            traceback.print_tb(info[2])
+        finally:
+            self._finished.value = 2
+            self.logger.info('exitting cleanup tmp image loop {}'.format(self._finished.value))
 
     def cleanup_tmp_images(self):
         # delete image files created before the last interval
@@ -362,7 +390,12 @@ class TmpImageCleaner(Process):
 
     def finish(self):
         self.logger.info('finishing cleanup tmp images')
-        self._finished.value = 1
+        if self._finished.value == 0:
+            self._finished.value = 1
+
+        while self._finished.value != 2:
+            self.logger.info('waiting for exitting cleaner loop, finished = {}'.format(self._finished.value))
+            time.sleep(0.001)
 
 def main():
     print(sys.argv)
