@@ -274,9 +274,11 @@ class Tracklet(TenguObject):
         return self._path
 
     def add_flow_node_to_path(self, flow_node):
+        start = time.time()
         self._path.append(flow_node)
         self._milestones.append([self.center, self.rect, TenguTracker._global_updates])
         flow_node.record_tracklet(self)
+        self.logger.info('added flow node to path of {} in {} s'.format(self.obj_id, time.time() - start))
 
     @property
     def stats(self):

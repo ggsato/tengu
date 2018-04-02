@@ -381,10 +381,9 @@ class TenguFlowAnalyzer(object):
             if prev_flow_node is None:
                 self.logger.error('no last flow exists on {}'.format(existing_tracklet))
                 raise
+
             # if flow_node is not adjacent of prev, skip it
-            # but this could happen by a quickly moving tracklet
-            # so check this only when building scene
-            if self._scene_file is None and not flow_node.adjacent(prev_flow_node):
+            if not flow_node.adjacent(prev_flow_node):
                 self.logger.debug('skipping update of {}, {} is not adjacent of {}'.format(existing_tracklet, flow_node, prev_flow_node))
                 continue
 
