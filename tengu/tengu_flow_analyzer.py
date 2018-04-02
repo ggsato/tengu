@@ -369,26 +369,29 @@ class TenguFlowAnalyzer(object):
         
         for existing_tracklet in existing_tracklets:
             if existing_tracklet.has_left or not existing_tracklet.is_confirmed:
+                self.logger.info('non-qualified tracklet check done in {} s'.format(time.time() - start))
                 continue
+
+            start_check = time.time()
 
             prev_flow_node = existing_tracklet.path[-1]
             flow_node = self.flow_node_at(*existing_tracklet.location)
             if prev_flow_node == flow_node:
                 # no change
-                self.logger.debug('{} stays on the same flow node'.format(existing_tracklet))
+                self.logger.info('{} stays on the same flow node, check done in {} s'.format(existing_tracklet.obj_id, time.time() - start_check))
                 continue
             # update edge
             if prev_flow_node is None:
-                self.logger.error('no last flow exists on {}'.format(existing_tracklet))
+                self.logger.error('no last flow exists on {}, check done in {} s'.format(existing_tracklet.obj_id, time.time() - start_check))
                 raise
 
             # if flow_node is not adjacent of prev, skip it
             if not flow_node.adjacent(prev_flow_node):
-                self.logger.debug('skipping update of {}, {} is not adjacent of {}'.format(existing_tracklet, flow_node, prev_flow_node))
+                self.logger.info('skipping update of {}, {} is not adjacent of {}, check done in {} s'.format(existing_tracklet.obj_id, flow_node, prev_flow_node, time.time() - start_check))
                 continue
 
             if self._tracker.ignore_tracklet(existing_tracklet):
-                self.logger.debug('ignoring update of {}'.format(existing_tracklet))
+                self.logger.info('ignoring update of {}, check done in {} s'.format(existing_tracklet.obj_id, time.time() - start_check))
                 continue
 
             # add flow
