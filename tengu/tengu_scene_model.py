@@ -51,14 +51,18 @@ class TenguSceneModel(Process):
     def run(self):
         """ start running the model until no sensor input arrives
         """
-        self.logger.info('start running scene model')
+        self.logger.info('running scene model')
         while self._finished.value == 0:
             model_update_start = time.time()
             model_updated = False
             sensor_output = None
-            if not self._intput_queue.empty():
-                self.logger.info('getting a frame img path from an input queue')
+            frame_img_path = None
+            try:
                 frame_img_path = self._intput_queue.get_nowait()
+            except:
+                pass
+            if frame_img_path is not None:
+                self.logger.info('got a frame img path from an input queue')
                 frame_sensor_item = TenguSensorItem(self._t, frame_img_path)
                 # feed first
                 try:
@@ -102,7 +106,7 @@ class TenguSceneModel(Process):
                 self.logger.info('model update at time {} took {} s with {} detections'.format(self._t, (time.time() - model_update_start), len(detections)))
 
             if not model_updated:
-                self.logger.info('no frame img is avaialble in an input queue, sleeping, finished? {}'.format(self._finished.value == 1))
+                self.logger.info('no frame img is avaialble in an input queue, queue size = {}, finished? {}'.format(self._intput_queue.qsize(), self._finished.value == 1))
                 time.sleep(0.001)
             else:
                 # then, increment by one
@@ -120,9 +124,13 @@ class TenguSceneModel(Process):
         start = time.time()
 
         while sensor_output is None and self._finished.value == 0:
-            if not sensor.output_queue.empty():
-                # get one by one until a sensor output taken at the time is taken
+            # get one by one until a sensor output taken at the time is taken
+            sensor_item = None
+            try:
                 sensor_item = sensor.output_queue.get_nowait()
+            except:
+                pass
+            if sensor_item is not None:
                 self.logger.debug('got an item {}'.format(sensor_item))
                 if sensor_item.t == self._t:
                     self.logger.debug('found the matching item {} with time {}'.format(sensor_item.item, self._t))

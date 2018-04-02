@@ -66,6 +66,7 @@ class TenguObjectDetectionSensor(TenguSensor):
         return True
 
     def run(self):
+        self.logger.info('running sensor')
         while self._finished.value == 0:
             sensored = 0
             while not self._input_queue.empty() and self._finished.value == 0:

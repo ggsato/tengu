@@ -8,9 +8,8 @@ import time
 import math
 import logging
 import os, shutil
-import threading
 import traceback
-from Queue import Queue
+from multiprocessing import Process, Value
 
 from tengu_scene_model import TenguSceneModel
 
@@ -45,7 +44,7 @@ class Tengu(object):
         TODO: this works only in the same process.
         Otherwise, this has to be something else to communicate between processes
         """
-        self._stopped = False
+        self._stopped = Value('i', 0)
 
     @property
     def frame_no(self):
@@ -53,7 +52,7 @@ class Tengu(object):
 
     """ start running analysis on src
     """
-    def run(self, src=None, roi=None, scale=1.0, every_x_frame=1, rotation=0, skip_to=-1, frame_queue_timeout_in_secs=10, queue=None, tmpfs_cleanup_interval_in_frames=1*25):
+    def run(self, src=None, roi=None, scale=1.0, every_x_frame=1, rotation=0, skip_to=-1, frame_queue_timeout_in_secs=10, queue=None, tmpfs_cleanup_interval_in_frames=10*25):
 
         if src is None:
             self.logger.error('src has to be set')
@@ -65,20 +64,27 @@ class Tengu(object):
         # tmp cleanup
         self._tmp_image_cleaner = TmpImageCleaner(tmpfs_cleanup_interval_in_frames)
 
+        # check tmpfs directory exists
+        if os.path.exists(Tengu.TMPFS_DIR):
+            shutil.rmtree(Tengu.TMPFS_DIR)
+        os.makedirs(Tengu.TMPFS_DIR)
+
         try:
-            # start reading camera
-            self._camera_reader.start()
-
-            # start cleaner
-            self._tmp_image_cleaner.start()
-
             # initialize scene model
             self.logger.info('starting scene model')
             self._scene_model.start_sensor()
             self._scene_model.start()
 
+            # start reading camera
+            self.logger.info('starting camera reader')
+            self._camera_reader.start()
+
+            # start cleaner
+            self.logger.info('starting tmp image cleaner')
+            self._tmp_image_cleaner.start()
+
             # run loop
-            while not self._stopped:
+            while self._stopped.value == 0:
 
                 frame_analysis_start = time.time()
 
@@ -91,7 +97,7 @@ class Tengu(object):
                 start = time.time()
                 elapsed = 0
                 output_dict = None
-                while not done and elapsed < frame_queue_timeout_in_secs and not self._stopped:
+                while not done and elapsed < frame_queue_timeout_in_secs and self._stopped.value == 0:
                     try:
                         self.logger.debug('getting an output dict from a queue')
                         output_dict = self._scene_model.output_queue.get_nowait()
@@ -115,7 +121,7 @@ class Tengu(object):
                 done = False
                 start = time.time()
                 elapsed = 0
-                while not done and elapsed < frame_queue_timeout_in_secs and not self._stopped:
+                while not done and elapsed < frame_queue_timeout_in_secs and self._stopped.value == 0:
                     try:
                         self.logger.debug('putting an event dict to a queue')
                         queue.put_nowait(event_dict)
@@ -141,7 +147,8 @@ class Tengu(object):
             self.logger.exception('Unknow Exception {}, {}, {}'.format(info[0], info[1], info[2]))
             traceback.print_tb(info[2])
 
-        self.logger.info('exitted run loop, exitting...')
+        self._stopped.value = 2
+        self.logger.info('exitted run loop, exitting... {}'.format(self._stopped.value))
         if self._camera_reader is not None:
             self._camera_reader.finish()
             self._camera_reader.join()
@@ -150,7 +157,6 @@ class Tengu(object):
             self._tmp_image_cleaner.join()
         self._scene_model.finish()
         self._scene_model.join()
-        self._stopped = True
 
     def save(self, model_folder):
         self.logger.debug('saving current models in {}...'.format(model_folder))
@@ -161,11 +167,11 @@ class Tengu(object):
     def stop(self):
         self.logger.info('stopping...')
         self._camera_reader.finish()
-        self._stopped = True
+        self._stopped.value = 1
 
-class CameraReader(threading.Thread):
-    def __init__(self, video_src, roi, scale, every_x_frame, rotation, skip_to, frame_queue_timeout_in_secs, queue, scene_input_queue):
-        super(CameraReader, self).__init__()
+class CameraReader(Process):
+    def __init__(self, video_src, roi, scale, every_x_frame, rotation, skip_to, frame_queue_timeout_in_secs, queue, scene_input_queue, **kwargs):
+        super(CameraReader, self).__init__(**kwargs)
         self.logger= logging.getLogger(__name__)
         self._video_src = video_src
         # TODO: check these values are correct
@@ -179,15 +185,16 @@ class CameraReader(threading.Thread):
         self._scene_input_queue = scene_input_queue
         # transient
         self._cam = None
-        self._current_frame = 0
+        self._current_frame = Value('i', 0)
         self._cleanup_thread = None
-        self._finished = False
+        self._finished = Value('i', 0)
 
     @property
     def current_frame(self):
-        return self._current_frame
+        return self._current_frame.value
 
     def setup(self):
+        self.logger.info('setting up camera reader')
         try:
             self._cam = cv2.VideoCapture(int(self._video_src))
         except:
@@ -200,15 +207,11 @@ class CameraReader(threading.Thread):
                 self.logger.info('set a user defined camera setting {} of {}'.format(Tengu.PREFERRED_CAMERA_SETTINGS[key], key))
                 self._cam.set(key, Tengu.PREFERRED_CAMERA_SETTINGS[key])
 
-        # check tmpfs directory exists
-        if os.path.exists(Tengu.TMPFS_DIR):
-            shutil.rmtree(Tengu.TMPFS_DIR)
-        os.makedirs(Tengu.TMPFS_DIR)
-
     def run(self):
+        self.logger.info('running camera reader')
         self.setup()
         # read frames
-        while not self._finished:
+        while self._finished.value == 0:
 
             frame_start = time.time()
             
@@ -221,7 +224,7 @@ class CameraReader(threading.Thread):
                 break
 
             # camera event dictionary
-            event_dict = {Tengu.EVENT_FRAME_NO: self._current_frame}
+            event_dict = {Tengu.EVENT_FRAME_NO: self._current_frame.value}
 
             # rotate
             if self._rotation != 0:
@@ -229,21 +232,24 @@ class CameraReader(threading.Thread):
                 M = cv2.getRotationMatrix2D((cols/2, rows/2), self._rotation, 1)
                 frame = cv2.warpAffine(frame, M, (cols, rows))
 
-            # use copy for gui use, which is done asynchronously, meaning may corrupt buffer during camera updates
-            event_dict[Tengu.EVENT_FRAME] = frame.copy()
-
             # preprocess
             cropped = self.preprocess(frame, self._roi, self._scale)
-            cropped_copy = cropped.copy()
-            event_dict[Tengu.EVENT_FRAME_CROPPED] = cropped_copy
 
-            # put in a queue
+            # write an image to exchange between processes
+            start = time.time()
+            img_path = os.path.join(Tengu.TMPFS_DIR, 'frame-{}.jpg'.format(self._current_frame.value))
+            cv2.imwrite(img_path, cropped)
+            self.logger.info('wrote a frame image {} in {} s'.format(img_path, time.time() - start))
+
+            event_dict[Tengu.EVENT_FRAME_CROPPED] = img_path
+
+            # put in a queue, this is shared with a GUI client
             done = False
             start = time.time()
             elapsed = 0
-            while not done and elapsed < self._frame_queue_timeout_in_secs and not self._finished:
+            while not done and elapsed < self._frame_queue_timeout_in_secs and self._finished.value == 0:
                 try:
-                    self.logger.debug('putting a frame image in a queue')
+                    self.logger.info('putting a frame image path {} in a queue'.format(img_path))
                     self._queue.put_nowait(event_dict)
                     done = True
                 except:
@@ -252,19 +258,16 @@ class CameraReader(threading.Thread):
                 elapsed = time.time() - start
 
             # skip if necessary
-            if (self._every_x_frame > 1 and self._current_frame % self._every_x_frame != 0) or (self._skip_to > 0 and self._current_frame < self._skip_to):
+            if (self._every_x_frame > 1 and self._current_frame.value % self._every_x_frame != 0) or (self._skip_to > 0 and self._current_frame.value < self._skip_to):
 
-                self.logger.debug('skipping frame at {}'.format(self._current_frame))
+                self.logger.info('skipping frame at {}'.format(self._current_frame.value))
                 continue
 
-            img_path = os.path.join(Tengu.TMPFS_DIR, 'frame-{}.jpg'.format(self._current_frame))
-            cv2.imwrite(img_path, cropped_copy)
-            self.logger.info('wrote a frame image {}'.format(img_path))
-
+            # put in a scene input queue, this is shared with scene model
             done = False
             start = time.time()
             elapsed = 0
-            while not done and elapsed < self._frame_queue_timeout_in_secs and not self._finished:
+            while not done and elapsed < self._frame_queue_timeout_in_secs and self._finished.value == 0:
                 try:
                     self.logger.info('putting a frame image path {} in a queue'.format(img_path))
                     self._scene_input_queue.put_nowait(img_path)
@@ -274,12 +277,13 @@ class CameraReader(threading.Thread):
                     time.sleep(0.001)
                 elapsed = time.time() - start
 
-            self.logger.info('put frame img and its path at time {} in {} s'.format(self._current_frame, time.time() - frame_start))
+            self.logger.info('put frame img and its path at time {} in {} s'.format(self._current_frame.value, time.time() - frame_start))
 
             # increment
-            self._current_frame += 1
+            self._current_frame.value += 1
 
-        self._finished = True
+        self._finished.value = 2
+        self.logger.info('exitted camera loop {}'.format(self._finished.value))
         # cleanup queues
         self.logger.info('cleaning up queue')
         while not self._queue.empty():
@@ -290,6 +294,8 @@ class CameraReader(threading.Thread):
         self.logger.info('finished reading camera')
 
     def preprocess(self, frame, roi, scale):
+
+        start = time.time()
 
         cropped = None
         
@@ -303,38 +309,41 @@ class CameraReader(threading.Thread):
             cropped = resized[roi[1]:roi[1]+roi[3], roi[0]:roi[0]+roi[2]]
         else:
             cropped = resized
+
+        self.logger.info('preprocessing done in {} s'.format(time.time() - start))
         
         return cropped
 
     def finish(self):
         self.logger.info('finishing camera reading')
-        self._finished = True
+        self._finished.value = 1
 
-class TmpImageCleaner(threading.Thread):
+class TmpImageCleaner(Process):
 
     def __init__(self, tmpfs_cleanup_interval_in_frames, **kwargs):
         super(TmpImageCleaner, self).__init__(**kwargs)
         self.logger= logging.getLogger(__name__)
-        self._current_frame = 0
+        self._current_frame = Value('i', 0)
         self._tmpfs_cleanup_interval_in_frames = tmpfs_cleanup_interval_in_frames
-        self._finished = False
+        self._finished = Value('i', 0)
 
     @property
     def current_frame(self):
-        return self._current_frame
+        return self._current_frame.value
 
     def increment_current_frame(self):
-        self._current_frame += 1
+        self._current_frame.value += 1
 
     def run(self):
-        self.logger.info('starting tmp image cleaner')
-        while not self._finished:
+        self.logger.info('running tmp image cleaner')
+        while self._finished.value == 0:
 
             self.cleanup_tmp_images()
 
             time.sleep(1.0)
 
-        self.logger.info('exitting cleanup tmp image loop')
+        self._finished.value = 2
+        self.logger.info('exitting cleanup tmp image loop {}'.format(self._finished.value))
 
     def cleanup_tmp_images(self):
         # delete image files created before the last interval
@@ -344,16 +353,16 @@ class TmpImageCleaner(threading.Thread):
             if not file.endswith('.jpg'):
                 continue
             img_frame_no = int(file[file.index('-')+1:file.index('.')])
-            if (self._current_frame - img_frame_no) > self._tmpfs_cleanup_interval_in_frames:
+            if (self._current_frame.value - img_frame_no) > self._tmpfs_cleanup_interval_in_frames:
                 self.logger.info('removing tmp image file {}'.format(file))
                 os.remove(os.path.join(Tengu.TMPFS_DIR, file))
             else:
                 self.logger.info('keep tmp image file {}'.format(file))
-        self.logger.info('cleaned up tmp images at time {} in {} ms'.format(self._current_frame, time.time() - start))
+        self.logger.info('cleaned up tmp images at time {} in {} ms'.format(self._current_frame.value, time.time() - start))
 
     def finish(self):
         self.logger.info('finishing cleanup tmp images')
-        self._finished = True
+        self._finished.value = 1
 
 def main():
     print(sys.argv)
