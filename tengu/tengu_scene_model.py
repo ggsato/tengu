@@ -1,12 +1,12 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-import logging
-import time
+import logging, sys, traceback, time
 from multiprocessing import Process, Queue, Value
 
 from detectnet_detector import DetectNetDetector
 from tengu_flow_analyzer import TenguFlowAnalyzer
+from tengu_scene_analyzer import TenguSceneAnalyzer
 from tengu_sensor import TenguSensorItem, TenguObjectDetectionSensor
 
 class TenguSceneModel(Process):
@@ -23,6 +23,7 @@ class TenguSceneModel(Process):
         self._frame_sensor = TenguObjectDetectionSensor(detector=detector)
 
         self._flow_analyzer = TenguFlowAnalyzer()
+        self._scene_analyzer = TenguSceneAnalyzer()
 
         # queues
         self._intput_queue = Queue(maxsize=input_queue_max_size)
@@ -106,6 +107,9 @@ class TenguSceneModel(Process):
 
                     self.logger.info('model update at time {} took {} s with {} detections'.format(self._t, (time.time() - model_update_start), len(detections)))
 
+                    if scene is not None:
+                        self._scene_analyzer.analyze_scene(scene)
+
                 if not model_updated:
                     self.logger.info('no frame img is avaialble in an input queue, queue size = {}, finished? {}'.format(self._intput_queue.qsize(), self._finished.value > 0))
                     time.sleep(0.001)
@@ -117,6 +121,7 @@ class TenguSceneModel(Process):
             self.logger.exception('Unknow Exception {}, {}, {}'.format(info[0], info[1], info[2]))
             traceback.print_tb(info[2])
         finally:
+            self._scene_analyzer.finish_analysis()
             self._finished.value = 2
             self.logger.info('exitted scene model loop {}'.format(self._finished.value))
 
