@@ -78,6 +78,10 @@ class Tengu(object):
             # start reading camera
             self.logger.info('starting camera reader')
             self._camera_reader.start()
+            while self._camera_reader._finished.value == -1:
+                # this means not started yet
+                self.logger.info('waiting for camera running, process alive = {}, exitcode = {}'.format(self._camera_reader.is_alive(), self._camera_reader.exitcode))
+                time.sleep(0.1)
 
             # start cleaner
             self.logger.info('starting tmp image cleaner')
@@ -196,8 +200,7 @@ class CameraReader(Process):
         # transient
         self._cam = None
         self._current_frame = Value('i', 0)
-        self._cleanup_thread = None
-        self._finished = Value('i', 0)
+        self._finished = Value('i', -1)
 
     @property
     def current_frame(self):
@@ -216,6 +219,7 @@ class CameraReader(Process):
             for key in Tengu.PREFERRED_CAMERA_SETTINGS:
                 self.logger.info('set a user defined camera setting {} of {}'.format(Tengu.PREFERRED_CAMERA_SETTINGS[key], key))
                 self._cam.set(key, Tengu.PREFERRED_CAMERA_SETTINGS[key])
+        self._finished.value = 0
 
     def run(self):
         self.logger.info('running camera reader')
