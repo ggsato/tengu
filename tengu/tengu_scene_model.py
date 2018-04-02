@@ -180,23 +180,37 @@ class TenguSceneModel(Process):
         # at first, cleanup all the items in queues
         self.logger.info('cleaning up scene model input queue')
         self._intput_queue.close()
-        while not self._intput_queue.empty():
-            self._intput_queue.get_nowait()
+        has_more = True
+        while has_more:
+            try:
+                self._intput_queue.get_nowait()
+            except:
+                # more
+                has_more = False
 
         # finish all
         self.logger.info('finishing frame sensor')
-        self._frame_sensor.finish()
+        if self._frame_sensor.finish():
+            self._frame_sensor.join()
+        else:
+            self._frame_sensor.terminate()
 
         self.logger.info('cleaning up scene model output queue')
         self._output_queue.close()
-        while not self._output_queue.empty():
-            self._output_queue.get_nowait()
-
-        # join sensors
-        self.logger.info('joinning frame sensors')
-        self._frame_sensor.join()
+        has_more = True
+        while has_more:
+            try:
+                self._output_queue.get_nowait()
+            except:
+                # more
+                has_more = False
 
         # wait
-        while self._finished.value != 2:
+        start = time.time()
+        elapsed = 0
+        while elapsed < 1.0 and self._finished.value != 2:
             self.logger.info('waiting for exitting scene model loop, finished = {}'.format(self._finished.value))
             time.sleep(0.001)
+            elapsed = time.time() - start
+
+        return self._finished.value == 2

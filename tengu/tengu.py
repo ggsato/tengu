@@ -154,14 +154,24 @@ class Tengu(object):
         finally:
 
             if self._camera_reader is not None:
-                self._camera_reader.finish()
-                self._camera_reader.join()
+                if self._camera_reader.finish():
+                    self._camera_reader.join()
+                else:
+                    self._camera_reader.terminate()
+
             if self._scene_model is not None:
-                self._scene_model.finish()
-                self._scene_model.join()
+                if self._scene_model.finish():
+                    self._scene_model.join()
+                else:
+                    self._scene_model.terminate()
+
+            # at this point, only queue that communicates with a client has not yet been cleaned up, and which should be done by the clietn
+
             if self._tmp_image_cleaner is not None:
-                self._tmp_image_cleaner.finish()
-                self._tmp_image_cleaner.join()
+                if self._tmp_image_cleaner.finish():
+                    self._tmp_image_cleaner.join()
+                else:
+                    self._tmp_image_cleaner.terminate()
 
             self._stopped.value = 2
             self.logger.info('exitted run loop, exitting... {}'.format(self._stopped.value))
@@ -340,9 +350,14 @@ class CameraReader(Process):
         if self._finished.value == 0:
             self._finished.value = 1
 
-        while self._finished.value != 2:
+        start = time.time()
+        elapsed = 0
+        while elapsed < 1.0 and self._finished.value != 2:
             self.logger.info('waiting for exitting camera loop, finished = {}'.format(self._finished.value))
             time.sleep(0.001)
+            elapsed = time.time() - start
+
+        return self._finished.value == 2
 
 class TmpImageCleaner(Process):
 
@@ -401,9 +416,14 @@ class TmpImageCleaner(Process):
         if self._finished.value == 0:
             self._finished.value = 1
 
-        while self._finished.value != 2:
+        start = time.time()
+        elapsed = 0
+        while elapsed < 1.0 and self._finished.value != 2:
             self.logger.info('waiting for exitting cleaner loop, finished = {}'.format(self._finished.value))
             time.sleep(0.001)
+            elapsed = time.time() - start
+
+        return self._finished.value == 2
 
 def main():
     print(sys.argv)

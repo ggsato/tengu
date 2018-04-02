@@ -45,18 +45,34 @@ class TenguSensor(Process):
         # input first
         self.logger.info('cleaning up input queue')
         self._input_queue.close()
-        while not self._input_queue.empty():
-            self._input_queue.get_nowait()
+        has_more = True
+        while has_more:
+            try:
+                self._intput_queue.get_nowait()
+            except:
+                # more
+                has_more = False
+
         # output queue
         self.logger.info('cleaning up output queue')
         self._output_queue.close()
-        while not self._output_queue.empty():
-            self._output_queue.get_nowait()
+        has_more = True
+        while has_more:
+            try:
+                self._output_queue.get_nowait()
+            except:
+                # more
+                has_more = False
 
         # wait
-        while self._finished.value != 2:
+        start = time.time()
+        elapsed = 0
+        while elapsed < 1.0 and self._finished.value != 2:
             self.logger.info('waiting for exitting sensor loop, finished = {}'.format(self._finished.value))
             time.sleep(0.001)
+            elapsed = time.time() - start
+
+        return self._finished.value == 2
 
 class TenguObjectDetectionSensor(TenguSensor):
 
