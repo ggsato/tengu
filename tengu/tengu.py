@@ -194,6 +194,8 @@ class CameraReader(threading.Thread):
         self.setup()
         # read frames
         while not self._finished:
+
+            frame_start = time.time()
             
             self.logger.info('reading the next frame')
             ret, frame = self._cam.read()
@@ -259,6 +261,8 @@ class CameraReader(threading.Thread):
 
             if self._current_frame % self._tmpfs_cleanup_interval_in_frames == 0:
                 self.cleanup_tmp_images()
+
+            self.logger.info('put frame img and its path at time {} in {} s'.format(self._current_frame, time.time() - frame_start))
 
             # increment
             self._current_frame += 1
