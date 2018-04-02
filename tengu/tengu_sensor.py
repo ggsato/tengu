@@ -86,7 +86,7 @@ class TenguObjectDetectionSensor(TenguSensor):
                             done = True
                         except:
                             time.sleep(0.001)
-                        elapsed = (time.time() - start) / 1000
+                        elapsed = time.time() - start
                 except:
                     self.logger.error('sensor {} failed to get an image from {}'.format(self, sensor_input.item))
                     info = sys.exc_info()

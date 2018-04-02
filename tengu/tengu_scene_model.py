@@ -95,7 +95,7 @@ class TenguSceneModel(Process):
                     except:
                         self.logger.debug('failed to put in the output queue, sleeping')
                         time.sleep(0.001)
-                    elapsed = (time.time() - start) / 1000
+                    elapsed = time.time() - start
 
                 model_updated = True
 

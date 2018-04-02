@@ -93,7 +93,7 @@ class Tengu(object):
                     except:
                         self.logger.debug('failed to get an output dict from a queue, sleeping')
                         time.sleep(0.001)
-                    elapsed = (time.time() - start) / 1000
+                    elapsed = time.time() - start
 
                 if output_dict is None:
                     self.logger.error('failed to get any output from an output queue within {} seconds'.format(frame_queue_timeout_in_secs))
@@ -116,7 +116,7 @@ class Tengu(object):
                     except:
                         self.logger.debug('failed to put an event dict in a queue, sleeping')
                         time.sleep(0.001)
-                    elapsed = (time.time() - start) / 1000
+                    elapsed = time.time() - start
 
                 if not done:
                     self.logger.error('failed to put an output dict in a queue within {} seconds'.format(frame_queue_timeout_in_secs))
@@ -232,7 +232,7 @@ class CameraReader(threading.Thread):
                 except:
                     self.logger.debug('failed to put event dict in a queue, sleeping')
                     time.sleep(0.001)
-                elapsed = (time.time() - start) / 1000
+                elapsed = time.time() - start
 
             # skip if necessary
             if (self._every_x_frame > 1 and self._current_frame % self._every_x_frame != 0) or (self._skip_to > 0 and self._current_frame < self._skip_to):
@@ -255,7 +255,7 @@ class CameraReader(threading.Thread):
                 except:
                     self.logger.info('failed to put {} in a queue, sleeping'.format(img_path))
                     time.sleep(0.001)
-                elapsed = (time.time() - start) / 1000
+                elapsed = time.time() - start
 
             if self._current_frame % self._tmpfs_cleanup_interval_in_frames == 0:
                 self.cleanup_tmp_images()
