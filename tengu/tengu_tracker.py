@@ -300,7 +300,7 @@ class Tracklet(TenguObject):
             return None
 
         # the denominator of residual, std_dev*3, is too large here, so put it back to std_dev
-        return [self._last_accepted_residual[0]*3, self._last_accepted_residual[1]*3]
+        return [self._last_accepted_residual[0], self._last_accepted_residual[1]]
 
     @property
     def speed(self):

@@ -141,7 +141,9 @@ class TenguObject(object):
             return True
 
         last_x = self._xs[-1]
-        variance = self.variance
+        variance_speed = self.variance_speed
+        variance_accl = self.variance_accel
+        variance = [variance_speed[0] + 0.5 * variance_accl[0], variance_speed[1] + 0.5 * variance_accl[1]]
 
         next_x = last_x[0] + last_x[1] + 0.5 * last_x[2]
         next_y = last_x[3] + last_x[4] + 0.5 * last_x[5]
@@ -186,7 +188,7 @@ class TenguObject(object):
         return [math.sqrt(self._covs[-1][1][1]), math.sqrt(self._covs[-1][4][4])]
 
     @property
-    def variance_x_accel(self):
+    def variance_accel(self):
         """ the variance of x accel """
         if len(self._covs) == 0:
             return None
