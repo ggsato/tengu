@@ -90,14 +90,14 @@ class TenguObjectDetectionSensor(TenguSensor):
         while self._finished.value == 0:
             sensored = 0
             while not self._input_queue.empty() and self._finished.value == 0:
-                self.logger.info('got an input to sensor from a queue')
+                self.logger.debug('got an input to sensor from a queue')
                 sensor_input = self._input_queue.get_nowait()
                 sensored += 1
                 try:
                     img = cv2.imread(sensor_input.item)
                     detections, class_names = self._detector.detect(img)
                     sensor_output = TenguSensorItem(sensor_input.t, {'d': detections, 'n': class_names,'h': img.shape[0], 'w': img.shape[1]})
-                    self.logger.info('detections at sensor = {}'.format(detections))
+                    self.logger.debug('detections at sensor = {}'.format(detections))
                     done = False
                     start = time.time()
                     elapsed = 0

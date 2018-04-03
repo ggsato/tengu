@@ -47,7 +47,7 @@ class Tracklet(TenguObject):
         self._centers = []
         # used by flow analyzer for building flow graph
         self._path = []
-        # (center, rect, frame_no, hist)
+        # (center, rect, frame_no, error)
         self._milestones = []
         # used by flow analyzer for updating a scene
         self._removed = False
@@ -126,6 +126,10 @@ class Tracklet(TenguObject):
     @property
     def last_update_pattern(self):
         return self._recent_updates[-1]
+
+    @property
+    def last_accepted_residual(self):
+        return self._last_accepted_residual
 
     def similarity(self, assignment):
         """
@@ -207,7 +211,7 @@ class Tracklet(TenguObject):
             pass
         elif not self.accept_measurement(Tracklet.center_from_rect((assignment.detection))):
             # not acceptable
-            self.logger.info('{} is not an acceptable measurement to update {}'.format(assignment.detection, self))
+            self.logger.debug('{} is not an acceptable measurement to update {}'.format(assignment.detection, self))
         elif self.has_left:
             # no more update
             self.update_without_assignment()
@@ -276,8 +280,8 @@ class Tracklet(TenguObject):
     def add_flow_node_to_path(self, flow_node):
         start = time.time()
         self._path.append(flow_node)
-        self._milestones.append([self.center, self.rect, TenguTracker._global_updates])
-        self.logger.info('added flow node to path of {} in {} s'.format(self.obj_id, time.time() - start))
+        self._milestones.append([self.center, self.rect ,TenguTracker._global_updates, self.error])
+        self.logger.debug('added flow node to path of {} in {} s'.format(self.obj_id, time.time() - start))
 
     @property
     def stats(self):
@@ -289,6 +293,14 @@ class Tracklet(TenguObject):
         stats.append(direction)
 
         return stats
+
+    @property
+    def error(self):
+        if self._last_accepted_residual is None:
+            return None
+
+        # the denominator of residual, std_dev*3, is too large here, so put it back to std_dev
+        return [self._last_accepted_residual[0]*3, self._last_accepted_residual[1]*3]
 
     @property
     def speed(self):
@@ -458,19 +470,19 @@ class TenguTracker(object):
 
             self.prepare_updates(detections)
             lap1 = time.time()
-            self.logger.info('prepare_updates took {} s'.format(lap1 - start))
+            self.logger.debug('prepare_updates took {} s'.format(lap1 - start))
 
             tengu_cost_matrix = self.calculate_cost_matrix(detections)
             lap2 = time.time()
-            self.logger.info('calculate_cost_matrix took {} s'.format(lap2 - lap1))
+            self.logger.debug('calculate_cost_matrix took {} s'.format(lap2 - lap1))
 
             TenguTracker.optimize_and_assign(tengu_cost_matrix)
             lap3 = time.time()
-            self.logger.info('optimize_and_assign took {} s'.format(lap3 - lap2))
+            self.logger.debug('optimize_and_assign took {} s'.format(lap3 - lap2))
 
             self.update_trackings_with_optimized_assignments(tengu_cost_matrix, class_names)
             lap4 = time.time()
-            self.logger.info('update_trackings_with_optimized_assignments took {} s'.format(lap4 - lap3))
+            self.logger.debug('update_trackings_with_optimized_assignments took {} s'.format(lap4 - lap3))
 
         # update without detections
         self.update_tracklets()
@@ -478,10 +490,10 @@ class TenguTracker(object):
         # Obsolete old ones
         self.obsolete_trackings()
         lap5 = time.time()
-        self.logger.info('obsolete_trackings took {} s'.format(lap5 - (lap4 if len(detections) > 0 else start)))
+        self.logger.debug('obsolete_trackings took {} s'.format(lap5 - (lap4 if len(detections) > 0 else start)))
 
         end = time.time()
-        self.logger.info('resolved, and now {} tracked objects at {}, executed in {} s'.format(len(self._tracklets), TenguTracker._global_updates, end-start))
+        self.logger.debug('resolved, and now {} tracked objects at {}, executed in {} s'.format(len(self._tracklets), TenguTracker._global_updates, end-start))
 
         return self.tracklets
 
@@ -635,7 +647,7 @@ class TenguTracker(object):
                 self.logger.debug('{} is not obsolete yet, diff = {}'.format(tracklet, TenguTracker._global_updates - tracklet.last_updated_at))
                 new_tracklet.append(tracklet)
             else:
-                self.logger.info('{} became obsolete'.format(tracklet))
+                self.logger.debug('{} became obsolete'.format(tracklet))
         removed = len(self._tracklets) - len(new_tracklet)
         self._tracklets = new_tracklet
         self.logger.debug('removed {} tracked objects due to obsoletion'.format(removed))
@@ -713,5 +725,5 @@ class TenguTracker(object):
                         self.logger.debug('{} is moving towards the direction between ignored ranges'.format(tracklet))
                         ignore_tracklet = True
                         break
-        self.logger.info('checked if ignore tracklet in {} s'.format(time.time() - start))
+        self.logger.debug('checked if ignore tracklet in {} s'.format(time.time() - start))
         return ignore_tracklet

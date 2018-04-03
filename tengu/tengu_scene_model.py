@@ -69,7 +69,7 @@ class TenguSceneModel(Process):
                 except:
                     pass
                 if frame_img_path is not None:
-                    self.logger.info('got a frame img path from an input queue')
+                    self.logger.debug('got a frame img path from an input queue')
                     frame_sensor_item = TenguSensorItem(self._t, frame_img_path)
                     # feed first
                     try:
@@ -119,7 +119,7 @@ class TenguSceneModel(Process):
                         self._scene_analyzer.analyze_scene(scene)
 
                 if not model_updated:
-                    self.logger.info('no frame img is avaialble in an input queue, queue size = {}, finished? {}'.format(self._intput_queue.qsize(), self._finished.value > 0))
+                    self.logger.debug('no frame img is avaialble in an input queue, queue size = {}, finished? {}'.format(self._intput_queue.qsize(), self._finished.value > 0))
                     time.sleep(0.001)
                 else:
                     # then, increment by one
@@ -131,12 +131,15 @@ class TenguSceneModel(Process):
         finally:
             self._scene_analyzer.finish_analysis()
             self._finished.value = 2
+            if self._finished.value == 0:
+                # finish is not called
+                self.finish()
             self.logger.info('exitted scene model loop {}'.format(self._finished.value))
 
     def get_sensor_output(self, sensor):
         """ get a sensor output given at a paricular time
         """
-        self.logger.info('getting a sensor input from {}'.format(sensor))
+        self.logger.debug('getting a sensor input from {}'.format(sensor))
         sensor_output = None
         start = time.time()
 
@@ -159,7 +162,7 @@ class TenguSceneModel(Process):
                 # wait a bit
                 time.sleep(0.001)
 
-        self.logger.info('got an sensor output at time {} in {} s'.format(self._t, time.time() - start))
+        self.logger.debug('got an sensor output at time {} in {} s'.format(self._t, time.time() - start))
 
         return sensor_output
 

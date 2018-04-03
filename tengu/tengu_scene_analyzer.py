@@ -28,7 +28,7 @@ class TenguSceneAnalyzer(object):
                     direction_based_flow.remove_tracklet(tracklet)
 
     def count_tracklet(self, tracklet, group):
-        self.logger.info('found removed tracklet, counting {}'.format(tracklet))
+        self.logger.debug('found removed tracklet, counting {}'.format(tracklet))
         count_dict = self.tracklet_to_count_dict(tracklet)
         if count_dict is not None:
             count_dict['Class'] = {tracklet.obj_id: tracklet.class_name}
@@ -40,7 +40,7 @@ class TenguSceneAnalyzer(object):
                 self._df = df
             else:
                 self._df = self._df.merge(df, how='outer')
-                self.logger.info('self df = {}'.format(self._df))
+                self.logger.debug('self df = {}'.format(self._df))
 
     def tracklet_to_count_dict(self, tracklet):
         """ returns a list of numbers to be counted of this tracklet

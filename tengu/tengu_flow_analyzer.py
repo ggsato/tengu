@@ -222,7 +222,7 @@ class TenguFlowNode(object):
 
     def record_tracklet(self, tracklet):
         stats = tracklet.stats
-        if stats is None:
+        if stats is None or tracklet.last_accepted_residual is None:
             return
         stats_dict = {}
         stats_dict['x_p'] = {tracklet.obj_id: stats[0]}
@@ -232,6 +232,13 @@ class TenguFlowNode(object):
         stats_dict['y_v'] = {tracklet.obj_id: stats[4]}
         stats_dict['y_a'] = {tracklet.obj_id: stats[5]}
         stats_dict['direction'] = {tracklet.obj_id: stats[6]}
+        stats_dict['w'] = tracklet.rect[2]
+        stats_dict['h'] = tracklet.rect[3]
+        stats_dict['residual_x'] = tracklet.last_accepted_residual[0]
+        stats_dict['residual_y'] = tracklet.last_accepted_residual[1]
+        error = tracklet.error
+        stats_dict['error_x'] = error[0]
+        stats_dict['error_y'] = error[1]
         stats_dict['frame_ix'] = {tracklet.obj_id: TenguTracker._global_updates}
         self._stats.append(stats_dict)
 
@@ -242,7 +249,7 @@ class TenguFlowNode(object):
         if std_dev_series is None or std_dev_series.isnull()[0]:
             return None
 
-        return [std_dev_series['x_p'], std_dev_series['x_v'], std_dev_series['x_a'], std_dev_series['y_p'], std_dev_series['y_v'], std_dev_series['y_a']]
+        return [std_dev_series['x_p'], std_dev_series['x_v'], std_dev_series['x_a'], std_dev_series['y_p'], std_dev_series['y_v'], std_dev_series['y_a'], std_dev_series['error_x'], std_dev_series['error_y']]
 
     @property
     def means(self):
@@ -251,7 +258,7 @@ class TenguFlowNode(object):
         if mean_series is None or mean_series.isnull()[0]:
             return None
 
-        return [mean_series['x_p'], mean_series['x_v'], mean_series['x_a'], mean_series['y_p'], mean_series['y_v'], mean_series['y_a']]
+        return [mean_series['x_p'], mean_series['x_v'], mean_series['x_a'], mean_series['y_p'], mean_series['y_v'], mean_series['y_a'], mean_series['error_x'], mean_series['error_y']]
 
     @staticmethod
     def max_node_diff(node1, node2):
@@ -360,7 +367,7 @@ class TenguFlowAnalyzer(object):
 
         self._last_tracklets = current_tracklets
 
-        self.logger.info('update flow graph took {} s'.format(time.time() - start))
+        self.logger.debug('update flow graph took {} s'.format(time.time() - start))
 
     def flow_node_at(self, x, y):
         y_blk = self.get_y_blk(y)
@@ -383,16 +390,16 @@ class TenguFlowAnalyzer(object):
             flow_node = self.flow_node_at(*new_tracklet.location)
             new_tracklet.add_flow_node_to_path(flow_node)
 
-        self.logger.info('added new {} tracklet in {} s'.format(len(new_tracklets), time.time() - start))
+        self.logger.debug('added new {} tracklet in {} s'.format(len(new_tracklets), time.time() - start))
 
     def update_existing_tracklets(self, existing_tracklets):
 
         start = time.time()
         
         for existing_tracklet in existing_tracklets:
-            self.logger.info('checking existing tracklet {} in {} s'.format(existing_tracklet.obj_id, time.time() - start))
+            self.logger.debug('checking existing tracklet {} in {} s'.format(existing_tracklet.obj_id, time.time() - start))
             if existing_tracklet.has_left or not existing_tracklet.is_confirmed:
-                self.logger.info('non-qualified tracklet check done in {} s'.format(time.time() - start))
+                self.logger.debug('non-qualified tracklet check done in {} s'.format(time.time() - start))
                 continue
 
             start_check = time.time()
@@ -401,7 +408,7 @@ class TenguFlowAnalyzer(object):
             flow_node = self.flow_node_at(*existing_tracklet.location)
             if prev_flow_node == flow_node:
                 # no change
-                self.logger.info('{} stays on the same flow node, check done in {} s'.format(existing_tracklet.obj_id, time.time() - start_check))
+                self.logger.debug('{} stays on the same flow node, check done in {} s'.format(existing_tracklet.obj_id, time.time() - start_check))
                 continue
             # update edge
             if prev_flow_node is None:
@@ -410,57 +417,57 @@ class TenguFlowAnalyzer(object):
 
             # if flow_node is not adjacent of prev, skip it
             if not flow_node.adjacent(prev_flow_node):
-                self.logger.info('skipping update of {}, not adjacent move, check done in {} s'.format(existing_tracklet.obj_id, time.time() - start_check))
+                self.logger.debug('skipping update of {}, not adjacent move, check done in {} s'.format(existing_tracklet.obj_id, time.time() - start_check))
                 continue
 
             if self._tracker.ignore_tracklet(existing_tracklet):
-                self.logger.info('ignoring update of {}, check done in {} s'.format(existing_tracklet.obj_id, time.time() - start_check))
+                self.logger.debug('ignoring update of {}, check done in {} s'.format(existing_tracklet.obj_id, time.time() - start_check))
                 continue
 
             # add flow
             existing_tracklet.add_flow_node_to_path(flow_node)
             self._scene.update_flow_node(flow_node, existing_tracklet)
 
-        self.logger.info('updated existing {} tracklet in {} s'.format(len(existing_tracklets), time.time() - start))
+        self.logger.debug('updated existing {} tracklet in {} s'.format(len(existing_tracklets), time.time() - start))
 
     def finish_removed_tracklets(self, removed_tracklets):
 
         start = time.time()
         
         for removed_tracklet in removed_tracklets:
-            self.logger.info('checking removed tracklet {} in {} s'.format(removed_tracklet.obj_id, time.time() - start))
+            self.logger.debug('checking removed tracklet {} in {} s'.format(removed_tracklet.obj_id, time.time() - start))
 
             check_start = time.time()
             if removed_tracklet.speed < 0:
-                self.logger.info('{} has too short path, speed is not available, not counted, check done in {} s'.format(removed_tracklet, time.time() - check_start))
+                self.logger.debug('{} has too short path, speed is not available, not counted, check done in {} s'.format(removed_tracklet, time.time() - check_start))
                 continue
 
             # if this tracklet is not moving, just remove
             max_diff = TenguFlowNode.max_node_diff(removed_tracklet.path[0], removed_tracklet.path[-1])
             if max_diff < 2:
                 # within adjacent blocks, this is stationally
-                self.logger.info('{} is removed, but not for counting, stationally, done in {} s'.format(removed_tracklet, time.time() - check_start))
+                self.logger.debug('{} is removed, but not for counting, stationally, done in {} s'.format(removed_tracklet, time.time() - check_start))
                 continue
 
             # still, the travel distance might have been done by prediction, then skip it
             if removed_tracklet.observed_travel_distance < max(*self._flow_blocks_size)*2:
-                self.logger.info('{} has moved, but the travel distance is {} smaller than a block size {}, so being skipped, check done in {} s'.format(removed_tracklet, removed_tracklet.observed_travel_distance, max(*self._flow_blocks_size)*2, time.time() - check_start))
+                self.logger.debug('{} has moved, but the travel distance is {} smaller than a block size {}, so being skipped, check done in {} s'.format(removed_tracklet, removed_tracklet.observed_travel_distance, max(*self._flow_blocks_size)*2, time.time() - check_start))
                 continue
 
             if self._tracker.ignore_tracklet(removed_tracklet):
-                self.logger.info('{} is removed, but not for counting, within ignored directions, check done in {} s'.format(removed_tracklet, time.time() - check_start))
+                self.logger.debug('{} is removed, but not for counting, within ignored directions, check done in {} s'.format(removed_tracklet, time.time() - check_start))
                 continue
 
             sink_node = removed_tracklet.path[-1]
             source_node = removed_tracklet.path[0]
             if sink_node == source_node:
-                self.logger.info('same source {} and sink {}, skipped, check done in {} s'.format(source_node, sink_node, time.time() - check_start))
+                self.logger.debug('same source {} and sink {}, skipped, check done in {} s'.format(source_node, sink_node, time.time() - check_start))
                 return
 
             # check direction baesd flow
             self.check_direction_based_flow(removed_tracklet)
 
-        self.logger.info('finished removed {} tracklet in {} s'.format(len(removed_tracklets), time.time() - start))
+        self.logger.debug('finished removed {} tracklet in {} s'.format(len(removed_tracklets), time.time() - start))
 
     def check_direction_based_flow(self, tracklet):
         """ check direction based flow if available
@@ -494,10 +501,10 @@ class TenguFlowAnalyzer(object):
 
             direction_based_flow.add_tracklet(tracklet)
             tracklet.mark_removed()
-            self.logger.info('found a matching direction based flow {} for {}'.format(direction_based_flow, tracklet))
+            self.logger.debug('found a matching direction based flow {} for {}'.format(direction_based_flow, tracklet))
             break
 
-        self.logger.info('checked direction based flow in {} s'.format(time.time() - start))
+        self.logger.debug('checked direction based flow in {} s'.format(time.time() - start))
 
     def save(self, file):
         """
@@ -530,7 +537,7 @@ class TenguFlowAnalyzer(object):
             self.logger.error('frame shape is different {} != {}'.format(js['frame_shape'], self._frame_shape))
             raise
         self._scene = TenguScene.deserialize(js['scene'], self._blk_node_map)
-        self.logger.info('deserialized scene {}'.format(self._scene))
+        self.logger.debug('deserialized scene {}'.format(self._scene))
 
     def load(self):
         """
@@ -549,4 +556,4 @@ class TenguFlowAnalyzer(object):
 
     def build_scene_from_file(self):
         self.load()
-        self.logger.info('build from file {}'.format(self._scene_file))
+        self.logger.debug('build from file {}'.format(self._scene_file))

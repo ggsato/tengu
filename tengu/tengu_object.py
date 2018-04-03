@@ -22,6 +22,7 @@ class TenguObject(object):
         self._zs = []
         self._xs = []
         self._covs = []
+        self._last_accepted_residual = None
 
     @property
     def location(self):
@@ -82,7 +83,6 @@ class TenguObject(object):
         returns a float value >= 0
         """
         movement = self.movement
-        print('getting speed from the last movement {}'.format(movement))
 
         if movement is None:
             return None
@@ -136,21 +136,31 @@ class TenguObject(object):
 
         please override as required
         """
-        if len(self._xs) == 0:
+        # accept until enough time steps have passed
+        if self.direction is None:
             return True
-
-        residual_x = z[0] - self.location[0]
-        residual_y = z[1] - self.location[1]
 
         last_x = self._xs[-1]
         variance = self.variance
-        residual_x_p = max(variance[0]*3, last_x[1] + 0.5 * last_x[2])
-        residual_y_p = max(variance[1]*3, last_x[4] + 0.5 * last_x[5])
 
-        residual_ratio = max(residual_x / residual_x_p, residual_y / residual_y_p)
+        next_x = last_x[0] + last_x[1] + 0.5 * last_x[2]
+        next_y = last_x[3] + last_x[4] + 0.5 * last_x[5]
+
+        residual_x = math.sqrt((z[0] - next_x)**2)
+        residual_y = math.sqrt((z[1] - next_y)**2)
+
+        most_likely_x = variance[0]*3
+        most_likely_y = variance[1]*3
+
+        residual_ratio = [residual_x / most_likely_x, residual_y / most_likely_y]
 
         # accept if the ratio is smailer than 1
-        return residual_ratio < 1.0
+        accept = max(residual_ratio) < 1.0
+
+        if accept:
+            self._last_accepted_residual = [residual_ratio[0], residual_ratio[1]]
+
+        return accept
 
     def similarity(self, another):
         """ calculate a similarity between self and another instance of TenguObject 

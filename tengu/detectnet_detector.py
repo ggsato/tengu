@@ -141,6 +141,6 @@ class DetectNetDetector(TenguDetector):
 
         self._index += 1
 
-        print('detected in {} ms'.format(time.time() - start))
+        #print('detected in {} ms'.format(time.time() - start))
 
         return rects, class_names
