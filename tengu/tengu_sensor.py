@@ -20,7 +20,7 @@ class TenguSensor(Process):
         # a queue to put some items as outputs from this sensor
         self._output_queue = Queue(maxsize=output_queue_max_size)
 
-        self._finished = Value('i', 0)
+        self._finished = Value('i', -1)
 
     @property
     def needs_frame_input(self):
@@ -86,6 +86,7 @@ class TenguObjectDetectionSensor(TenguSensor):
 
     def run(self):
         self.logger.info('running sensor')
+        self._finished.value = 0
         while self._finished.value == 0:
             sensored = 0
             while not self._input_queue.empty() and self._finished.value == 0:

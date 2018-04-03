@@ -34,7 +34,7 @@ class TenguSceneModel(Process):
         self._t = 0
 
         # finish if 1, this has to be Value because it is exchanged between processes
-        self._finished = Value('i', 0)
+        self._finished = Value('i', -1)
 
     @property
     def input_queue(self):
@@ -49,10 +49,15 @@ class TenguSceneModel(Process):
         self.logger.info('starting sensor')
         self._frame_sensor.start()
 
+        while self._frame_sensor._finished.value == -1:
+            self.logger.info('waiting for sensor running, process alive = {}, exitcode = {}'.format(self._frame_sensor.is_alive(), self._frame_sensor.exitcode))
+            time.sleep(0.1)
+
     def run(self):
         """ start running the model until no sensor input arrives
         """
         self.logger.info('running scene model')
+        self._finished.value = 0
         try:
             while self._finished.value == 0:
                 model_update_start = time.time()

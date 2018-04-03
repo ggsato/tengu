@@ -10,6 +10,7 @@ import logging
 import os, shutil
 import traceback
 from multiprocessing import Process, Value
+import threading
 
 from tengu_scene_model import TenguSceneModel
 
@@ -71,13 +72,17 @@ class Tengu(object):
             self._camera_reader.start()
             while self._camera_reader._finished.value == -1:
                 # this means not started yet
-                self.logger.info('waiting for camera running, process alive = {}, exitcode = {}'.format(self._camera_reader.is_alive(), self._camera_reader.exitcode))
+                self.logger.info('waiting for camera running')
                 time.sleep(0.1)
 
             # initialize scene model
             self.logger.info('starting scene model')
             self._scene_model.start_sensor()
             self._scene_model.start()
+            while self._scene_model._finished.value == -1:
+                # this means not started yet
+                self.logger.info('waiting for scene model running, process alive = {}, exitcode = {}'.format(self._scene_model.is_alive(), self._scene_model.exitcode))
+                time.sleep(0.1)
 
             # start cleaner
             self.logger.info('starting tmp image cleaner')
@@ -157,7 +162,7 @@ class Tengu(object):
                 if self._camera_reader.finish():
                     self._camera_reader.join()
                 else:
-                    self._camera_reader.terminate()
+                    raise Exception('camera reader did not stop!')
 
             if self._scene_model is not None:
                 if self._scene_model.finish():
@@ -192,7 +197,7 @@ class Tengu(object):
             time.sleep(0.01)
 
 
-class CameraReader(Process):
+class CameraReader(threading.Thread):
     def __init__(self, video_src, roi, scale, every_x_frame, rotation, skip_to, frame_queue_timeout_in_secs, queue, scene_input_queue, **kwargs):
         super(CameraReader, self).__init__(**kwargs)
         self.logger= logging.getLogger(__name__)
