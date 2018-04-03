@@ -13,7 +13,7 @@ class TenguSceneModel(Process):
     """ TenguSceneModel repreesnts a model of scene, where a movement of each travelling Tracklet is predicted by a continuous sensor update respectively. 
     """
 
-    def __init__(self, input_queue_max_size=100, output_queue_max_size=10, output_queue_timeout_in_secs=10, **kwargs):
+    def __init__(self, input_queue_max_size=10, output_queue_max_size=10, output_queue_timeout_in_secs=10, **kwargs):
         super(TenguSceneModel, self).__init__(**kwargs)
 
         self.logger= logging.getLogger(__name__)
@@ -97,7 +97,10 @@ class TenguSceneModel(Process):
                     tracklet_dicts = []
                     for tracklet in tracklets:
                         tracklet_dicts.append(tracklet.to_dict())
-                    output_dict = {'d': detections, 'c': class_names, 't': tracklet_dicts, 'n': self._t}
+                    flow_nodes_dicts = []
+                    for flow_node in scene.updated_flow_nodes:
+                        flow_nodes_dicts.append(flow_node.serialize())
+                    output_dict = {'d': detections, 'c': class_names, 't': tracklet_dicts, 'n': self._t, 'f': flow_nodes_dicts}
                     while not done and elapsed < self._output_queue_timeout_in_secs and self._finished.value == 0:
                         try:
                             self.logger.debug('putting output dict {} to an output queue'.format(output_dict))

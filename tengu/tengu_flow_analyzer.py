@@ -21,6 +21,7 @@ class TenguScene(object):
     def __init__(self, direction_based_flows=[]):
         super(TenguScene, self).__init__()
         self._direction_based_flows = direction_based_flows
+        self._updated_flow_nodes = []
 
     @property
     def direction_based_flows(self):
@@ -42,6 +43,20 @@ class TenguScene(object):
                 direction_based_flows.append(direction_based_flow)
         tengu_scene = TenguScene(direction_based_flows=direction_based_flows)
         return tengu_scene
+
+    def update_flow_node(self, flow_node, tracklet):
+        if tracklet is None:
+            return
+        flow_node.record_tracklet(tracklet)
+        if not flow_node in self._updated_flow_nodes:
+            self._updated_flow_nodes.append(flow_node)
+
+    def reset_updated_flow_nodes(self):
+        self._updated_flow_nodes = []
+
+    @property
+    def updated_flow_nodes(self):
+        return self._updated_flow_nodes
 
 class DirectionBasedFlow(object):
 
@@ -187,7 +202,13 @@ class TenguFlowNode(object):
         js['y_blk'] = self._y_blk
         js['x_blk'] = self._x_blk
         js['position'] = self._position
+        js['std_devs'] = self.std_devs
+        js['means'] = self.means
         return js
+
+    @property
+    def blk_position(self):
+        return (self._x_blk, self._y_blk)
 
     @property
     def position(self):
@@ -315,6 +336,7 @@ class TenguFlowAnalyzer(object):
         """
         start = time.time()
         current_tracklets = Set(tracklets)
+        self._scene.reset_updated_flow_nodes()
 
         if len(self._last_tracklets) == 0:
             self.add_new_tracklets(current_tracklets)
@@ -397,6 +419,7 @@ class TenguFlowAnalyzer(object):
 
             # add flow
             existing_tracklet.add_flow_node_to_path(flow_node)
+            self._scene.update_flow_node(flow_node, existing_tracklet)
 
         self.logger.info('updated existing {} tracklet in {} s'.format(len(existing_tracklets), time.time() - start))
 
