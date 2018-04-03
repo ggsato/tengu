@@ -47,9 +47,15 @@ class Tengu(object):
         """
         self._stopped = Value('i', 0)
 
+        self._current_model_frame = Value('i', 0)
+
     @property
-    def frame_no(self):
+    def camera_frame_no(self):
         return self._camera_reader.current_frame
+
+    @property
+    def model_frame_no(self):
+        return self._current_model_frame.value
 
     """ start running analysis on src
     """
@@ -146,7 +152,8 @@ class Tengu(object):
                         self.logger.error('failed to put an output dict in a queue within {} seconds'.format(frame_queue_timeout_in_secs))
                     break
 
-                self.logger.info('analyzed frame no {} in {} s'.format(event_dict[Tengu.EVENT_FRAME_NO], (time.time() - frame_analysis_start)))
+                self._current_model_frame.value = event_dict[Tengu.EVENT_FRAME_NO]
+                self.logger.info('analyzed frame no {} in {} s'.format(self._current_model_frame.value, (time.time() - frame_analysis_start)))
 
                 # update time of tmp cleaner
                 while self._tmp_image_cleaner.current_frame < self._camera_reader.current_frame:
