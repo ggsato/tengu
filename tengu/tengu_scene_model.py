@@ -13,7 +13,7 @@ class TenguSceneModel(Process):
     """ TenguSceneModel repreesnts a model of scene, where a movement of each travelling Tracklet is predicted by a continuous sensor update respectively. 
     """
 
-    def __init__(self, input_queue_max_size=20, output_queue_max_size=10, output_queue_timeout_in_secs=10, **kwargs):
+    def __init__(self, input_queue_max_size=100, output_queue_max_size=10, output_queue_timeout_in_secs=10, **kwargs):
         super(TenguSceneModel, self).__init__(**kwargs)
 
         self.logger= logging.getLogger(__name__)

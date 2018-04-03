@@ -285,6 +285,7 @@ class CameraReader(threading.Thread):
                         self.logger.debug('failed to put event dict in a queue, sleeping')
                         time.sleep(0.001)
                     elapsed = time.time() - start
+                self.logger.info('took {} to put a frame image path in a queue'.format(elapsed))
 
                 # skip if necessary
                 if (self._every_x_frame > 1 and self._current_frame.value % self._every_x_frame != 0) or (self._skip_to > 0 and self._current_frame.value < self._skip_to):
@@ -305,6 +306,7 @@ class CameraReader(threading.Thread):
                         self.logger.info('failed to put {} in a queue, sleeping'.format(img_path))
                         time.sleep(0.001)
                     elapsed = time.time() - start
+                self.logger.info('took {} to put a frame image path in a scene queue'.format(elapsed))
 
                 self.logger.info('put frame img and its path at time {} in {} s'.format(self._current_frame.value, time.time() - frame_start))
 
