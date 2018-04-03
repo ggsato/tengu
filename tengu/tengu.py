@@ -176,7 +176,7 @@ class Tengu(object):
                 if self._tmp_image_cleaner.finish():
                     self._tmp_image_cleaner.join()
                 else:
-                    self._tmp_image_cleaner.terminate()
+                    raise Exception('cleaner did not stop!')
 
             self._stopped.value = 2
             self.logger.info('exitted run loop, exitting... {}'.format(self._stopped.value))
@@ -364,7 +364,7 @@ class CameraReader(threading.Thread):
 
         return self._finished.value == 2
 
-class TmpImageCleaner(Process):
+class TmpImageCleaner(threading.Thread):
 
     def __init__(self, tmpfs_cleanup_interval_in_frames, **kwargs):
         super(TmpImageCleaner, self).__init__(**kwargs)
