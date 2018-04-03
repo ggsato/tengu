@@ -19,8 +19,8 @@ class TenguSceneModel(Process):
         self.logger= logging.getLogger(__name__)
 
         # a list of sensors
-        detector = DetectNetDetector(8890, interval=Value('i', 5))
-        self._frame_sensor = TenguObjectDetectionSensor(detector=detector)
+        self._detector = DetectNetDetector(8890, interval=Value('i', 5))
+        self._frame_sensor = TenguObjectDetectionSensor(detector=self._detector)
 
         self._flow_analyzer = TenguFlowAnalyzer()
         self._scene_analyzer = TenguSceneAnalyzer()
@@ -35,6 +35,16 @@ class TenguSceneModel(Process):
 
         # finish if 1, this has to be Value because it is exchanged between processes
         self._finished = Value('i', -1)
+
+    @property
+    def detection_interval(self):
+        return self._detector.interval
+
+    def set_detection_interval(self, detection_interval):
+        if self._detector is None:
+            return
+
+        self._detector.set_detection_interval(detection_interval)
 
     @property
     def input_queue(self):

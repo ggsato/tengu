@@ -57,6 +57,17 @@ class Tengu(object):
     def model_frame_no(self):
         return self._current_model_frame.value
 
+    @property
+    def detection_interval(self):
+        if self._scene_model is None:
+            return -1
+        return self._scene_model.detection_interval
+
+    def set_detection_interval(self, detection_interval):
+        if self._scene_model is None:
+            return
+        self._scene_model.set_detection_interval(detection_interval)
+
     """ start running analysis on src
     """
     def run(self, src=None, roi=None, scale=1.0, every_x_frame=1, rotation=0, skip_to=-1, frame_queue_timeout_in_secs=10, queue=None, tmpfs_cleanup_interval_in_frames=10*25):

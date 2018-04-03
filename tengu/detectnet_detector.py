@@ -92,6 +92,13 @@ class DetectNetDetector(TenguDetector):
         self._max_detection_size = max_detection_size
         self._interval = interval
 
+    @property
+    def interval(self):
+        return self._interval.value
+
+    def set_detection_interval(self, detection_interval):
+        self._interval.value = detection_interval
+
     @staticmethod
     def class_names():
         return [DetectNetDetector.DETECTION_CLASS_SMALL, DetectNetDetector.DETECTION_CLASS_LARGE, DetectNetDetector.DETECTION_CLASS_BUS]
