@@ -74,6 +74,10 @@ class Tracklet(TenguObject):
         tracklet_dict['location'] = self.location
         tracklet_dict['has_left'] = self.has_left
         tracklet_dict['variance'] = self.variance
+        tracklet_dict['variance_speed'] = self.variance_speed
+        tracklet_dict['variance_accel'] = self.variance_accel
+        tracklet_dict['error'] = self.error
+        tracklet_dict['r_std'] = self.R_std
 
         return tracklet_dict
 

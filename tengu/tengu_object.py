@@ -23,6 +23,7 @@ class TenguObject(object):
         self._xs = []
         self._covs = []
         self._last_accepted_residual = None
+        self._R_std = R_std
 
     @property
     def location(self):
@@ -194,6 +195,10 @@ class TenguObject(object):
             return None
 
         return [math.sqrt(self._covs[-1][2][2]), math.sqrt(self._covs[-1][5][5])]
+
+    @property
+    def R_std(self):
+        return self._R_std
 
     @staticmethod
     def create_filter(x0, R_std, Q, dt, P, std_devs):
