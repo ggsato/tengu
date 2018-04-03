@@ -244,8 +244,9 @@ class CameraReader(threading.Thread):
 
                 frame_start = time.time()
                 
-                self.logger.info('reading the next frame')
+                start = time.time()
                 ret, frame = self._cam.read()
+                self.logger.info('read the next frame in {} s'.format(time.time() - start))
 
                 # finished
                 if not ret:
