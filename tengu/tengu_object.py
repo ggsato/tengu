@@ -159,9 +159,7 @@ class TenguObject(object):
 
         # accept if the ratio is smailer than 1
         accept = max(residual_ratio) < 1.0
-
-        if accept:
-            self._last_accepted_residual = [residual_ratio[0], residual_ratio[1]]
+        self._last_accepted_residual = [residual_ratio[0], residual_ratio[1]]
 
         return accept
 
