@@ -392,7 +392,7 @@ class TmpImageCleaner(threading.Thread):
         super(TmpImageCleaner, self).__init__(**kwargs)
         self.logger= logging.getLogger(__name__)
         self._current_frame = Value('i', 0)
-        self._tmpfs_cleanup_interval_in_frames = Value('i', tmpfs_cleanup_interval_in_frames)
+        self._tmpfs_cleanup_interval_in_frames = tmpfs_cleanup_interval_in_frames
         self._finished = Value('i', 0)
 
     @property
@@ -431,12 +431,13 @@ class TmpImageCleaner(threading.Thread):
             if not file.endswith('.jpg'):
                 continue
             img_frame_no = int(file[file.index('-')+1:file.index('.')])
-            if (self._current_frame.value - img_frame_no) > self._tmpfs_cleanup_interval_in_frames:
-                self.logger.info('removing tmp image file {}'.format(file))
+            #self.logger.info('frame no of {} is {}'.format(file, img_frame_no))
+            if (self.current_frame - img_frame_no) > self._tmpfs_cleanup_interval_in_frames:
+                self.logger.debug('removing tmp image file {}'.format(file))
                 os.remove(os.path.join(Tengu.TMPFS_DIR, file))
             else:
-                self.logger.info('keep tmp image file {}'.format(file))
-        self.logger.info('cleaned up tmp images at time {} in {} ms'.format(self._current_frame.value, time.time() - start))
+                self.logger.debug('keep tmp image file {}, {} - {} <= {}'.format(file, self.current_frame, img_frame_no, self._tmpfs_cleanup_interval_in_frames))
+        self.logger.info('cleaned up tmp images at time {} in {} ms'.format(self.current_frame, time.time() - start))
 
     def finish(self):
         self.logger.info('finishing cleanup tmp images')
