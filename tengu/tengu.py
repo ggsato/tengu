@@ -30,6 +30,7 @@ class Tengu(object):
 
     EVENT_TRACKLETS = 'et'
     EVENT_FLOW_NODES = 'ef'
+    EVENT_COUNTED_TRACKLETS = 'ect'
 
     # tmpfs to exchange an image between processes
     TMPFS_DIR = '/dev/shm/tengu'
@@ -141,6 +142,8 @@ class Tengu(object):
                     event_dict[Tengu.EVENT_TRACKLETS] = output_dict['t']
                     event_dict[Tengu.EVENT_FRAME_NO] = output_dict['n']
                     event_dict[Tengu.EVENT_FLOW_NODES] = output_dict['f']
+                    event_dict[Tengu.EVENT_COUNTED_TRACKLETS] = output_dict['ct']
+
 
                 # put in the queue
                 done = False

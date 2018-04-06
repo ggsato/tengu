@@ -22,7 +22,7 @@ class TenguSceneModel(Process):
         self._detector = DetectNetDetector(8890, interval=Value('i', 3))
         self._frame_sensor = TenguObjectDetectionSensor(detector=self._detector)
 
-        self._flow_analyzer = TenguFlowAnalyzer()
+        self._flow_analyzer = TenguFlowAnalyzer(scene_file='model/flows/default.json')
         self._scene_analyzer = TenguSceneAnalyzer()
 
         # queues
@@ -100,6 +100,8 @@ class TenguSceneModel(Process):
                         self.logger.info('None detections found, shutting down...')
                         break
 
+                    counted_tracklets = self._scene_analyzer.analyze_scene(scene)
+
                     # put in an output queue
                     done = False
                     start = time.time()
@@ -110,7 +112,7 @@ class TenguSceneModel(Process):
                     flow_nodes_dicts = []
                     for flow_node in scene.updated_flow_nodes:
                         flow_nodes_dicts.append(flow_node.serialize())
-                    output_dict = {'d': detections, 'c': class_names, 't': tracklet_dicts, 'n': self._t, 'f': flow_nodes_dicts}
+                    output_dict = {'d': detections, 'c': class_names, 't': tracklet_dicts, 'n': self._t, 'f': flow_nodes_dicts, 'ct': counted_tracklets}
                     while not done and elapsed < self._output_queue_timeout_in_secs and self._finished.value == 0:
                         try:
                             self.logger.debug('putting output dict {} to an output queue'.format(output_dict))
@@ -124,9 +126,6 @@ class TenguSceneModel(Process):
                     model_updated = True
 
                     self.logger.info('model update at time {} took {} s with {} detections'.format(self._t, (time.time() - model_update_start), len(detections)))
-
-                    if scene is not None:
-                        self._scene_analyzer.analyze_scene(scene)
 
                 if not model_updated:
                     self.logger.debug('no frame img is avaialble in an input queue, queue size = {}, finished? {}'.format(self._intput_queue.qsize(), self._finished.value > 0))
@@ -182,13 +181,12 @@ class TenguSceneModel(Process):
         detection_dict = sensor_output.item
         detections = detection_dict['d']
         class_names = detection_dict['n']
-        h = detection_dict['h']
-        w = detection_dict['w']
+        shape = detection_dict['s']
 
         self.logger.debug('detections at scene model = {}'.format(detections))
 
         # update model
-        tracklets, scene = self._flow_analyzer.update_model((h, w), detections, class_names)
+        tracklets, scene = self._flow_analyzer.update_model(shape, detections, class_names)
 
         self.logger.info('model was updated at time {} in {} s'.format(self._t, time.time() - start))
 
