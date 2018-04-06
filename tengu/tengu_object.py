@@ -159,7 +159,7 @@ class TenguObject(object):
 
         # accept if the ratio is smailer than 1
         accept = max(residual_ratio) < 1.0
-        self._last_accepted_residual = [residual_ratio[0], residual_ratio[1]]
+        self._last_accepted_residual = [min(1.0, residual_ratio[0]), min(1.0, residual_ratio[1])]
 
         return accept
 
@@ -184,7 +184,7 @@ class TenguObject(object):
         if len(self._covs) == 0:
             return None
 
-        return [math.sqrt(self._covs[-1][1][1]), math.sqrt(self._covs[-1][4][4])]
+        return [max(TenguObject._very_small_value, math.sqrt(self._covs[-1][1][1])), max(TenguObject._very_small_value, math.sqrt(self._covs[-1][4][4]))]
 
     @property
     def variance_accel(self):
@@ -192,7 +192,7 @@ class TenguObject(object):
         if len(self._covs) == 0:
             return None
 
-        return [math.sqrt(self._covs[-1][2][2]), math.sqrt(self._covs[-1][5][5])]
+        return [max(TenguObject._very_small_value, math.sqrt(self._covs[-1][2][2])), max(TenguObject._very_small_value, math.sqrt(self._covs[-1][5][5]))]
 
     @property
     def R_std(self):
