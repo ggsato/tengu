@@ -35,17 +35,16 @@ class Tengu(object):
     # tmpfs to exchange an image between processes
     TMPFS_DIR = '/dev/shm/tengu'
 
-    def __init__(self):
+    def __init__(self, scene_model=None):
         self.logger= logging.getLogger(__name__)
 
-        self._scene_model = TenguSceneModel()
+        """ a model that consumes camera frames and produces something meaningful as scene
+        """
+        self._scene_model = TenguSceneModel() if scene_model is None else scene_model
         self._camera_reader = None
         self._tmp_image_cleaner = None
 
-        """ terminate if True
-        TODO: this works only in the same process.
-        Otherwise, this has to be something else to communicate between processes
-        """
+        """ terminate if not 0 """
         self._stopped = Value('i', 0)
 
         self._current_model_frame = Value('i', 0)
