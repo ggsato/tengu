@@ -10,7 +10,6 @@ import logging
 import os, shutil
 import traceback
 from multiprocessing import Process, Value
-import threading
 
 from tengu_scene_model import TenguSceneModel
 
@@ -68,10 +67,8 @@ class Tengu(object):
             return
         self._scene_model.set_detection_interval(detection_interval)
 
-    """ start running analysis on src
-    """
-    def run(self, src=None, roi=None, scale=1.0, every_x_frame=1, rotation=0, skip_to=-1, frame_queue_timeout_in_secs=10, queue=None, tmpfs_cleanup_interval_in_frames=10*25):
-
+    
+    def start_processes(self, src=None, roi=None, scale=1.0, every_x_frame=1, rotation=0, skip_to=-1, frame_queue_timeout_in_secs=10, queue=None, tmpfs_cleanup_interval_in_frames=10*25):
         if src is None:
             self.logger.error('src has to be set')
             return
@@ -81,32 +78,41 @@ class Tengu(object):
             shutil.rmtree(Tengu.TMPFS_DIR)
         os.makedirs(Tengu.TMPFS_DIR)
 
+        # start scene model that spawns Processes
+        # IMPORTANT: Fork first, then Thread
+        # so this should be called BEFORE creating any threads on a main process
+        # start reading camera
+        self.logger.info('starting camera reader')
+        self._camera_reader = CameraReader(src, roi, scale, every_x_frame, rotation, skip_to, frame_queue_timeout_in_secs, queue, self._scene_model.input_queue)
+        self._camera_reader.start()
+        while self._camera_reader._finished.value == -1:
+            # this means not started yet
+            self.logger.info('waiting for camera running')
+            time.sleep(0.1)
+
+        # start cleaner
+        self.logger.info('starting tmp image cleaner')
+        # tmp cleanup
+        self._tmp_image_cleaner = TmpImageCleaner(tmpfs_cleanup_interval_in_frames)
+        self._tmp_image_cleaner.start()
+        while self._tmp_image_cleaner._finished.value == -1:
+            # this means not started yet
+            self.logger.info('waiting for image cleaner running')
+            time.sleep(0.1)
+
+        # start scene model
+        self.logger.info('starting scene model')
+        self._scene_model.start_sensor()
+        self._scene_model.start()
+        while self._scene_model._finished.value == -1:
+            # this means not started yet
+            self.logger.info('waiting for scene model running, process alive = {}, exitcode = {}'.format(self._scene_model.is_alive(), self._scene_model.exitcode))
+            time.sleep(0.1)
+
+
+    def run(self, frame_queue_timeout_in_secs=10, queue=None, tmpfs_cleanup_interval_in_frames=10*25, **kwargs):
+
         try:
-
-            # start reading camera
-            self.logger.info('starting camera reader')
-            self._camera_reader = CameraReader(src, roi, scale, every_x_frame, rotation, skip_to, frame_queue_timeout_in_secs, queue, self._scene_model.input_queue)
-            self._camera_reader.start()
-            while self._camera_reader._finished.value == -1:
-                # this means not started yet
-                self.logger.info('waiting for camera running')
-                time.sleep(0.1)
-
-            # initialize scene model
-            self.logger.info('starting scene model')
-            self._scene_model.start_sensor()
-            self._scene_model.start()
-            while self._scene_model._finished.value == -1:
-                # this means not started yet
-                self.logger.info('waiting for scene model running, process alive = {}, exitcode = {}'.format(self._scene_model.is_alive(), self._scene_model.exitcode))
-                time.sleep(0.1)
-
-            # start cleaner
-            self.logger.info('starting tmp image cleaner')
-            # tmp cleanup
-            self._tmp_image_cleaner = TmpImageCleaner(tmpfs_cleanup_interval_in_frames)
-            self._tmp_image_cleaner.start()
-
             # run loop
             while self._stopped.value == 0:
 
@@ -218,7 +224,7 @@ class Tengu(object):
             time.sleep(0.01)
 
 
-class CameraReader(threading.Thread):
+class CameraReader(Process):
     def __init__(self, video_src, roi, scale, every_x_frame, rotation, skip_to, frame_queue_timeout_in_secs, queue, scene_input_queue, **kwargs):
         super(CameraReader, self).__init__(**kwargs)
         self.logger= logging.getLogger(__name__)
@@ -388,7 +394,7 @@ class CameraReader(threading.Thread):
 
         return self._finished.value == 2
 
-class TmpImageCleaner(threading.Thread):
+class TmpImageCleaner(Process):
 
     def __init__(self, tmpfs_cleanup_interval_in_frames, **kwargs):
         super(TmpImageCleaner, self).__init__(**kwargs)
