@@ -109,6 +109,27 @@ class Tengu(object):
             self.logger.info('waiting for scene model running, process alive = {}, exitcode = {}'.format(self._scene_model.is_alive(), self._scene_model.exitcode))
             time.sleep(0.1)
 
+    def stop_processes(self):
+
+        if self._camera_reader is not None:
+            if self._camera_reader.finish():
+                self._camera_reader.join()
+            else:
+                raise Exception('camera reader did not stop!')
+
+        if self._scene_model is not None:
+            if self._scene_model.finish():
+                self._scene_model.join()
+            else:
+                self._scene_model.terminate()
+
+        # at this point, only queue that communicates with a client has not yet been cleaned up, and which should be done by the clietn
+
+        if self._tmp_image_cleaner is not None:
+            if self._tmp_image_cleaner.finish():
+                self._tmp_image_cleaner.join()
+            else:
+                raise Exception('cleaner did not stop!')
 
     def run(self, frame_queue_timeout_in_secs=10, queue=None, tmpfs_cleanup_interval_in_frames=10*25, **kwargs):
 
@@ -184,27 +205,6 @@ class Tengu(object):
             self.logger.exception('Unknow Exception {}, {}, {}'.format(info[0], info[1], info[2]))
             traceback.print_tb(info[2])
         finally:
-
-            if self._camera_reader is not None:
-                if self._camera_reader.finish():
-                    self._camera_reader.join()
-                else:
-                    raise Exception('camera reader did not stop!')
-
-            if self._scene_model is not None:
-                if self._scene_model.finish():
-                    self._scene_model.join()
-                else:
-                    self._scene_model.terminate()
-
-            # at this point, only queue that communicates with a client has not yet been cleaned up, and which should be done by the clietn
-
-            if self._tmp_image_cleaner is not None:
-                if self._tmp_image_cleaner.finish():
-                    self._tmp_image_cleaner.join()
-                else:
-                    raise Exception('cleaner did not stop!')
-
             self._stopped.value = 2
             self.logger.info('exitted run loop, exitting... {}'.format(self._stopped.value))
 
