@@ -74,10 +74,18 @@ class TenguSceneModel(Process):
                 model_updated = False
                 sensor_output = None
                 frame_img_path = None
+                has_changed = False
                 try:
-                    frame_img_path = self._intput_queue.get_nowait()
+                    event_dict = self._intput_queue.get_nowait()
+                    frame_img_path = event_dict[Tengu.EVENT_FRAME_CROPPED]
+                    has_changed = event_dict[Tengu.EVENT_CAMERA_CHANGED]
                 except:
                     pass
+                if has_changed:
+                    self.logger.info('camera change detected, resetting...')
+                    # model has to be reset
+                    self._flow_analyzer.reset()
+                    self._scene_analyzer.reset_counter()
                 if frame_img_path is not None:
                     self.logger.debug('got a frame img path from an input queue')
                     frame_sensor_item = TenguSensorItem(self._t, frame_img_path)

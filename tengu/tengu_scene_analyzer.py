@@ -112,4 +112,5 @@ class TenguSceneAnalyzer(object):
         self.reset_counter()
 
     def reset_counter(self):
+        self.logger.info('resetting counter...')
         self._df = None

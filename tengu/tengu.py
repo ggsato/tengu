@@ -31,6 +31,11 @@ class Tengu(object):
     EVENT_FLOW_NODES = 'ef'
     EVENT_COUNTED_TRACKLETS = 'ect'
 
+    EVENT_CAMERA_SRC = 'ecsr'
+    EVENT_CAMERA_ROI = 'ecr'
+    EVENT_CAMERA_SCALE = 'ecsc'
+    EVENT_CAMERA_CHANGED = 'ecc'
+
     # tmpfs to exchange an image between processes
     TMPFS_DIR = '/dev/shm/tengu'
 
@@ -68,7 +73,7 @@ class Tengu(object):
         self._scene_model.set_detection_interval(detection_interval)
 
     
-    def start_processes(self, src=None, roi=None, scale=1.0, every_x_frame=1, rotation=0, skip_to=-1, frame_queue_timeout_in_secs=10, queue=None, tmpfs_cleanup_interval_in_frames=10*25):
+    def start_processes(self, src=None, roi=None, scale=1.0, every_x_frame=1, rotation=0, skip_to=-1, frame_queue_timeout_in_secs=10, queue=None, event_queue=None, tmpfs_cleanup_interval_in_frames=10*25):
         # check tmpfs directory exists
         if os.path.exists(Tengu.TMPFS_DIR):
             shutil.rmtree(Tengu.TMPFS_DIR)
@@ -79,7 +84,7 @@ class Tengu(object):
         # so this should be called BEFORE creating any threads on a main process
         # start reading camera
         self.logger.info('starting camera reader')
-        self._camera_reader = CameraReader(src, roi, scale, every_x_frame, rotation, skip_to, frame_queue_timeout_in_secs, queue, self._scene_model.input_queue)
+        self._camera_reader = CameraReader(src, roi, scale, every_x_frame, rotation, skip_to, frame_queue_timeout_in_secs, queue, event_queue, self._scene_model.input_queue)
         self._camera_reader.start()
         while self._camera_reader._finished.value == -1:
             # this means not started yet
@@ -219,7 +224,7 @@ class Tengu(object):
 
 
 class CameraReader(Process):
-    def __init__(self, video_src, roi, scale, every_x_frame, rotation, skip_to, frame_queue_timeout_in_secs, queue, scene_input_queue, **kwargs):
+    def __init__(self, video_src, roi, scale, every_x_frame, rotation, skip_to, frame_queue_timeout_in_secs, queue, event_queue, scene_input_queue, **kwargs):
         super(CameraReader, self).__init__(**kwargs)
         self.logger= logging.getLogger(__name__)
         self._video_src = video_src
@@ -231,6 +236,7 @@ class CameraReader(Process):
         self._skip_to = skip_to
         self._frame_queue_timeout_in_secs = frame_queue_timeout_in_secs
         self._queue = queue
+        self._event_queue = event_queue
         self._scene_input_queue = scene_input_queue
         # transient
         self._cam = None
@@ -274,6 +280,40 @@ class CameraReader(Process):
         try:
             while self._finished.value == 0:
 
+                has_changed = False
+
+                if self._event_queue is not None:
+                    # check if camera settings are passed as events
+                    try:
+                        event = self._event_queue.get_nowait()
+                        # ok, found an event
+                        for key in event:
+                            if key == Tengu.EVENT_CAMERA_SRC:
+                                new_src = event[Tengu.EVENT_CAMERA_SRC]
+                                self.logger.info('video_src is switching to {} from {}'.format(new_src, self._video_src))
+                                self._video_src = new_src
+                                has_changed = True
+                            elif key == Tengu.EVENT_CAMERA_ROI:
+                                new_roi = event[Tengu.EVENT_CAMERA_ROI]
+                                self.logger.info('roi is changed to {}'.format(new_roi))
+                                self._roi = new_roi
+                                has_changed = True
+                            elif key == Tengu.EVENT_CAMERA_SCALE:
+                                new_scale = event[Tengu.EVENT_CAMERA_SCALE]
+                                self.logger.info('scale is changed to {}'.format(scale))
+                                self._scale = scale
+                                has_changed = True
+                            else:
+                                self.logger.warning('{} is not a known event key for camera'.format(key))
+
+                        if has_changed:
+                            self._current_frame.value = 0
+                            self.setup()
+
+                    except:
+                        # no event
+                        pass
+
                 if self._video_src is None:
                     # no src is set yet
                     time.sleep(1)
@@ -312,6 +352,7 @@ class CameraReader(Process):
                 self.logger.debug('wrote a frame image {} in {} s'.format(img_path, time.time() - start))
 
                 event_dict[Tengu.EVENT_FRAME_CROPPED] = img_path
+                event_dict[Tengu.EVENT_CAMERA_CHANGED] = has_changed
 
                 # put in a queue, this is shared with a GUI client
                 done = False
@@ -340,11 +381,11 @@ class CameraReader(Process):
                 elapsed = 0
                 while not done and elapsed < self._frame_queue_timeout_in_secs and self._finished.value == 0:
                     try:
-                        self.logger.debug('putting a frame image path {} in a queue'.format(img_path))
-                        self._scene_input_queue.put_nowait(img_path)
+                        self.logger.debug('putting a frame image path {} in a scene model queue'.format(img_path))
+                        self._scene_input_queue.put_nowait(event_dict)
                         done = True
                     except:
-                        self.logger.debug('failed to put {} in a queue, sleeping'.format(img_path))
+                        self.logger.debug('failed to put {} in a queue, sleeping'.format(event_dict))
                         time.sleep(0.001)
                     elapsed = time.time() - start
                 self.logger.debug('took {} to put a frame image path in a scene queue'.format(elapsed))

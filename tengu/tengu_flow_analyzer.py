@@ -310,6 +310,10 @@ class TenguFlowAnalyzer(object):
 
         return tracklets, self._scene
 
+    def reset(self):
+        self.logger.info('resetting flow analyzer...')
+        self._initialized = False
+
     def initialize(self, frame_shape):
         if self._initialized:
             self.logger.info('already initialized')
