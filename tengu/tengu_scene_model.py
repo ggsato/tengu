@@ -193,6 +193,10 @@ class TenguSceneModel(Process):
         return detections, class_names, tracklets, scene
 
     def finish(self):
+        if self._finished.value == -1:
+            # this is not yet started
+            return True
+
         if self._finished.value == 0:
             self._finished.value = 1
 
@@ -209,9 +213,7 @@ class TenguSceneModel(Process):
 
         # finish all
         self.logger.info('finishing frame sensor')
-        if self._frame_sensor.finish():
-            self._frame_sensor.join()
-        else:
+        if not self._frame_sensor.finish():
             self._frame_sensor.terminate()
 
         self.logger.info('cleaning up scene model output queue')

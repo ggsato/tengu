@@ -69,10 +69,6 @@ class Tengu(object):
 
     
     def start_processes(self, src=None, roi=None, scale=1.0, every_x_frame=1, rotation=0, skip_to=-1, frame_queue_timeout_in_secs=10, queue=None, tmpfs_cleanup_interval_in_frames=10*25):
-        if src is None:
-            self.logger.error('src has to be set')
-            return
-
         # check tmpfs directory exists
         if os.path.exists(Tengu.TMPFS_DIR):
             shutil.rmtree(Tengu.TMPFS_DIR)
@@ -118,9 +114,7 @@ class Tengu(object):
                 raise Exception('camera reader did not stop!')
 
         if self._scene_model is not None:
-            if self._scene_model.finish():
-                self._scene_model.join()
-            else:
+            if not self._scene_model.finish():
                 self._scene_model.terminate()
 
         # at this point, only queue that communicates with a client has not yet been cleaned up, and which should be done by the clietn
@@ -161,7 +155,7 @@ class Tengu(object):
 
                 if output_dict is None:
                     self.logger.error('failed to get any output from an output queue within {} seconds'.format(frame_queue_timeout_in_secs))
-                    break
+                    continue
                 else:
                     event_dict[Tengu.EVENT_DETECTIONS] = output_dict['d']
                     event_dict[Tengu.EVENT_DETECTION_CLASSES] = output_dict['c']
@@ -208,6 +202,9 @@ class Tengu(object):
             self._stopped.value = 2
             self.logger.info('exitted run loop, exitting... {}'.format(self._stopped.value))
 
+    def update_camera_settings(self, src, roi, scale):
+        self.logger.info('updating camera settings, current=({}, {}, {}), new=({}, {}, {})'.format(self._camera_reader.video_src, self._camera_reader.roi, self._camera_reader.scale, src, roi, scale))
+
     def save(self, model_folder):
         self.logger.debug('saving current models in {}...'.format(model_folder))
 
@@ -231,7 +228,7 @@ class CameraReader(Process):
         self._video_src = video_src
         # TODO: check these values are correct
         self._roi = roi
-        self._scale = scale
+        self._scale = Value('d', scale)
         self._every_x_frame = every_x_frame
         self._rotation = rotation
         self._skip_to = skip_to
@@ -242,6 +239,18 @@ class CameraReader(Process):
         self._cam = None
         self._current_frame = Value('i', 0)
         self._finished = Value('i', -1)
+
+    @property
+    def video_src(self):
+        return self._video_src
+
+    @property
+    def roi(self):
+        return self._roi
+
+    @property
+    def scale(self):
+        return self._scale.value
 
     @property
     def current_frame(self):
@@ -260,14 +269,20 @@ class CameraReader(Process):
             for key in Tengu.PREFERRED_CAMERA_SETTINGS:
                 self.logger.info('set a user defined camera setting {} of {}'.format(Tengu.PREFERRED_CAMERA_SETTINGS[key], key))
                 self._cam.set(key, Tengu.PREFERRED_CAMERA_SETTINGS[key])
-        self._finished.value = 0
 
     def run(self):
         self.logger.info('running camera reader')
-        self.setup()
+        self._finished.value = 0
         # read frames
         try:
             while self._finished.value == 0:
+
+                if self._video_src is None:
+                    # no src is set yet
+                    time.sleep(1)
+                    continue
+
+                self.setup()
 
                 frame_start = time.time()
                 
@@ -290,7 +305,7 @@ class CameraReader(Process):
                     frame = cv2.warpAffine(frame, M, (cols, rows))
 
                 # preprocess
-                cropped = self.preprocess(frame, self._roi, self._scale)
+                cropped = self.preprocess(frame, self._roi, self.scale)
 
                 # write an image to exchange between processes
                 start = time.time()

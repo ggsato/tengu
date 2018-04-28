@@ -38,6 +38,9 @@ class TenguSensor(Process):
         pass
 
     def finish(self):
+        if self._finished.value == -1:
+            # this is not yet started
+            return True
         # then, mark finished
         if self._finished.value == 0:
             self._finished.value = 1
