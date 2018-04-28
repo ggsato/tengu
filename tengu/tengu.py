@@ -202,9 +202,6 @@ class Tengu(object):
             self._stopped.value = 2
             self.logger.info('exitted run loop, exitting... {}'.format(self._stopped.value))
 
-    def update_camera_settings(self, src, roi, scale):
-        self.logger.info('updating camera settings, current=({}, {}, {}), new=({}, {}, {})'.format(self._camera_reader.video_src, self._camera_reader.roi, self._camera_reader.scale, src, roi, scale))
-
     def save(self, model_folder):
         self.logger.debug('saving current models in {}...'.format(model_folder))
 
@@ -282,7 +279,8 @@ class CameraReader(Process):
                     time.sleep(1)
                     continue
 
-                self.setup()
+                if self._cam is None:
+                    self.setup()
 
                 frame_start = time.time()
                 
