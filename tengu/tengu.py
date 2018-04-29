@@ -10,6 +10,7 @@ import logging
 import os, shutil
 import traceback
 from multiprocessing import Process, Value
+from Queue import Full, Empty
 
 from tengu_scene_model import TenguSceneModel
 
@@ -20,7 +21,7 @@ class Tengu(object):
     PREFERRED_CAMERA_SETTINGS = None
 
     # event keys
-    EVENT_FRAME = 'ef'
+    EVENT_FRAME_SHAPE = 'efs'
     EVENT_FRAME_NO = 'efn'
     EVENT_FRAME_CROPPED = 'efc'
 
@@ -73,7 +74,7 @@ class Tengu(object):
         self._scene_model.set_detection_interval(detection_interval)
 
     
-    def start_processes(self, src=None, roi=None, scale=1.0, every_x_frame=1, rotation=0, skip_to=-1, frame_queue_timeout_in_secs=10, queue=None, event_queue=None, tmpfs_cleanup_interval_in_frames=10*25):
+    def start_processes(self, src=None, roi=None, scale=None, every_x_frame=1, rotation=0, skip_to=-1, frame_queue_timeout_in_secs=10, queue=None, event_queue=None, tmpfs_cleanup_interval_in_frames=10*25):
         # check tmpfs directory exists
         if os.path.exists(Tengu.TMPFS_DIR):
             shutil.rmtree(Tengu.TMPFS_DIR)
@@ -230,7 +231,7 @@ class CameraReader(Process):
         self._video_src = video_src
         # TODO: check these values are correct
         self._roi = roi
-        self._scale = Value('d', scale)
+        self._scale = scale
         self._every_x_frame = every_x_frame
         self._rotation = rotation
         self._skip_to = skip_to
@@ -253,7 +254,7 @@ class CameraReader(Process):
 
     @property
     def scale(self):
-        return self._scale.value
+        return self._scale
 
     @property
     def current_frame(self):
@@ -266,7 +267,7 @@ class CameraReader(Process):
         except:
             self._cam = cv2.VideoCapture(self._video_src)        
         if self._cam is None or not self._cam.isOpened():
-            self.logger.error(self._video_src + ' is not available')
+            self.logger.error('{} is not available'.format(self._video_src))
 
         if Tengu.PREFERRED_CAMERA_SETTINGS is not None:
             for key in Tengu.PREFERRED_CAMERA_SETTINGS:
@@ -286,6 +287,7 @@ class CameraReader(Process):
                     # check if camera settings are passed as events
                     try:
                         event = self._event_queue.get_nowait()
+                        self.logger.info('new event found {}'.format(event))
                         # ok, found an event
                         for key in event:
                             if key == Tengu.EVENT_CAMERA_SRC:
@@ -300,19 +302,28 @@ class CameraReader(Process):
                                 has_changed = True
                             elif key == Tengu.EVENT_CAMERA_SCALE:
                                 new_scale = event[Tengu.EVENT_CAMERA_SCALE]
-                                self.logger.info('scale is changed to {}'.format(scale))
-                                self._scale = scale
+                                self.logger.info('scale is changed to {}'.format(new_scale))
+                                self._scale = new_scale
                                 has_changed = True
                             else:
-                                self.logger.warning('{} is not a known event key for camera'.format(key))
+                                self.logger.info('{} is not a known event key for camera'.format(key))
 
-                        if has_changed:
+                        if has_changed and self._video_src is not None:
+                            self.logger.info('resetting camera...')
                             self._current_frame.value = 0
                             self.setup()
+                        else:
+                            # this is strange
+                            self.logger.info('keys = {}'.format(event.keys()))
+                            self.logger.info('values = {}'.format(event.values()))
 
-                    except:
+                    except Empty:
                         # no event
                         pass
+                    except:
+                        info = sys.exc_info()
+                        self.logger.exception('Unknow Exception {}, {}, {}'.format(info[0], info[1], info[2]))
+                        traceback.print_tb(info[2])
 
                 if self._video_src is None:
                     # no src is set yet
@@ -330,7 +341,7 @@ class CameraReader(Process):
 
                 # finished
                 if not ret:
-                    self.logger.info('no frame is avaiable')
+                    self.logger.info('no frame is available')
                     break
 
                 # camera event dictionary
@@ -343,7 +354,7 @@ class CameraReader(Process):
                     frame = cv2.warpAffine(frame, M, (cols, rows))
 
                 # preprocess
-                cropped = self.preprocess(frame, self._roi, self.scale)
+                cropped = self.preprocess(frame, self._roi, self._scale)
 
                 # write an image to exchange between processes
                 start = time.time()
@@ -351,6 +362,7 @@ class CameraReader(Process):
                 cv2.imwrite(img_path, cropped)
                 self.logger.debug('wrote a frame image {} in {} s'.format(img_path, time.time() - start))
 
+                event_dict[Tengu.EVENT_FRAME_SHAPE] = [frame.shape[0], frame.shape[1]]
                 event_dict[Tengu.EVENT_FRAME_CROPPED] = img_path
                 event_dict[Tengu.EVENT_CAMERA_CHANGED] = has_changed
 
@@ -430,7 +442,7 @@ class CameraReader(Process):
         else:
             cropped = resized
 
-        self.logger.info('preprocessing done in {} s'.format(time.time() - start))
+        self.logger.info('preprocessing done with {}, {} in {} s'.format(roi, scale, time.time() - start))
         
         return cropped
 
