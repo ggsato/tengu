@@ -5,6 +5,9 @@ import logging
 import time, sys, traceback
 import cv2
 from multiprocessing import Process, Queue, Value
+from Queue import Empty, Full
+
+from tengu import Tengu
 
 class TenguSensor(Process):
 
@@ -91,37 +94,34 @@ class TenguObjectDetectionSensor(TenguSensor):
         self.logger.info('running sensor')
         self._finished.value = 0
         while self._finished.value == 0:
-            sensored = 0
-            while not self._input_queue.empty() and self._finished.value == 0:
-                self.logger.debug('got an input to sensor from a queue')
+            self.logger.debug('got an input to sensor from a queue')
+            try:
                 sensor_input = self._input_queue.get_nowait()
-                sensored += 1
-                try:
-                    img = cv2.imread(sensor_input.item)
-                    detections, class_names = self._detector.detect(img)
-                    sensor_output = TenguSensorItem(sensor_input.t, {'d': detections, 'n': class_names,'s': img.shape})
-                    self.logger.debug('detections at sensor = {}'.format(detections))
-                    done = False
-                    start = time.time()
-                    elapsed = 0
-                    while not done and elapsed < self._output_queue_timeout_in_secs and self._finished.value == 0:
-                        try:
-                            self.output_queue.put_nowait(sensor_output)
-                            done = True
-                        except:
-                            time.sleep(0.001)
-                        elapsed = time.time() - start
-                except:
-                    self.logger.error('sensor {} failed to get an image from {}'.format(self, sensor_input.item))
-                    info = sys.exc_info()
-                    self.logger.exception('Unknow Exception {}, {}, {}'.format(info[0], info[1], info[2]))
-                    traceback.print_tb(info[2])
-                if self._finished.value == 1:
-                    break
-            if sensored == 0:
+                img = cv2.imread(sensor_input.item)
+                detections, class_names = self._detector.detect(img)
+                sensor_output = TenguSensorItem(sensor_input.t, {'d': detections, 'n': class_names,'s': img.shape})
+                self.logger.debug('detections at sensor = {}'.format(detections))
+                done = False
+                start = time.time()
+                elapsed = 0
+                while not done and elapsed < self._output_queue_timeout_in_secs and self._finished.value == 0:
+                    try:
+                        self.output_queue.put_nowait(sensor_output)
+                        done = True
+                    except:
+                        time.sleep(0.001)
+                    elapsed = time.time() - start
+            except Empty:
                 self.logger.debug('no sensor input available, sleeping, finished? {}'.format(self._finished.value == 1))
                 # no inputs were available, sleep a bit
                 time.sleep(0.001)
+            except:
+                self.logger.error('sensor {} failed to get an image from {}'.format(self, sensor_input.item))
+                info = sys.exc_info()
+                self.logger.exception('Unknow Exception {}, {}, {}'.format(info[0], info[1], info[2]))
+                traceback.print_tb(info[2])
+            if self._finished.value == 1:
+                break
 
         self._finished.value = 2
 

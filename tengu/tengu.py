@@ -12,8 +12,6 @@ import traceback
 from multiprocessing import Process, Value
 from Queue import Full, Empty
 
-from tengu_scene_model import TenguSceneModel
-
 class Tengu(object):
 
     # dictionary to set camera settings
@@ -21,21 +19,22 @@ class Tengu(object):
     PREFERRED_CAMERA_SETTINGS = None
 
     # event keys
-    EVENT_FRAME_SHAPE = 'efs'
-    EVENT_FRAME_NO = 'efn'
-    EVENT_FRAME_CROPPED = 'efc'
+    EVENT_FRAME_SHAPE = 'event_frame_shape'
+    EVENT_FRAME_NO = 'event_frame_no'
+    EVENT_FRAME_CROPPED = 'event_frame_cropped'
 
-    EVENT_DETECTIONS = 'ed'
-    EVENT_DETECTION_CLASSES = 'edc'
+    EVENT_DETECTIONS = 'event_detections'
+    EVENT_DETECTION_CLASSES = 'event_detection_classes'
 
-    EVENT_TRACKLETS = 'et'
-    EVENT_FLOW_NODES = 'ef'
-    EVENT_COUNTED_TRACKLETS = 'ect'
+    EVENT_TRACKLETS = 'event_tracklets'
+    EVENT_FLOW_NODES = 'event_flow_nodes'
+    EVENT_COUNTED_TRACKLETS = 'event_counted_tracklets'
 
-    EVENT_CAMERA_SRC = 'ecsr'
-    EVENT_CAMERA_ROI = 'ecr'
-    EVENT_CAMERA_SCALE = 'ecsc'
-    EVENT_CAMERA_CHANGED = 'ecc'
+    EVENT_CAMERA_SRC = 'event_camera_src'
+    EVENT_CAMERA_ROI = 'event_camera_roi'
+    EVENT_CAMERA_SCALE = 'event_camera_scale'
+    EVENT_CAMERA_CHANGED = 'event_camera_changed'
+    EVENT_CAMERA_NEEDS_ONLY_FRAME = 'event_camera_only_frame'
 
     # tmpfs to exchange an image between processes
     TMPFS_DIR = '/dev/shm/tengu'
@@ -45,6 +44,8 @@ class Tengu(object):
 
         """ a model that consumes camera frames and produces something meaningful as scene
         """
+        # deferred import to prevent a circular import, Tengu -> TenguSceneModel -> Tengu
+        from tengu_scene_model import TenguSceneModel
         self._scene_model = TenguSceneModel() if scene_model is None else scene_model
         self._camera_reader = None
         self._tmp_image_cleaner = None
@@ -154,7 +155,7 @@ class Tengu(object):
                         output_dict = self._scene_model.output_queue.get_nowait()
                         self.logger.debug('got an output dict {}'.format(output_dict))
                         done = True
-                    except:
+                    except Empty:
                         self.logger.debug('failed to get an output dict from a queue, sleeping')
                         time.sleep(0.001)
                     elapsed = time.time() - start
@@ -180,7 +181,7 @@ class Tengu(object):
                         self.logger.debug('putting an event dict to a queue')
                         queue.put_nowait(event_dict)
                         done = True
-                    except:
+                    except Full:
                         self.logger.debug('failed to put an event dict in a queue, sleeping')
                         time.sleep(0.001)
                     elapsed = time.time() - start
@@ -243,6 +244,7 @@ class CameraReader(Process):
         self._cam = None
         self._current_frame = Value('i', 0)
         self._finished = Value('i', -1)
+        self._return_only_frame = False
 
     @property
     def video_src(self):
@@ -305,6 +307,10 @@ class CameraReader(Process):
                                 self.logger.info('scale is changed to {}'.format(new_scale))
                                 self._scale = new_scale
                                 has_changed = True
+                            elif key == Tengu.EVENT_CAMERA_NEEDS_ONLY_FRAME:
+                                needs_only_frame = event[Tengu.EVENT_CAMERA_NEEDS_ONLY_FRAME]
+                                self.logger.info('camera will return only frame? = {}'.format(needs_only_frame))
+                                self._return_only_frame = needs_only_frame
                             else:
                                 self.logger.info('{} is not a known event key for camera'.format(key))
 
@@ -322,7 +328,7 @@ class CameraReader(Process):
                         pass
                     except:
                         info = sys.exc_info()
-                        self.logger.exception('Unknow Exception {}, {}, {}'.format(info[0], info[1], info[2]))
+                        self.logger.exception('Unknown Exception {}, {}, {}'.format(info[0], info[1], info[2]))
                         traceback.print_tb(info[2])
 
                 if self._video_src is None:
@@ -375,7 +381,7 @@ class CameraReader(Process):
                         self.logger.debug('putting a frame image path {} in a queue'.format(img_path))
                         self._queue.put_nowait(event_dict)
                         done = True
-                    except:
+                    except Full:
                         self.logger.debug('failed to put event dict in a queue, sleeping')
                         time.sleep(0.001)
                     elapsed = time.time() - start
@@ -388,19 +394,20 @@ class CameraReader(Process):
                     continue
 
                 # put in a scene input queue, this is shared with scene model
-                done = False
-                start = time.time()
-                elapsed = 0
-                while not done and elapsed < self._frame_queue_timeout_in_secs and self._finished.value == 0:
-                    try:
-                        self.logger.debug('putting a frame image path {} in a scene model queue'.format(img_path))
-                        self._scene_input_queue.put_nowait(event_dict)
-                        done = True
-                    except:
-                        self.logger.debug('failed to put {} in a queue, sleeping'.format(event_dict))
-                        time.sleep(0.001)
-                    elapsed = time.time() - start
-                self.logger.debug('took {} to put a frame image path in a scene queue'.format(elapsed))
+                if not self._return_only_frame:
+                    done = False
+                    start = time.time()
+                    elapsed = 0
+                    while not done and elapsed < self._frame_queue_timeout_in_secs and self._finished.value == 0:
+                        try:
+                            self.logger.debug('putting a frame image path {} in a scene model queue'.format(img_path))
+                            self._scene_input_queue.put_nowait(event_dict)
+                            done = True
+                        except Full:
+                            self.logger.debug('failed to put {} in a queue, sleeping'.format(event_dict))
+                            time.sleep(0.001)
+                        elapsed = time.time() - start
+                    self.logger.debug('took {} to put a frame image path in a scene queue'.format(elapsed))
 
                 self.logger.info('put frame img and its path at time {} in {} s'.format(self._current_frame.value, time.time() - frame_start))
 
@@ -408,7 +415,7 @@ class CameraReader(Process):
                 self._current_frame.value += 1
         except:
             info = sys.exc_info()
-            self.logger.exception('Unknow Exception {}, {}, {}'.format(info[0], info[1], info[2]))
+            self.logger.exception('Unknown Exception {}, {}, {}'.format(info[0], info[1], info[2]))
             traceback.print_tb(info[2])
         finally:
             # cleanup queues

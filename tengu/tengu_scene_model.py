@@ -3,7 +3,9 @@
 
 import logging, sys, traceback, time
 from multiprocessing import Process, Queue, Value
+from Queue import Empty, Full
 
+from tengu import Tengu
 from detectnet_detector import DetectNetDetector
 from tengu_flow_analyzer import TenguFlowAnalyzer
 from tengu_scene_analyzer import TenguSceneAnalyzer
@@ -66,6 +68,7 @@ class TenguSceneModel(Process):
     def run(self):
         """ start running the model until no sensor input arrives
         """
+        # run
         self.logger.info('running scene model')
         self._finished.value = 0
         try:
@@ -79,20 +82,24 @@ class TenguSceneModel(Process):
                     event_dict = self._intput_queue.get_nowait()
                     frame_img_path = event_dict[Tengu.EVENT_FRAME_CROPPED]
                     has_changed = event_dict[Tengu.EVENT_CAMERA_CHANGED]
-                except:
+                except Empty:
                     pass
+                except:
+                    info = sys.exc_info()
+                    self.logger.exception('Unknown Exception {}, {}, {}'.format(info[0], info[1], info[2]))
+                    traceback.print_tb(info[2])
                 if has_changed:
                     self.logger.info('camera change detected, resetting...')
                     # model has to be reset
                     self._flow_analyzer.reset()
                     self._scene_analyzer.reset_counter()
                 if frame_img_path is not None:
-                    self.logger.debug('got a frame img path from an input queue')
+                    self.logger.info('got a frame img path from an input queue')
                     frame_sensor_item = TenguSensorItem(self._t, frame_img_path)
                     # feed first
                     try:
                         self._frame_sensor.input_queue.put_nowait(frame_sensor_item)
-                    except:
+                    except Full:
                         self.logger.debug('failed to put a new frame in frame sensor queue')
 
                     # get sensor output
@@ -126,7 +133,7 @@ class TenguSceneModel(Process):
                             self.logger.debug('putting output dict {} to an output queue'.format(output_dict))
                             self._output_queue.put_nowait(output_dict)
                             done = True
-                        except:
+                        except Full:
                             self.logger.debug('failed to put in the output queue, sleeping')
                             time.sleep(0.001)
                         elapsed = time.time() - start
@@ -165,7 +172,7 @@ class TenguSceneModel(Process):
             sensor_item = None
             try:
                 sensor_item = sensor.output_queue.get_nowait()
-            except:
+            except Empty:
                 pass
             if sensor_item is not None:
                 self.logger.debug('got an item {}'.format(sensor_item))

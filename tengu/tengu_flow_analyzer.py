@@ -9,7 +9,7 @@ import StringIO
 from pandas import DataFrame
 import pandas as pd
 
-from .tengu_tracker import TenguTracker, Tracklet, TenguCostMatrix
+from tengu_tracker import TenguTracker, Tracklet, TenguCostMatrix
 
 class TenguScene(object):
 
