@@ -71,7 +71,8 @@ class TenguScene(object):
             for direction_based_flow_js in direction_based_flows_js:
                 direction_based_flow = DirectionBasedFlow.deserialize(direction_based_flow_js)
                 direction_based_flows.append(direction_based_flow)
-        tengu_scene = TenguScene(direction_based_flows=direction_based_flows)
+        flow_blocks = (js['flow_blocks_rows'], js['flow_blocks_cols'])
+        tengu_scene = TenguScene(flow_blocks, direction_based_flows=direction_based_flows)
         return tengu_scene
 
     @property
@@ -379,8 +380,8 @@ class TenguFlowAnalyzer(object):
         # scene
         if self._scene_file is not None:
             self.build_scene_from_file()
-        else:
-            self._scene.initialize(self._frame_shape)
+        
+        self._scene.initialize(self._frame_shape)
         
         self._initialized = True
         self.logger.info('flow analyzer initialized')
