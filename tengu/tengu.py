@@ -39,14 +39,14 @@ class Tengu(object):
     # tmpfs to exchange an image between processes
     TMPFS_DIR = '/dev/shm/tengu'
 
-    def __init__(self, scene_model=None):
+    def __init__(self, scene_file=None):
         self.logger= logging.getLogger(__name__)
 
         """ a model that consumes camera frames and produces something meaningful as scene
         """
         # deferred import to prevent a circular import, Tengu -> TenguSceneModel -> Tengu
         from tengu_scene_model import TenguSceneModel
-        self._scene_model = TenguSceneModel() if scene_model is None else scene_model
+        self._scene_model = TenguSceneModel(scene_file=scene_file)
         self._camera_reader = None
         self._tmp_image_cleaner = None
 

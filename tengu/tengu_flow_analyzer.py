@@ -18,21 +18,35 @@ class TenguScene(object):
     A named TenguFlow is a set of TengFlows sharing the same name.
     """
 
-    def __init__(self, direction_based_flows=[]):
+    def __init__(self, flow_blocks, direction_based_flows=[]):
         super(TenguScene, self).__init__()
+        self.logger= logging.getLogger(__name__)
+        self._flow_blocks = flow_blocks
+        self._flow_blocks_size = None
+        self._blk_node_map = None
         self._direction_based_flows = direction_based_flows
+        # transient
         self._updated_flow_nodes = []
 
-    @property
-    def direction_based_flows(self):
-        return self._direction_based_flows
+    def initialize(self, frame_shape):
+        self._flow_blocks_size = (int(frame_shape[0]/self._flow_blocks[0]), int(frame_shape[1]/self._flow_blocks[1]))
+
+        self._blk_node_map = {}
+        for y_blk in xrange(self._flow_blocks[0]):
+            self._blk_node_map[y_blk] = {}
+            for x_blk in xrange(self._flow_blocks[1]):
+                pos_x = int(self._flow_blocks_size[1]*x_blk + self._flow_blocks_size[1]/2)
+                pos_y = int(self._flow_blocks_size[0]*y_blk + self._flow_blocks_size[0]/2)
+                flow_node = TenguFlowNode(y_blk, x_blk, (pos_x, pos_y))
+                self.logger.debug('created at y_blk,x_blk = {}, {} = {}'.format(y_blk, x_blk, (pos_x, pos_y)))
+                self._blk_node_map[y_blk][x_blk] = flow_node
 
     def serialize(self):
         js = {}
         return js
 
     @staticmethod
-    def deserialize(js, blk_node_map):
+    def deserialize(js):
         logging.debug('deserializing {}'.format(js))
         # direction based flows
         direction_based_flows = []
@@ -43,6 +57,21 @@ class TenguScene(object):
                 direction_based_flows.append(direction_based_flow)
         tengu_scene = TenguScene(direction_based_flows=direction_based_flows)
         return tengu_scene
+
+    @property
+    def flow_blocks(self):
+        return self._flow_blocks
+
+    @property
+    def flow_blocks_size(self):
+        return self._flow_blocks_size
+
+    def get_flow_node(self, x_blk, y_blk):
+        return self._blk_node_map[y_blk][x_blk]
+
+    @property
+    def direction_based_flows(self):
+        return self._direction_based_flows
 
     def update_flow_node(self, flow_node, tracklet):
         if tracklet is None:
@@ -147,9 +176,9 @@ class StatsDataFrame(object):
     """ A wraper object of stats DataFrame
     """
 
-    def __init__(self):
+    def __init__(self, df=None):
         super(StatsDataFrame, self).__init__()
-        self._df = None
+        self._df = df
 
     def __repr__(self):
         return '{}'.format('Empty' if self._df is None else self._df.describe())
@@ -179,12 +208,21 @@ class StatsDataFrame(object):
 
         return self._df.mean()
 
+    def serialize(self):
+        if self._df is None:
+            return None
+        return self._df.to_json()
+
+    @staticmethod
+    def deserialize(js):
+        return StatsDataFrame(df=pd.read_json(js))
+
 
 class TenguFlowNode(object):
     """ A FlowNode keeps statistical information about its own region
     """
 
-    def __init__(self, y_blk, x_blk, position):
+    def __init__(self, y_blk, x_blk, position, stats=None):
         super(TenguFlowNode, self).__init__()
         self._y_blk = y_blk
         self._x_blk = x_blk
@@ -196,15 +234,20 @@ class TenguFlowNode(object):
     def __repr__(self):
         return 'FlowNode@[{},{}], {}\n{}'.format(self._y_blk, self._x_blk, self._position, self._stats)
 
-    def serialize(self):
+    def serialize(self, simple=True):
         js = {}
-        js['id'] = id(self)
         js['y_blk'] = self._y_blk
         js['x_blk'] = self._x_blk
         js['position'] = self._position
         js['std_devs'] = self.std_devs
         js['means'] = self.means
+        if not simple:
+            js['stats_df'] = self._stats.serialize()
         return js
+
+    @staticmethod
+    def deserialize(js):
+        return TenguFlowNode(js['y_blk'], js['x_blk'], js['position'], StatsDataFrame.deserialize(js['stats_df']))
 
     @property
     def blk_position(self):
@@ -278,9 +321,6 @@ class TenguFlowAnalyzer(object):
     For example, given a set of flow_blocks F = {fb0, fb1, ..., fbn},
     fbn =
     """
-
-    rebuild_scene_ratio = 10
-
     def __init__(self, min_length=10, scene_file=None, flow_blocks=(20, 30), **kwargs):
         super(TenguFlowAnalyzer, self).__init__()
         self.logger= logging.getLogger(__name__)
@@ -288,12 +328,9 @@ class TenguFlowAnalyzer(object):
         self._last_tracklets = Set([])
         self._tracker = TenguTracker(self, min_length)
         self._scene_file = scene_file
-        self._flow_blocks = flow_blocks
         # the folowings will be initialized
-        self._scene = None
+        self._scene = TenguScene(flow_blocks)
         self._frame_shape = None
-        self._flow_blocks_size = None
-        self._blk_node_map = None
 
     def update_model(self, frame_shape, detections, class_names):
         self.logger.debug('updating model for the shape {}, detections = {}, class_names = {}'.format(frame_shape, detections, class_names))
@@ -320,24 +357,13 @@ class TenguFlowAnalyzer(object):
             return
         # flow graph
         # gray scale
-        self._frame_shape = frame_shape
-        self._flow_blocks_size = (int(self._frame_shape[0]/self._flow_blocks[0]), int(self._frame_shape[1]/self._flow_blocks[1]))
-        self._blk_node_map = {}
-
-        for y_blk in xrange(self._flow_blocks[0]):
-            self._blk_node_map[y_blk] = {}
-            for x_blk in xrange(self._flow_blocks[1]):
-                pos_x = int(self._flow_blocks_size[1]*x_blk + self._flow_blocks_size[1]/2)
-                pos_y = int(self._flow_blocks_size[0]*y_blk + self._flow_blocks_size[0]/2)
-                flow_node = TenguFlowNode(y_blk, x_blk, (pos_x, pos_y))
-                self.logger.debug('created at y_blk,x_blk = {}, {} = {}'.format(y_blk, x_blk, (pos_x, pos_y)))
-                self._blk_node_map[y_blk][x_blk] = flow_node
+        self._frame_shape = frame_shape     
 
         # scene
         if self._scene_file is not None:
             self.build_scene_from_file()
         else:
-            self._scene = TenguScene()
+            self._scene.initialize(self._frame_shape)
         
         self._initialized = True
         self.logger.info('flow analyzer initialized')
@@ -376,15 +402,15 @@ class TenguFlowAnalyzer(object):
     def flow_node_at(self, x, y):
         y_blk = self.get_y_blk(y)
         x_blk = self.get_x_blk(x)
-        return self._blk_node_map[y_blk][x_blk]
+        return self._scene.get_flow_node(x_blk, y_blk)
 
     def get_x_blk(self, x):
         x = min(max(0., x), self._frame_shape[1])
-        return min(int(x / self._flow_blocks_size[1]), self._flow_blocks[1]-1)
+        return min(int(x / self._scene.flow_blocks_size[1]), self._scene.flow_blocks[1]-1)
 
     def get_y_blk(self, y):
         y = min(max(0., y), self._frame_shape[0])
-        return min(int(y / self._flow_blocks_size[0]), self._flow_blocks[0]-1)
+        return min(int(y / self._scene.flow_blocks_size[0]), self._scene.flow_blocks[0]-1)
 
     def add_new_tracklets(self, new_tracklets):
 
@@ -454,8 +480,8 @@ class TenguFlowAnalyzer(object):
                 continue
 
             # still, the travel distance might have been done by prediction, then skip it
-            if removed_tracklet.observed_travel_distance < max(*self._flow_blocks_size)*2:
-                self.logger.debug('{} has moved, but the travel distance is {} smaller than a block size {}, so being skipped, check done in {} s'.format(removed_tracklet, removed_tracklet.observed_travel_distance, max(*self._flow_blocks_size)*2, time.time() - check_start))
+            if removed_tracklet.observed_travel_distance < max(*self._scene.flow_blocks_size)*2:
+                self.logger.debug('{} has moved, but the travel distance is {} smaller than a block size {}, so being skipped, check done in {} s'.format(removed_tracklet, removed_tracklet.observed_travel_distance, max(*self._scene.flow_blocks_size)*2, time.time() - check_start))
                 continue
 
             if self._tracker.ignore_tracklet(removed_tracklet):
@@ -531,16 +557,14 @@ class TenguFlowAnalyzer(object):
     def serialize(self):
         js = {}
         js['frame_shape'] = self._frame_shape
-        js['flow_blocks'] = self._flow_blocks
         return js
 
     def deserialize(self, js):
         frame_shape = (js['frame_shape'][0], js['frame_shape'][1], js['frame_shape'][2])
-        flow_blocks = (js['flow_blocks'][0], js['flow_blocks'][1])
-        if frame_shape != self._frame_shape or flow_blocks != self._flow_blocks:
+        if frame_shape != self._frame_shape:
             self.logger.error('frame shape is different {} != {}'.format(js['frame_shape'], self._frame_shape))
             raise
-        self._scene = TenguScene.deserialize(js['scene'], self._blk_node_map)
+        self._scene = TenguScene.deserialize(js['scene'])
         self.logger.debug('deserialized scene {}'.format(self._scene))
 
     def load(self):

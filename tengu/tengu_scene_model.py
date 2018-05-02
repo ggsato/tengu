@@ -15,7 +15,7 @@ class TenguSceneModel(Process):
     """ TenguSceneModel repreesnts a model of scene, where a movement of each travelling Tracklet is predicted by a continuous sensor update respectively. 
     """
 
-    def __init__(self, input_queue_max_size=10, output_queue_max_size=10, output_queue_timeout_in_secs=10, **kwargs):
+    def __init__(self, input_queue_max_size=10, output_queue_max_size=10, output_queue_timeout_in_secs=10, scene_file=None, **kwargs):
         super(TenguSceneModel, self).__init__(**kwargs)
 
         self.logger= logging.getLogger(__name__)
@@ -24,7 +24,7 @@ class TenguSceneModel(Process):
         self._detector = DetectNetDetector(8890, interval=Value('i', 3))
         self._frame_sensor = TenguObjectDetectionSensor(detector=self._detector)
 
-        self._flow_analyzer = TenguFlowAnalyzer(scene_file='model/flows/default.json')
+        self._flow_analyzer = TenguFlowAnalyzer(scene_file=scene_file)
         self._scene_analyzer = TenguSceneAnalyzer()
 
         # queues
