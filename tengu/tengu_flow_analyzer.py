@@ -43,6 +43,22 @@ class TenguScene(object):
 
     def serialize(self):
         js = {}
+        js['flow_blocks_rows'] = self._flow_blocks[0]
+        js['flow_blocks_cols'] = self._flow_blocks[1]
+        js['flow_blocks_size_row'] = self._flow_blocks_size[0]
+        js['flow_blocks_size_col'] = self._flow_blocks_size[1]
+        js_blk_node_map = {}
+        for y_blk in sorted(self._blk_node_map):
+            js_blk_node_map[y_blk] = {}
+            for x_blk in sorted(self._blk_node_map[y_blk]):
+                flow_node = self._blk_node_map[y_blk][x_blk]
+                js_blk_node_map[y_blk][x_blk] = flow_node.serialize(simple=False)
+        js['blk_node_map'] = js_blk_node_map
+        js_direction_based_flows = []
+        for direction_based_flow in self._direction_based_flows:
+            js_direction_based_flows.append(direction_based_flow.serialize())
+        js['direction_based_flows'] = js_direction_based_flows
+
         return js
 
     @staticmethod
@@ -211,11 +227,11 @@ class StatsDataFrame(object):
     def serialize(self):
         if self._df is None:
             return None
-        return self._df.to_json()
+        return self._df.to_json(orient='records')
 
     @staticmethod
     def deserialize(js):
-        return StatsDataFrame(df=pd.read_json(js))
+        return StatsDataFrame(df=pd.read_json(js, orient='records'))
 
 
 class TenguFlowNode(object):
@@ -239,9 +255,10 @@ class TenguFlowNode(object):
         js['y_blk'] = self._y_blk
         js['x_blk'] = self._x_blk
         js['position'] = self._position
-        js['std_devs'] = self.std_devs
-        js['means'] = self.means
-        if not simple:
+        if simple:
+            js['std_devs'] = self.std_devs
+            js['means'] = self.means
+        else:
             js['stats_df'] = self._stats.serialize()
         return js
 
@@ -551,12 +568,11 @@ class TenguFlowAnalyzer(object):
             f.write(js_string)
         finally:
             f.close()
-        #
-        cv2.imwrite('{}.jpg'.format(file[:file.rindex('.')]), self._last_graph_img)
 
     def serialize(self):
         js = {}
         js['frame_shape'] = self._frame_shape
+        js['scene'] = self._scene.serialize()
         return js
 
     def deserialize(self, js):

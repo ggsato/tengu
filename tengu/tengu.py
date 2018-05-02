@@ -29,6 +29,7 @@ class Tengu(object):
     EVENT_TRACKLETS = 'event_tracklets'
     EVENT_FLOW_NODES = 'event_flow_nodes'
     EVENT_COUNTED_TRACKLETS = 'event_counted_tracklets'
+    EVENT_SCENE_SAVE = 'event_scene_save'
 
     EVENT_CAMERA_SRC = 'event_camera_src'
     EVENT_CAMERA_ROI = 'event_camera_roi'
@@ -284,6 +285,7 @@ class CameraReader(Process):
             while self._finished.value == 0:
 
                 has_changed = False
+                save_path = None
 
                 if self._event_queue is not None:
                     # check if camera settings are passed as events
@@ -311,6 +313,9 @@ class CameraReader(Process):
                                 needs_only_frame = event[Tengu.EVENT_CAMERA_NEEDS_ONLY_FRAME]
                                 self.logger.info('camera will return only frame? = {}'.format(needs_only_frame))
                                 self._return_only_frame = needs_only_frame
+                            elif key == Tengu.EVENT_SCENE_SAVE:
+                                save_path = event[Tengu.EVENT_SCENE_SAVE]
+                                self.logger.info('will forward an event to save a scene to {}...'.format(save_path))
                             else:
                                 self.logger.info('{} is not a known event key for camera'.format(key))
 
@@ -401,6 +406,8 @@ class CameraReader(Process):
                     while not done and elapsed < self._frame_queue_timeout_in_secs and self._finished.value == 0:
                         try:
                             self.logger.debug('putting a frame image path {} in a scene model queue'.format(img_path))
+                            if save_path is not None:
+                                event_dict[Tengu.EVENT_SCENE_SAVE] = save_path
                             self._scene_input_queue.put_nowait(event_dict)
                             done = True
                         except Full:
