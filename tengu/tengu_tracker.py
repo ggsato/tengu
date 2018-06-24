@@ -512,8 +512,7 @@ class TenguTracker(object):
             x0 = [center[0], 0., 0., center[1], 0., 0.]
         else:
             x0 = [center[0], means[1], means[2], center[1], means[4], means[5]]
-        R_std = self.R_std_from_rect(assignment)
-        to = Tracklet(self, x0, R_std=R_std, P=self._P, Q=self._Q, std_devs=flow_node.std_devs)
+        to = Tracklet(self, x0)
         to.update_with_assignment(Assignment(assignment), class_name)
         return to
 

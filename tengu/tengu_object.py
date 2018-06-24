@@ -7,6 +7,73 @@ from scipy.linalg import block_diag
 from filterpy.kalman import KalmanFilter
 from filterpy.common import Q_discrete_white_noise
 
+class VehicleFilter(KalmanFilter):
+    """ KalmanFilter designed for tracking vehicles by detections as observations
+    """
+    
+    DIM_X = 6
+    DIM_Z = 2
+    
+    F_BASE = np.array([
+        [1, 1, 0.5, 0, 0, 0],
+        [0, 1, 1, 0, 0, 0],
+        [0, 0, 1, 0, 0, 0],
+        [0, 0, 0, 1, 1, 0.5],
+        [0, 0, 0, 0, 1, 1],
+        [0, 0, 0, 0, 0, 1]
+    ])
+    
+    H_BASE = np.array([
+        [1, 0, 0, 0, 0, 0],
+        [0, 0, 0, 1, 0, 0]
+    ])
+    
+    
+    def __init__(self, x0, max_detection_size, detection_error_ratio, decay=0.1, coefficient=0.1):
+        super(VehicleFilter, self).__init__(dim_x=VehicleFilter.DIM_X, dim_z=VehicleFilter.DIM_Z)
+        self._max_detection_size = max_detection_size
+        self._detection_error_ratio = detection_error_ratio
+        
+        self.P = np.array([
+            [1, 0, 0, 0, 0, 0],
+            [0, decay**2, 0, 0, 0, 0],
+            [0, 0, decay**4, 0, 0, 0],
+            [0, 0, 0, 1, 0, 0],
+            [0, 0, 0, 0, decay**2, 0],
+            [0, 0, 0, 0, 0, decay**4]
+        ])
+    
+        self.Q = np.array([
+            [0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0],
+            [0, 0, decay**4, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, decay**4]
+        ])
+    
+        self.R = np.array([
+            [coefficient**2, 0],
+            [0, coefficient**2]
+        ])
+        
+        # key statistical properties
+        self._std_dev = (self._max_detection_size * self._detection_error_ratio) / 3
+        self._variance = self._std_dev **2
+        
+        # matrices
+        self.P *= self._variance
+        self.Q *= self._variance
+        self.R *= self._variance
+        self.F = VehicleFilter.F_BASE * 1
+        self.H = VehicleFilter.H_BASE * 1
+
+        # initialize
+        self.x = np.array([x0]).T
+        
+    def scale(self, x, y, w, h):
+        return [x * self._max_detection_size / w, y * self._max_detection_size / h]
+
 class TenguObject(object):
     """ TenguObject is a base class of any travelling object classes in Tengu framework.
 
@@ -16,14 +83,13 @@ class TenguObject(object):
 
     _very_small_value = 0.000001
 
-    def __init__(self, x0, R_std=10., Q=.0001, dt=1, P=100., std_devs=None):
+    def __init__(self, x0, max_detection_size=192, detection_error_ratio=0.1, decay=0.1, coefficient=0.5):
         super(TenguObject, self).__init__()
-        self._filter = TenguObject.create_filter(x0, R_std, Q, dt, P, std_devs)
+        self._filter = VehicleFilter(x0, max_detection_size, detection_error_ratio, decay=decay, coefficient=coefficient)
         self._zs = []
         self._xs = []
         self._covs = []
         self._last_accepted_residual = None
-        self._R_std = R_std
 
     @property
     def location(self):
@@ -196,45 +262,4 @@ class TenguObject(object):
 
     @property
     def R_std(self):
-        return self._R_std
-
-    @staticmethod
-    def create_filter(x0, R_std, Q, dt, P, std_devs):
-        """ creates a second order Kalman Filter
-
-        R_std: float, a standard deviation of measurement errors
-        Q    : float, a covariance of process noises
-        dt   : int, a time unit
-        P    : float, a maximum initial variance of all states to build a covariance matrix
-        x0   : 1x6 array, initial values of x(x0)
-        """
-        kf = KalmanFilter(dim_x=6, dim_z=2)
-        kf.R = np.eye(2) * R_std**2
-        if std_devs is None:
-            kf.P = np.eye(6) * P
-            q = Q_discrete_white_noise(3, dt, Q)
-            kf.Q = block_diag(q, q)
-        else:
-            kf.P = np.array([[std_devs[0]*3**2, 0., 0., 0., 0., 0.],
-                         [0., std_devs[1]*3**2, 0., 0., 0., 0.],
-                         [0., 0., std_devs[2]*3**2, 0., 0., 0.],
-                         [0., 0., 0., std_devs[3]*3**2, 0., 0.],
-                         [0., 0., 0., 0., std_devs[4]*3**2, 0.],
-                         [0., 0., 0., 0., 0., std_devs[5]*3**2]])
-            kf.Q = np.array([[0., 0., 0., 0., 0., 0.],
-                         [0., 0., 0., 0., 0., 0.],
-                         [0., 0., std_devs[2]*3**2, 0., 0., 0.],
-                         [0., 0., 0., 0., 0., 0.],
-                         [0., 0., 0., 0., 0., 0.],
-                         [0., 0., 0., 0., 0., std_devs[5]*3**2]])
-        kf.F = np.array([[1., dt, .5*dt*dt, 0., 0., 0.],
-                         [0., 1., dt, 0., 0., 0.],
-                         [0., 0., 1., 0., 0., 0.],
-                         [0., 0., 0., 1., dt, .5*dt*dt],
-                         [0., 0., 0., 0., 1., dt],
-                         [0., 0., 0., 0., 0., 1.]])
-        kf.H = np.array([[1., 0., 0., 0., 0., 0.],
-                         [0., 0., 0., 1., 0., 0.]])
-        # initial x
-        kf.x = np.array([x0]).T
-        return kf
+        return math.sqrt(self._filter.R[0][0])
