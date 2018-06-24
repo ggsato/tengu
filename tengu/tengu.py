@@ -14,6 +14,19 @@ from Queue import Full, Empty
 
 class Tengu(object):
 
+    """ A main program to track and count objects
+
+    First of all, Tengu manages the following three processes:
+    1. Camera Reader
+    2. Temp Image Cleaner
+    3. Scene Model
+
+    And communications between processes are done by queues.
+    A. output_event_queue[CameraReader => SceneModel => GUI]: various events are raised for visualization and debugging
+    B. input_event_queue[GUI => CameraReader(=> SceneModel)]: various control events from GUI(a user) is passed
+
+    """
+
     # dictionary to set camera settings
     # e.g. width {3, 1280}
     PREFERRED_CAMERA_SETTINGS = None
@@ -76,7 +89,7 @@ class Tengu(object):
         self._scene_model.set_detection_interval(detection_interval)
 
     
-    def start_processes(self, src=None, roi=None, scale=None, every_x_frame=1, rotation=0, skip_to=-1, frame_queue_timeout_in_secs=10, queue=None, event_queue=None, tmpfs_cleanup_interval_in_frames=10*25):
+    def start_processes(self, src=None, roi=None, scale=None, every_x_frame=1, rotation=0, skip_to=-1, frame_queue_timeout_in_secs=10, output_event_queue=None, input_event_queue=None, tmpfs_cleanup_interval_in_frames=10*25):
         # check tmpfs directory exists
         if os.path.exists(Tengu.TMPFS_DIR):
             shutil.rmtree(Tengu.TMPFS_DIR)
@@ -87,7 +100,7 @@ class Tengu(object):
         # so this should be called BEFORE creating any threads on a main process
         # start reading camera
         self.logger.info('starting camera reader')
-        self._camera_reader = CameraReader(src, roi, scale, every_x_frame, rotation, skip_to, frame_queue_timeout_in_secs, queue, event_queue, self._scene_model.input_queue)
+        self._camera_reader = CameraReader(src, roi, scale, every_x_frame, rotation, skip_to, frame_queue_timeout_in_secs, output_event_queue, input_event_queue, self._scene_model.input_queue)
         self._camera_reader.start()
         while self._camera_reader._finished.value == -1:
             # this means not started yet
@@ -133,7 +146,7 @@ class Tengu(object):
             else:
                 raise Exception('cleaner did not stop!')
 
-    def run(self, frame_queue_timeout_in_secs=10, queue=None, tmpfs_cleanup_interval_in_frames=10*25, **kwargs):
+    def run(self, frame_queue_timeout_in_secs=10, output_event_queue=None, tmpfs_cleanup_interval_in_frames=10*25, **kwargs):
 
         try:
             # run loop
@@ -180,7 +193,7 @@ class Tengu(object):
                 while not done and elapsed < frame_queue_timeout_in_secs and self._stopped.value == 0:
                     try:
                         self.logger.debug('putting an event dict to a queue')
-                        queue.put_nowait(event_dict)
+                        output_event_queue.put_nowait(event_dict)
                         done = True
                     except Full:
                         self.logger.debug('failed to put an event dict in a queue, sleeping')
@@ -227,7 +240,7 @@ class Tengu(object):
 
 
 class CameraReader(Process):
-    def __init__(self, video_src, roi, scale, every_x_frame, rotation, skip_to, frame_queue_timeout_in_secs, queue, event_queue, scene_input_queue, **kwargs):
+    def __init__(self, video_src, roi, scale, every_x_frame, rotation, skip_to, frame_queue_timeout_in_secs, output_event_queue, input_event_queue, scene_input_queue, **kwargs):
         super(CameraReader, self).__init__(**kwargs)
         self.logger= logging.getLogger(__name__)
         self._video_src = video_src
@@ -238,8 +251,8 @@ class CameraReader(Process):
         self._rotation = rotation
         self._skip_to = skip_to
         self._frame_queue_timeout_in_secs = frame_queue_timeout_in_secs
-        self._queue = queue
-        self._event_queue = event_queue
+        self._output_event_queue = output_event_queue
+        self._input_event_queue = input_event_queue
         self._scene_input_queue = scene_input_queue
         # transient
         self._cam = None
@@ -287,10 +300,10 @@ class CameraReader(Process):
                 has_changed = False
                 save_path = None
 
-                if self._event_queue is not None:
+                if self._input_event_queue is not None:
                     # check if camera settings are passed as events
                     try:
-                        event = self._event_queue.get_nowait()
+                        event = self._input_event_queue.get_nowait()
                         self.logger.info('new event found {}'.format(event))
                         # ok, found an event
                         for key in event:
@@ -384,7 +397,7 @@ class CameraReader(Process):
                 while not done and elapsed < self._frame_queue_timeout_in_secs and self._finished.value == 0:
                     try:
                         self.logger.debug('putting a frame image path {} in a queue'.format(img_path))
-                        self._queue.put_nowait(event_dict)
+                        self._output_event_queue.put_nowait(event_dict)
                         done = True
                     except Full:
                         self.logger.debug('failed to put event dict in a queue, sleeping')
@@ -427,9 +440,9 @@ class CameraReader(Process):
         finally:
             # cleanup queues
             self.logger.info('cleaning up queue')
-            self._queue.close()
-            while not self._queue.empty():
-                self._queue.get_nowait()
+            self._output_event_queue.close()
+            while not self._output_event_queue.empty():
+                self._output_event_queue.get_nowait()
             self.logger.info('cleaning up scene input queue')
             self._scene_input_queue.close()
             while not self._scene_input_queue.empty():
