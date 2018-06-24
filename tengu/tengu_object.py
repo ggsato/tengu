@@ -3,9 +3,8 @@
 
 import math
 import numpy as np
-from scipy.linalg import block_diag
+import StringIO
 from filterpy.kalman import KalmanFilter
-from filterpy.common import Q_discrete_white_noise
 
 class VehicleFilter(KalmanFilter):
     """ KalmanFilter designed for tracking vehicles by detections as observations
@@ -89,6 +88,9 @@ class TenguObject(object):
         self._zs = []
         self._xs = []
         self._covs = []
+        self._xps = []
+        self._ys = []
+        self._Ks = []
         self._last_accepted_residual = None
 
     @property
@@ -197,6 +199,9 @@ class TenguObject(object):
         self._xs.append(self._filter.x)
         self._covs.append(self._filter.P)
         self._zs.append(z)
+        self._xps.append(self._filter.x_prior)
+        self._ys.append(self._filter.y)
+        self._Ks.append(self._filter.K)
 
     def accept_measurement(self, z):
         """ check if a given measurement is aacceptable
@@ -263,3 +268,21 @@ class TenguObject(object):
     @property
     def R_std(self):
         return math.sqrt(self._filter.R[0][0])
+
+    def history(self):
+
+        buf = StringIO.StringIO()
+        for x, z, cov, x_prior, y, K in zip(self._xs, self._zs, self._covs, self._xps, self._ys, self._Ks):
+            buf.write('x_prior: \n{}\n'.format(x_prior))
+            buf.write('z: \n{}\n'.format(z))
+            buf.write('y: \n{}\n'.format(y))
+            buf.write('K: \n{}\n'.format(K))
+            buf.write('x: \n{}\n'.format(x))
+            buf.write('cov: \n{}\n'.format(cov))
+            buf.write('=====================================\n')
+
+
+        history = buf.getvalue()
+        buf.close()
+
+        return history

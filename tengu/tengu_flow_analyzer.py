@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-import logging, math, json, sys, traceback, copy, time
+import logging, math, json, sys, traceback, copy, time, os
 import cv2
 import numpy as np
 from operator import attrgetter
@@ -349,6 +349,8 @@ class TenguFlowAnalyzer(object):
         # the folowings will be initialized
         self._scene = TenguScene(flow_blocks)
         self._frame_shape = None
+        # save folder
+        self._output_folder = 'output'
 
     def update_model(self, frame_shape, detections, class_names):
         self.logger.debug('updating model for the shape {}, detections = {}, class_names = {}'.format(frame_shape, detections, class_names))
@@ -376,6 +378,11 @@ class TenguFlowAnalyzer(object):
         # flow graph
         # gray scale
         self._frame_shape = frame_shape     
+
+        # make sure output folder exists
+        if not os.path.exists(self._output_folder):
+            self.logger.info('creating the output folder at {}'.format(self._output_folder))
+            os.makedirs(self._output_folder)
 
         # scene
         if self._scene_file is not None:
@@ -486,6 +493,10 @@ class TenguFlowAnalyzer(object):
             self.logger.debug('checking removed tracklet {} in {} s'.format(removed_tracklet.obj_id, time.time() - start))
 
             check_start = time.time()
+            
+            # save this tracklet details
+            self.save_tracklet(removed_tracklet)
+
             if removed_tracklet.speed < 0:
                 self.logger.debug('{} has too short path, speed is not available, not counted, check done in {} s'.format(removed_tracklet, time.time() - check_start))
                 continue
@@ -553,6 +564,12 @@ class TenguFlowAnalyzer(object):
             break
 
         self.logger.debug('checked direction based flow in {} s'.format(time.time() - start))
+
+    def save_tracklet(self, tracklet):
+        
+        file = os.path.join(self._output_folder, '{}.txt'.format(tracklet.obj_id))
+        with open(file, 'w') as f:
+            f.write(tracklet.history())
 
     def save(self, file):
         """
