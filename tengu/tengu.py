@@ -314,6 +314,8 @@ class CameraReader(Process):
                                 has_changed = True
                             elif key == Tengu.EVENT_CAMERA_ROI:
                                 new_roi = event[Tengu.EVENT_CAMERA_ROI]
+                                # make sure roi is int
+                                new_roi = [int(new_roi[0]), int(new_roi[1]), int(new_roi[2]), int(new_roi[3])]
                                 self.logger.info('roi is changed to {}'.format(new_roi))
                                 self._roi = new_roi
                                 has_changed = True

@@ -131,10 +131,6 @@ class Tracklet(TenguObject):
     def last_update_pattern(self):
         return self._recent_updates[-1]
 
-    @property
-    def last_accepted_residual(self):
-        return self._last_accepted_residual
-
     def similarity(self, assignment):
         """
         calculate similarity of assignment to self
@@ -300,11 +296,7 @@ class Tracklet(TenguObject):
 
     @property
     def error(self):
-        if self._last_accepted_residual is None:
-            return None
-
-        # the denominator of residual, std_dev*3, is too large here, so put it back to std_dev
-        return [self._last_accepted_residual[0], self._last_accepted_residual[1]]
+        return [0, 0]
 
     @property
     def speed(self):

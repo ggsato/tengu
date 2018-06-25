@@ -283,7 +283,7 @@ class TenguFlowNode(object):
 
     def record_tracklet(self, tracklet):
         stats = tracklet.stats
-        if stats is None or tracklet.last_accepted_residual is None:
+        if stats is None:
             return
         stats_dict = {}
         stats_dict['x_p'] = {tracklet.obj_id: stats[0]}
@@ -295,8 +295,6 @@ class TenguFlowNode(object):
         stats_dict['direction'] = {tracklet.obj_id: stats[6]}
         stats_dict['w'] = tracklet.rect[2]
         stats_dict['h'] = tracklet.rect[3]
-        stats_dict['residual_x'] = tracklet.last_accepted_residual[0]
-        stats_dict['residual_y'] = tracklet.last_accepted_residual[1]
         error = tracklet.error
         stats_dict['error_x'] = error[0]
         stats_dict['error_y'] = error[1]

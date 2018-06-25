@@ -91,7 +91,9 @@ class TenguObject(object):
         self._xps = []
         self._ys = []
         self._Ks = []
-        self._last_accepted_residual = None
+        self._zs_candidates = []
+        # reset each time step
+        self._z_candidates = []
 
     @property
     def location(self):
@@ -202,35 +204,29 @@ class TenguObject(object):
         self._xps.append(self._filter.x_prior)
         self._ys.append(self._filter.y)
         self._Ks.append(self._filter.K)
+        # candidates
+        self._zs_candidates.append(self._z_candidates)
+        self._z_candidates = []
 
     def accept_measurement(self, z):
         """ check if a given measurement is aacceptable
-
-        please override as required
         """
-        # accept until enough time steps have passed
-        if self.direction is None:
-            return True
+        # calculate the next predicted position
 
-        last_x = self._xs[-1]
-        variance_speed = self.variance_speed
-        variance_accl = self.variance_accel
-        variance = [variance_speed[0] + 0.5 * variance_accl[0], variance_speed[1] + 0.5 * variance_accl[1]]
+        next_x = self._filter.F.dot(self._filter.x)
 
-        next_x = last_x[0] + last_x[1] + 0.5 * last_x[2]
-        next_y = last_x[3] + last_x[4] + 0.5 * last_x[5]
+        # caclculate residuals
+        residual_x = abs(z[0] - next_x[0])
+        residual_y = abs(z[1] - next_x[3])
 
-        residual_x = math.sqrt((z[0] - next_x)**2)
-        residual_y = math.sqrt((z[1] - next_y)**2)
+        # calculate 99% range
+        most_likely_x = math.sqrt(self._filter.P[0][0])*3
+        most_likely_y = math.sqrt(self._filter.P[3][3])*3
 
-        most_likely_x = variance[0]*3
-        most_likely_y = variance[1]*3
+        # accept if both residuals are within 99% range(3 * std_devs)
+        accept = (residual_x < most_likely_x) and (residual_y < most_likely_y)
 
-        residual_ratio = [residual_x / most_likely_x, residual_y / most_likely_y]
-
-        # accept if the ratio is smailer than 1
-        accept = max(residual_ratio) < 1.0
-        self._last_accepted_residual = [min(1.0, residual_ratio[0]), min(1.0, residual_ratio[1])]
+        self._z_candidates.append([z, next_x, (residual_x, residual_y), (most_likely_x, most_likely_y), accept])
 
         return accept
 
@@ -272,9 +268,10 @@ class TenguObject(object):
     def history(self):
 
         buf = StringIO.StringIO()
-        for x, z, cov, x_prior, y, K in zip(self._xs, self._zs, self._covs, self._xps, self._ys, self._Ks):
+        for x, z, z_candidates, cov, x_prior, y, K in zip(self._xs, self._zs, self._zs_candidates, self._covs, self._xps, self._ys, self._Ks):
             buf.write('x_prior: \n{}\n'.format(x_prior))
             buf.write('z: \n{}\n'.format(z))
+            buf.write('z_candidates: \n{}\n'.format(z_candidates))
             buf.write('y: \n{}\n'.format(y))
             buf.write('K: \n{}\n'.format(K))
             buf.write('x: \n{}\n'.format(x))
