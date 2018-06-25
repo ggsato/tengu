@@ -243,7 +243,7 @@ class TenguObject(object):
         if len(self._covs) == 0:
             return None
 
-        return [max(TenguObject._very_small_value, math.sqrt(self._covs[-1][0][0])), max(TenguObject._very_small_value, math.sqrt(self._covs[-1][3][3]))]
+        return [self._covs[-1][0][0], self._covs[-1][3][3]]
 
     @property
     def variance_speed(self):
@@ -251,7 +251,7 @@ class TenguObject(object):
         if len(self._covs) == 0:
             return None
 
-        return [max(TenguObject._very_small_value, math.sqrt(self._covs[-1][1][1])), max(TenguObject._very_small_value, math.sqrt(self._covs[-1][4][4]))]
+        return [self._covs[-1][1][1], self._covs[-1][4][4]]
 
     @property
     def variance_accel(self):
@@ -259,7 +259,7 @@ class TenguObject(object):
         if len(self._covs) == 0:
             return None
 
-        return [max(TenguObject._very_small_value, math.sqrt(self._covs[-1][2][2])), max(TenguObject._very_small_value, math.sqrt(self._covs[-1][5][5]))]
+        return [self._covs[-1][2][2], self._covs[-1][5][5]]
 
     @property
     def R_std(self):

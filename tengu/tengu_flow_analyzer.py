@@ -91,6 +91,8 @@ class TenguScene(object):
         return self._direction_based_flows
 
     def update_flow_node(self, flow_node, tracklet):
+        """ update through scene to keep updated ones at this time step
+        """
         if tracklet is None:
             return
         flow_node.record_tracklet(tracklet)
@@ -257,7 +259,6 @@ class TenguFlowNode(object):
         js['x_blk'] = self._x_blk
         js['position'] = self._position
         if simple:
-            js['std_devs'] = self.std_devs
             js['means'] = self.means
         else:
             js['stats_df'] = self._stats.serialize()
@@ -292,12 +293,15 @@ class TenguFlowNode(object):
         stats_dict['y_p'] = {tracklet.obj_id: stats[3]}
         stats_dict['y_v'] = {tracklet.obj_id: stats[4]}
         stats_dict['y_a'] = {tracklet.obj_id: stats[5]}
-        stats_dict['direction'] = {tracklet.obj_id: stats[6]}
+        stats_dict['x_p_v'] = {tracklet.obj_id: stats[6][0]}
+        stats_dict['x_v_v'] = {tracklet.obj_id: stats[7][0]}
+        stats_dict['x_a_v'] = {tracklet.obj_id: stats[8][0]}
+        stats_dict['y_p_v'] = {tracklet.obj_id: stats[6][1]}
+        stats_dict['y_v_v'] = {tracklet.obj_id: stats[7][1]}
+        stats_dict['y_a_v'] = {tracklet.obj_id: stats[8][1]}
         stats_dict['w'] = tracklet.rect[2]
         stats_dict['h'] = tracklet.rect[3]
-        error = tracklet.error
-        stats_dict['error_x'] = error[0]
-        stats_dict['error_y'] = error[1]
+        # this is supposed to keep items within a certain time range like the last 10 mins
         stats_dict['frame_ix'] = {tracklet.obj_id: TenguTracker._global_updates}
         self._stats.append(stats_dict)
 
@@ -308,7 +312,8 @@ class TenguFlowNode(object):
         if std_dev_series is None or std_dev_series.isnull()[0]:
             return None
 
-        return [std_dev_series['x_p'], std_dev_series['x_v'], std_dev_series['x_a'], std_dev_series['y_p'], std_dev_series['y_v'], std_dev_series['y_a'], std_dev_series['error_x'], std_dev_series['error_y']]
+        return [std_dev_series['x_p'], std_dev_series['x_v'], std_dev_series['x_a'], std_dev_series['y_p'], std_dev_series['y_v'], std_dev_series['y_a'], 
+                std_dev_series['w'], std_dev_series['h']]
 
     @property
     def means(self):
@@ -317,7 +322,9 @@ class TenguFlowNode(object):
         if mean_series is None or mean_series.isnull()[0]:
             return None
 
-        return [mean_series['x_p'], mean_series['x_v'], mean_series['x_a'], mean_series['y_p'], mean_series['y_v'], mean_series['y_a'], mean_series['error_x'], mean_series['error_y']]
+        return [mean_series['x_p'], mean_series['x_v'], mean_series['x_a'], mean_series['y_p'], mean_series['y_v'], mean_series['y_a'], 
+                mean_series['x_p_v'], mean_series['x_v_v'], mean_series['x_a_v'], mean_series['y_p_v'], mean_series['y_v_v'], mean_series['y_a_v'],
+                mean_series['w'], mean_series['h']]
 
     @staticmethod
     def max_node_diff(node1, node2):
@@ -381,17 +388,7 @@ class TenguFlowAnalyzer(object):
         start = time.time()
 
         # mark if left
-        for tracklet in tracklets:
-            # check if it has already left
-            if tracklet.has_left:
-                continue
-            # check if any of rect corners has left
-            has_left = tracklet.rect[0] <= 0 or tracklet.rect[1] <= 0 \
-                    or (tracklet.rect[0] + tracklet.rect[2] >= self._frame_shape[1]) \
-                    or (tracklet.rect[1] + tracklet.rect[3] >= self._frame_shape[0])
-            if has_left:
-                tracklet.mark_left()
-                continue
+        self.mark_tracklets_left(tracklets)
 
         current_tracklets = Set(tracklets)
         self._scene.reset_updated_flow_nodes()
@@ -433,12 +430,26 @@ class TenguFlowAnalyzer(object):
         y = min(max(0., y), self._frame_shape[0])
         return min(int(y / self._scene.flow_blocks_size[0]), self._scene.flow_blocks[0]-1)
 
+    def mark_tracklets_left(self, tracklets):
+        for tracklet in tracklets:
+            # check if it has already left
+            if tracklet.has_left:
+                continue
+            # check if any of rect corners has left
+            has_left = tracklet.rect[0] <= 0 or tracklet.rect[1] <= 0 \
+                    or (tracklet.rect[0] + tracklet.rect[2] >= self._frame_shape[1]) \
+                    or (tracklet.rect[1] + tracklet.rect[3] >= self._frame_shape[0])
+            if has_left:
+                tracklet.mark_left()
+                continue
+
     def add_new_tracklets(self, new_tracklets):
 
         start = time.time()
         
         for new_tracklet in new_tracklets:
             flow_node = self.flow_node_at(*new_tracklet.location)
+            # save a node in this tracklet
             new_tracklet.add_flow_node_to_path(flow_node)
 
         self.logger.debug('added new {} tracklet in {} s'.format(len(new_tracklets), time.time() - start))
@@ -461,22 +472,15 @@ class TenguFlowAnalyzer(object):
                 # no change
                 self.logger.debug('{} stays on the same flow node, check done in {} s'.format(existing_tracklet.obj_id, time.time() - start_check))
                 continue
-            # update edge
-            if prev_flow_node is None:
-                self.logger.error('no last flow exists on {}, check done in {} s'.format(existing_tracklet.obj_id, time.time() - start_check))
-                raise
-
-            # if flow_node is not adjacent of prev, skip it
-            if not flow_node.adjacent(prev_flow_node):
-                self.logger.debug('skipping update of {}, not adjacent move, check done in {} s'.format(existing_tracklet.obj_id, time.time() - start_check))
-                continue
 
             #if self._tracker.ignore_tracklet(existing_tracklet):
             #    self.logger.debug('ignoring update of {}, check done in {} s'.format(existing_tracklet.obj_id, time.time() - start_check))
             #    continue
 
-            # add flow
+            # save a node in this tracklet
             existing_tracklet.add_flow_node_to_path(flow_node)
+
+            # update stats of this node
             self._scene.update_flow_node(flow_node, existing_tracklet)
 
         self.logger.debug('updated existing {} tracklet in {} s'.format(len(existing_tracklets), time.time() - start))

@@ -260,8 +260,11 @@ class Tracklet(TenguObject):
         if direction is None:
             return None
 
+        # a transposed array is two dimensional, so get only the content at 0
         stats = list(self._xs[-1].T[0])
-        stats.append(direction)
+        stats.append(self.variance)
+        stats.append(self.variance_speed)
+        stats.append(self.variance_accel)
 
         return stats
 
