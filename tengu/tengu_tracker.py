@@ -101,9 +101,12 @@ class Tracklet(TenguObject):
     @staticmethod
     def center_from_rect(rect):
         """ calculate the center of this tracklet
-        the true location of this object is lower than the simple center of this rectangle
-        center = (int(self._rect[0]+self._rect[2]/2), int(self._rect[1]+self._rect[3]/2))
-        location is a bit lower than the center y by 1/4 of the hight
+
+        The location of a visual object is lower than a simple center of this rectangle.
+
+        simple center = (int(self._rect[0]+self._rect[2]/2), int(self._rect[1]+self._rect[3]/2))
+        
+        So, a center is calculated a bit lower, as 1/4 of the hight
         """
         return [int(rect[0]+rect[2]/2), int(rect[1]+rect[3]/2+rect[3]/4)]
 
@@ -424,7 +427,7 @@ class TenguTracker(object):
     # 0.01 = 4.6 => 1% overlap
     _confident_min_cost = 4.6
 
-    def __init__(self, tengu_flow_analyzer, min_length, obsoletion=100, ignore_direction_ranges=None, P=9., Q=0.01, **kwargs):
+    def __init__(self, tengu_flow_analyzer, min_length, obsoletion=100, ignore_direction_ranges=None, **kwargs):
         super(TenguTracker, self).__init__(**kwargs)
         self.logger = logging.getLogger(__name__)
         self._tracklets = []
@@ -432,8 +435,6 @@ class TenguTracker(object):
         self._obsoletion = obsoletion
         # (start, end], -pi <= ignored_range < pi
         self._ignore_direction_ranges = ignore_direction_ranges
-        self._P = P
-        self._Q = Q
 
         self._tengu_flow_analyzer = tengu_flow_analyzer
         self._min_length = min_length
@@ -493,32 +494,15 @@ class TenguTracker(object):
 
         return self.tracklets
 
-    def prepare_updates(self, detections):
-        pass
-
-    def new_tracklet(self, assignment, class_name):
-        center = Tracklet.center_from_rect(assignment)
-        flow_node = self._tengu_flow_analyzer.flow_node_at(*center)
-        means = flow_node.means
-        if means is None:
-            x0 = [center[0], 0., 0., center[1], 0., 0.]
-        else:
-            x0 = [center[0], means[1], means[2], center[1], means[4], means[5]]
-        to = Tracklet(self, x0)
-        to.update_with_assignment(Assignment(assignment), class_name)
-        return to
-
-    def R_std_from_rect(self, rect):
-        """ caclculate a standard deviation of measurement error from rect
-        """
-        return max(rect[2], rect[3]) * 1/2 * 1/10
-
     def initialize_tracklets(self, detections, class_names):
         
         self.prepare_updates(detections)
 
         for d, detection in enumerate(detections):
             self._tracklets.append(self.new_tracklet(detection, class_names[d]))
+
+    def prepare_updates(self, detections):
+        pass
 
     def calculate_cost_matrix(self, detections):
         """ Calculates cost matrix
@@ -605,7 +589,7 @@ class TenguTracker(object):
                 to = self.new_tracklet(assignment, class_names[ix])
                 contains = False
                 for tracklet in self._tracklets:
-                    if self.rect_contains(to.rect, tracklet.rect):
+                    if TenguTracker.rect_contains(to.rect, tracklet.rect):
                         contains = True
                         break
                 if contains:
@@ -613,6 +597,31 @@ class TenguTracker(object):
                     continue
                 self._tracklets.append(to)
                 self.logger.debug('created tracked object {} of id={} at {}'.format(to, to.obj_id, TenguTracker._global_updates))
+
+    def new_tracklet(self, detection, class_name):
+        """ create a new tracklet with a new detection
+
+        A new tracklet is initialized with the position (x, y) calculated from the given detection,
+        and hidden variables, speed and acceleration, from statistics at a flow node if avaialble.
+        """
+        center = Tracklet.center_from_rect(detection)
+        flow_node = self._tengu_flow_analyzer.flow_node_at(*center)
+        means = flow_node.means
+        if means is None:
+            x0 = [center[0], 0., 0., center[1], 0., 0.]
+        else:
+            x0 = [center[0], means[1], means[2], center[1], means[4], means[5]]
+        to = Tracklet(self, x0)
+        to.update_with_assignment(Assignment(detection), class_name)
+        return to
+
+    @staticmethod
+    def rect_contains(rect_a, rect_b):
+        x, y = rect_a[0], rect_a[1]
+        contains_upper_left = (x > rect_b[0] and x < (rect_b[0]+rect_b[2])) and (y > rect_b[1] and y < (rect_b[1]+rect_b[3]))
+        x, y = x + rect_a[2], y + rect_a[3]
+        contains_lower_right = (x > rect_b[0] and x < (rect_b[0]+rect_b[2])) and (y > rect_b[1] and y < (rect_b[1]+rect_b[3]))
+        return contains_upper_left and contains_lower_right
 
     def update_tracklets(self):
         for tracklet in self._tracklets:
@@ -624,14 +633,6 @@ class TenguTracker(object):
             tracklet.update_without_assignment()
         else:
             tracklet.update_with_assignment(Assignment(new_assignment), class_name)
-
-    @staticmethod
-    def rect_contains(rect_a, rect_b):
-        x, y = rect_a[0], rect_a[1]
-        contains_upper_left = (x > rect_b[0] and x < (rect_b[0]+rect_b[2])) and (y > rect_b[1] and y < (rect_b[1]+rect_b[3]))
-        x, y = x + rect_a[2], y + rect_a[3]
-        contains_lower_right = (x > rect_b[0] and x < (rect_b[0]+rect_b[2])) and (y > rect_b[1] and y < (rect_b[1]+rect_b[3]))
-        return contains_upper_left and contains_lower_right
 
     def obsolete_trackings(self):
         """ Filters old trackings

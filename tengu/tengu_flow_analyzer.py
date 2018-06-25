@@ -9,7 +9,7 @@ import StringIO
 from pandas import DataFrame
 import pandas as pd
 
-from tengu_tracker import TenguTracker, Tracklet, TenguCostMatrix
+from tengu_tracker import TenguTracker, Tracklet
 
 class TenguScene(object):
 
@@ -326,23 +326,12 @@ class TenguFlowNode(object):
 class TenguFlowAnalyzer(object):
 
     """
-    TenguFlowAnalyzer collects a set of flows, identify similar types of flows,
-    then assign each tracklet to one of such types of flows.
-    A flow is characterized by its source and sink.
-
-    TenguFlowAnalyzer holds a directed weighed graph, 
-    and which has nodes in the shape of flow_blocks.
-    Each flow_block is assigned its dedicated region of frame_shape respectively.
-
-    For example, given a set of flow_blocks F = {fb0, fb1, ..., fbn},
-    fbn =
     """
-    def __init__(self, min_length=10, scene_file=None, flow_blocks=(20, 30), **kwargs):
+    def __init__(self, scene_file=None, flow_blocks=(20, 30), **kwargs):
         super(TenguFlowAnalyzer, self).__init__()
         self.logger= logging.getLogger(__name__)
         self._initialized = False
         self._last_tracklets = Set([])
-        self._tracker = TenguTracker(self, min_length)
         self._scene_file = scene_file
         # the folowings will be initialized
         self._scene = TenguScene(flow_blocks)
@@ -350,24 +339,10 @@ class TenguFlowAnalyzer(object):
         # save folder
         self._output_folder = 'output'
 
-    def update_model(self, frame_shape, detections, class_names):
-        self.logger.debug('updating model for the shape {}, detections = {}, class_names = {}'.format(frame_shape, detections, class_names))
-
-        if not self._initialized:
-            # this means new src came in
-            self.initialize(frame_shape)
-            self._initialized = True
-
-        # update tracklets with new detections
-        tracklets = self._tracker.resolve_tracklets(detections, class_names)
-
-        self.update_flow_graph(tracklets)
-
-        return tracklets, self._scene
-
-    def reset(self):
-        self.logger.info('resetting flow analyzer...')
-        self._initialized = False
+    @property
+    def initialized(self):
+        return self._initialized
+    
 
     def initialize(self, frame_shape):
         if self._initialized:
@@ -391,9 +366,19 @@ class TenguFlowAnalyzer(object):
         self._initialized = True
         self.logger.info('flow analyzer initialized')
 
+    def reset(self):
+        self.logger.info('resetting flow analyzer...')
+        self._initialized = False
+
+    @property
+    def scene(self):
+        return self._scene
+    
+
     def update_flow_graph(self, tracklets):
+        """ update a flow graph by updated tracklets
         """
-        """
+
         start = time.time()
         current_tracklets = Set(tracklets)
         self._scene.reset_updated_flow_nodes()
@@ -473,9 +458,9 @@ class TenguFlowAnalyzer(object):
                 self.logger.debug('skipping update of {}, not adjacent move, check done in {} s'.format(existing_tracklet.obj_id, time.time() - start_check))
                 continue
 
-            if self._tracker.ignore_tracklet(existing_tracklet):
-                self.logger.debug('ignoring update of {}, check done in {} s'.format(existing_tracklet.obj_id, time.time() - start_check))
-                continue
+            #if self._tracker.ignore_tracklet(existing_tracklet):
+            #    self.logger.debug('ignoring update of {}, check done in {} s'.format(existing_tracklet.obj_id, time.time() - start_check))
+            #    continue
 
             # add flow
             existing_tracklet.add_flow_node_to_path(flow_node)
@@ -511,9 +496,9 @@ class TenguFlowAnalyzer(object):
                 self.logger.debug('{} has moved, but the travel distance is {} smaller than a block size {}, so being skipped, check done in {} s'.format(removed_tracklet, removed_tracklet.observed_travel_distance, max(*self._scene.flow_blocks_size)*2, time.time() - check_start))
                 continue
 
-            if self._tracker.ignore_tracklet(removed_tracklet):
-                self.logger.debug('{} is removed, but not for counting, within ignored directions, check done in {} s'.format(removed_tracklet, time.time() - check_start))
-                continue
+            #if self._tracker.ignore_tracklet(removed_tracklet):
+            #    self.logger.debug('{} is removed, but not for counting, within ignored directions, check done in {} s'.format(removed_tracklet, time.time() - check_start))
+            #    continue
 
             sink_node = removed_tracklet.path[-1]
             source_node = removed_tracklet.path[0]

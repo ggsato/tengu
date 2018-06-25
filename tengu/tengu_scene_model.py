@@ -7,24 +7,39 @@ from Queue import Empty, Full
 
 from tengu import Tengu
 from detectnet_detector import DetectNetDetector
+from tengu_tracker import TenguTracker
 from tengu_flow_analyzer import TenguFlowAnalyzer
 from tengu_scene_analyzer import TenguSceneAnalyzer
 from tengu_sensor import TenguSensorItem, TenguObjectDetectionSensor
 
 class TenguSceneModel(Process):
-    """ TenguSceneModel repreesnts a model of scene, where a movement of each travelling Tracklet is predicted by a continuous sensor update respectively. 
+    """ TenguSceneModel manages a prediction model, in which objects are tracked and counted
+
+    A prediction model conssits of 4 components.
+
+    1. frame sensor   : detects objects in a frame
+    2. tracker        : associate detections with existing tracklets or create new ones, then update each tracking Kalman Filter model with assigned detections
+    3. flow analyzer  : collects and analyzes tracklet movements, and find traffic flows statistically
+    4. scene analyzer : count objects for each flow
+
     """
 
-    def __init__(self, input_queue_max_size=10, output_queue_max_size=10, output_queue_timeout_in_secs=10, scene_file=None, **kwargs):
+    def __init__(self, input_queue_max_size=10, output_queue_max_size=10, output_queue_timeout_in_secs=10, scene_file=None, min_length=10, **kwargs):
         super(TenguSceneModel, self).__init__(**kwargs)
 
         self.logger= logging.getLogger(__name__)
 
-        # a list of sensors
+        # sensor
         self._detector = DetectNetDetector(8890, interval=Value('i', 1))
         self._frame_sensor = TenguObjectDetectionSensor(detector=self._detector)
 
+        # flow analyzer
         self._flow_analyzer = TenguFlowAnalyzer(scene_file=scene_file)
+
+        # tracker
+        self._tracker = TenguTracker(self._flow_analyzer, min_length)
+
+        # scene analyzer
         self._scene_analyzer = TenguSceneAnalyzer()
 
         # queues
@@ -115,14 +130,14 @@ class TenguSceneModel(Process):
                         continue
 
                     # update the model
-                    detections, class_names, tracklets, scene = self.update_model(sensor_output)
+                    detections, class_names, tracklets = self.update_model(sensor_output)
 
                     if detections is None and self._finished.value != 0:
                         # shutdown in progress
                         self.logger.info('None detections found, shutting down...')
                         break
 
-                    counted_tracklets = self._scene_analyzer.analyze_scene(scene)
+                    counted_tracklets = self._scene_analyzer.analyze_scene(self._flow_analyzer.scene)
 
                     # put in an output queue
                     done = False
@@ -132,7 +147,7 @@ class TenguSceneModel(Process):
                     for tracklet in tracklets:
                         tracklet_dicts.append(tracklet.to_dict())
                     flow_nodes_dicts = []
-                    for flow_node in scene.updated_flow_nodes:
+                    for flow_node in self._flow_analyzer.scene.updated_flow_nodes:
                         flow_nodes_dicts.append(flow_node.serialize())
                     output_dict = {'d': detections, 'c': class_names, 't': tracklet_dicts, 'n': self._t, 'f': flow_nodes_dicts, 'ct': counted_tracklets}
                     while not done and elapsed < self._output_queue_timeout_in_secs and self._finished.value == 0:
@@ -207,12 +222,18 @@ class TenguSceneModel(Process):
 
         self.logger.debug('detections at scene model = {}'.format(detections))
 
-        # update model
-        tracklets, scene = self._flow_analyzer.update_model(shape, detections, class_names)
+        if not self._flow_analyzer.initialized:
+            self._flow_analyzer.initialize(shape)
+
+        # update tracklets with new detections
+        tracklets = self._tracker.resolve_tracklets(detections, class_names)
+
+        # update flow graph
+        self._flow_analyzer.update_flow_graph(tracklets)
 
         self.logger.info('model was updated at time {} in {} s'.format(self._t, time.time() - start))
 
-        return detections, class_names, tracklets, scene
+        return detections, class_names, tracklets
 
     def finish(self):
         if self._finished.value == -1:
