@@ -349,7 +349,6 @@ class TenguFlowAnalyzer(object):
             self.logger.info('already initialized')
             return
         # flow graph
-        # gray scale
         self._frame_shape = frame_shape     
 
         # make sure output folder exists
@@ -380,6 +379,20 @@ class TenguFlowAnalyzer(object):
         """
 
         start = time.time()
+
+        # mark if left
+        for tracklet in tracklets:
+            # check if it has already left
+            if tracklet.has_left:
+                continue
+            # check if any of rect corners has left
+            has_left = tracklet.rect[0] <= 0 or tracklet.rect[1] <= 0 \
+                    or (tracklet.rect[0] + tracklet.rect[2] >= self._frame_shape[1]) \
+                    or (tracklet.rect[1] + tracklet.rect[3] >= self._frame_shape[0])
+            if has_left:
+                tracklet.mark_left()
+                continue
+
         current_tracklets = Set(tracklets)
         self._scene.reset_updated_flow_nodes()
 

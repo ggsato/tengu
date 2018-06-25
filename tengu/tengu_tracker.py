@@ -27,7 +27,7 @@ class Tracklet(TenguObject):
     # angle movement when not enough records exist
     angle_movement_not_available = 9.9
 
-    def __init__(self, tracker, x0, **kwargs):
+    def __init__(self, x0, **kwargs):
         super(Tracklet, self).__init__(x0, **kwargs)
         self.logger = logging.getLogger(__name__)
         Tracklet._class_obj_id += 1
@@ -39,8 +39,6 @@ class Tracklet(TenguObject):
         self._movement = None
         self._confidence = 0.
         self._recent_updates = ['N/A']
-        # used by Clustered KLT Tracker
-        self.tracker = tracker
         self._w_hist = []
         self._h_hist = []
         self._hist = None
@@ -138,7 +136,6 @@ class Tracklet(TenguObject):
         """
         calculate similarity of assignment to self
         1. rect similarity(position, size similrity)
-        2. histogram similarity
         """
 
 
@@ -148,39 +145,10 @@ class Tracklet(TenguObject):
 
         # 1. rect similarity
         rect_similarity = TenguTracker.calculate_overlap_ratio(self._rect, assignment.detection)
-
-        # 2. histogram similarity
-        #hist0 = self._hist
-        #hist1, assignment.img = self.histogram(assignment.detection)
-        #assignment.hist = hist1
-        #hist_similarity = cv2.compareHist(hist0, hist1, cv2.HISTCMP_CORREL)
-
-        #disable_similarity = False
-        #if disable_similarity:
-        #    rect_similarity = 1.0
-        #    hist_similarity = 1.0
         
         self.logger.debug('similarity = {} of {} for {}'.format(rect_similarity, assignment.detection, self.obj_id))
 
         return rect_similarity
-
-    @property
-    def histogram(self):
-        frame = self.tracker._tengu_flow_analyzer._last_frame
-        bigger_ratio = 0.0
-        from_y = int(self._rect[1])
-        from_y = max(0, int(from_y - self._rect[3] * bigger_ratio))
-        to_y = int(self._rect[1]+self._rect[3])
-        to_y = min(frame.shape[0], int(to_y + self._rect[3] * bigger_ratio))
-        from_x = int(self._rect[0])
-        from_x = max(0, int(from_x - self._rect[2] * bigger_ratio))
-        to_x = int(self._rect[0]+self._rect[2])
-        to_x = min(frame.shape[1], int(to_x + self._rect[2] * bigger_ratio))
-        img = frame[from_y:to_y, from_x:to_x, :]
-        hist = cv2.calcHist([img], [0, 1, 2], None, [32, 32, 32], [0, 256, 0, 256, 0, 256])
-        cv2.normalize(hist, hist)
-        flattened = hist.flatten()
-        return flattened, img.copy()
 
     def update_properties(self):
         assignment = self._assignments[-1]
@@ -436,6 +404,7 @@ class TenguTracker(object):
         # (start, end], -pi <= ignored_range < pi
         self._ignore_direction_ranges = ignore_direction_ranges
 
+        # this is used only when asking for stats to initialize a new tracklet
         self._tengu_flow_analyzer = tengu_flow_analyzer
         self._min_length = min_length
 
@@ -611,7 +580,7 @@ class TenguTracker(object):
             x0 = [center[0], 0., 0., center[1], 0., 0.]
         else:
             x0 = [center[0], means[1], means[2], center[1], means[4], means[5]]
-        to = Tracklet(self, x0)
+        to = Tracklet(x0)
         to.update_with_assignment(Assignment(detection), class_name)
         return to
 
@@ -684,19 +653,6 @@ class TenguTracker(object):
         removed = len(self._tracklets) - len(new_tracklet)
         self._tracklets = new_tracklet
         self.logger.debug('removed {} tracked objects due to obsoletion'.format(removed))
-
-        for tracklet in self._tracklets:
-            # check if it has already left
-            if tracklet.has_left:
-                continue
-            # check if any of rect corners has left
-            frame_shape = self._tengu_flow_analyzer._frame_shape
-            has_left = tracklet.rect[0] <= 0 or tracklet.rect[1] <= 0 \
-                    or (tracklet.rect[0] + tracklet.rect[2] >= frame_shape[1]) \
-                    or (tracklet.rect[1] + tracklet.rect[3] >= frame_shape[0])
-            if has_left:
-                tracklet.mark_left()
-                continue
 
     def is_obsolete(self, tracklet):
         diff = TenguTracker._global_updates - tracklet.last_updated_at
