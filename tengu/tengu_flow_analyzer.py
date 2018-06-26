@@ -18,13 +18,15 @@ class TenguScene(object):
     A named TenguFlow is a set of TengFlows sharing the same name.
     """
 
-    def __init__(self, flow_blocks, direction_based_flows=[]):
+    def __init__(self, flow_blocks, direction_based_flows=[], ss_df=None):
         super(TenguScene, self).__init__()
         self.logger= logging.getLogger(__name__)
         self._flow_blocks = flow_blocks
         self._flow_blocks_size = None
         self._blk_node_map = None
         self._direction_based_flows = direction_based_flows
+        # data frame
+        self._ss_df = SourceSinkDataFrame() if ss_df is None else ss_df
         # transient
         self._updated_flow_nodes = []
 
@@ -59,6 +61,8 @@ class TenguScene(object):
             js_direction_based_flows.append(direction_based_flow.serialize())
         js['direction_based_flows'] = js_direction_based_flows
 
+        js['ss_df'] = self._ss_df.serialize()
+
         return js
 
     @staticmethod
@@ -72,7 +76,8 @@ class TenguScene(object):
                 direction_based_flow = DirectionBasedFlow.deserialize(direction_based_flow_js)
                 direction_based_flows.append(direction_based_flow)
         flow_blocks = (js['flow_blocks_rows'], js['flow_blocks_cols'])
-        tengu_scene = TenguScene(flow_blocks, direction_based_flows=direction_based_flows)
+        ss_df = SourceSinkDataFrame.deserialize(js['ss_df'])
+        tengu_scene = TenguScene(flow_blocks, direction_based_flows=direction_based_flows, ss_df=ss_df)
         return tengu_scene
 
     @property
@@ -105,6 +110,19 @@ class TenguScene(object):
     @property
     def updated_flow_nodes(self):
         return self._updated_flow_nodes
+
+    def mark_sink(self, tracklet, source, sink):
+
+        src_pos = source.blk_position
+        sink_pos = sink.blk_position
+
+        ss_dict = {}
+        ss_dict['x_blk_src'] = {tracklet.obj_id: src_pos[0]}
+        ss_dict['y_blk_src'] = {tracklet.obj_id: src_pos[1]}
+        ss_dict['x_blk_sink'] = {tracklet.obj_id: sink_pos[0]}
+        ss_dict['y_blk_sink'] = {tracklet.obj_id: sink_pos[1]}
+        ss_dict['frame_ix'] = {tracklet.obj_id: TenguTracker._global_updates}
+        self._ss_df.append(ss_dict)
 
 class DirectionBasedFlow(object):
 
@@ -190,6 +208,37 @@ class DirectionBasedFlow(object):
 
     def add_tracklet(self, tracklet):
         self._tracklets.append(tracklet)
+
+class SourceSinkDataFrame(object):
+
+    def __init__(self, df=None):
+        self._df = df
+
+    def append(self, ss_dict):
+        """ append an array of predicated values
+        """
+        new_df = DataFrame.from_dict(ss_dict)
+        if self._df is None:
+            self._df = new_df
+        else:
+            self._df = self._df.append(new_df)
+
+    @property
+    def mean_series(self):
+
+        if self._df is None:
+            return None
+
+        return self._df.mean()
+
+    def serialize(self):
+        if self._df is None:
+            return None
+        return self._df.to_json(orient='records')
+
+    @staticmethod
+    def deserialize(js):
+        return SourceSinkDataFrame(df=pd.read_json(js, orient='records'))
 
 class StatsDataFrame(object):
     """ A wraper object of stats DataFrame
@@ -299,8 +348,8 @@ class TenguFlowNode(object):
         stats_dict['y_p_v'] = {tracklet.obj_id: stats[6][1]}
         stats_dict['y_v_v'] = {tracklet.obj_id: stats[7][1]}
         stats_dict['y_a_v'] = {tracklet.obj_id: stats[8][1]}
-        stats_dict['w'] = tracklet.rect[2]
-        stats_dict['h'] = tracklet.rect[3]
+        stats_dict['w'] = {tracklet.obj_id: tracklet.rect[2]}
+        stats_dict['h'] = {tracklet.obj_id: tracklet.rect[3]}
         # this is supposed to keep items within a certain time range like the last 10 mins
         stats_dict['frame_ix'] = {tracklet.obj_id: TenguTracker._global_updates}
         self._stats.append(stats_dict)
@@ -517,11 +566,9 @@ class TenguFlowAnalyzer(object):
             #    self.logger.debug('{} is removed, but not for counting, within ignored directions, check done in {} s'.format(removed_tracklet, time.time() - check_start))
             #    continue
 
-            sink_node = removed_tracklet.path[-1]
-            source_node = removed_tracklet.path[0]
-            if sink_node == source_node:
-                self.logger.debug('same source {} and sink {}, skipped, check done in {} s'.format(source_node, sink_node, time.time() - check_start))
-                return
+            sink = removed_tracklet.path[-1]
+            source = removed_tracklet.path[0]
+            self._scene.mark_sink(removed_tracklet, source, sink)
 
             # check direction baesd flow
             self.check_direction_based_flow(removed_tracklet)
