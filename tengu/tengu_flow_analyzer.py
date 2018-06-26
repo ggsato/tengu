@@ -18,7 +18,7 @@ class TenguScene(object):
     A named TenguFlow is a set of TengFlows sharing the same name.
     """
 
-    def __init__(self, flow_blocks, direction_based_flows=[]):
+    def __init__(self, flow_blocks, direction_based_flows=[], clustering_threshold=100, flow_similarity_threshold=0.6, min_path_count_for_flow=10):
         super(TenguScene, self).__init__()
         self.logger= logging.getLogger(__name__)
         self._flow_blocks = flow_blocks
@@ -29,6 +29,11 @@ class TenguScene(object):
         self._updated_flow_nodes = []
         # {sink: {source: path}}
         self._path_map = {}
+        # current flows
+        self._flows = []
+        self._clustering_threshold = clustering_threshold
+        self._flow_similarity_threshold = flow_similarity_threshold
+        self._min_path_count_for_flow = min_path_count_for_flow
 
     def initialize(self, frame_shape):
         self._flow_blocks_size = (int(frame_shape[0]/self._flow_blocks[0]), int(frame_shape[1]/self._flow_blocks[1]))
@@ -120,6 +125,89 @@ class TenguScene(object):
         else:
             sink_map[source].increment_count()
 
+        # check total counts, and cluster if required
+        total_counts = 0
+        ordered_paths = []
+        for sink in self._path_map:
+            sink_map = self._path_map[sink]
+            for source in sink_map:
+                path = sink_map[source]
+                if path.count < self._min_path_count_for_flow:
+                    # ignore this time, not reset count, so will be checked once its count is more than enough
+                    continue
+                total_counts += path.count
+                ordered_paths.append(path)
+        if total_counts > self._clustering_threshold:
+            ordered_paths = sorted(ordered_paths, key=attrgetter('count'), reverse=True)
+            self.cluster_paths(ordered_paths)
+
+    def cluster_paths(self, ordered_paths):
+        """ cluster paths into flows
+        """
+        if len(self._flows) == 0:
+            # initialize
+            first_flow = TenguFlow()
+            first_flow.add(ordered_paths[0])
+            self._flows.append(first_flow)
+            del ordered_paths[0]
+
+        for path in ordered_paths:
+            flow = self.find_similar_flow(path)
+            if flow is None:
+                # create a new flow
+                flow = TenguFlow()
+                self._flows.append(flow)
+            flow.add_path(path)
+
+    def find_similar_flow(self, path):
+        """ find the most similar flow
+        """
+        most_similar_flow = None
+        best_similarity = self._flow_similarity_threshold
+        for flow in self._flows:
+            # calculate similarity
+            similarity = self.similarity(flow, path)
+            if similarity > best_similarity:
+                most_similar_flow = flow
+                best_similarity = similarity
+
+        return flow
+
+    def similarity(self, flow, path):
+        """ a key algorithm to calculate a similarity between a flow and a path
+
+        The main idea of path for a human is assumed here that:
+        1. where did it go?        (sink)
+        2. where did it come from? (source)
+
+        So, details on a way from source or to sink is not important.
+        This is especially true for a turning car.
+
+        A sink is more important than a source, but which is still required.
+        For example, a sink of a turning car and a car going straight of its diagonal road could be the same. 
+        Or if objects are moving far away, they are converging to a single sink.
+
+        Also note that a trajectory is usually not complete due to many reasons. 
+        """
+        similarity = 0
+
+        sink_similarity = 0
+        source_similarity = 0
+
+        # path adjacency
+        source_adj, sink_adj = flow.path_adjacency(path)
+
+        # sink similarity
+        sink_similarity = sink_adj        
+
+        # source similarity
+        source_similarity = source_adj
+
+        # equally important
+        similarity = (sink_similarity + source_similarity) / 2
+
+        return similarity
+
 class TenguFlow(object):
 
     """ TenguFlow is a cluster of TenguPaths
@@ -127,6 +215,33 @@ class TenguFlow(object):
 
     def __init__(self):
         super(TenguFlow, self).__init__()
+        # this is a collection of paths, sorted by descending order
+        self._similar_paths = []
+
+    @property
+    def similar_paths(self):
+        return self._similar_paths
+
+    def add_path(self, path):
+        path.set_flow(self)
+        self._similar_paths.append(path)
+        if len(self._similar_paths) > 2:
+            self._similar_paths = sorted(self._similar_paths, key=attrgetter('past_count'), reverse=True)
+
+    def path_adjacency(self, path):
+        """ calculate an average adjacency for a given path 
+        """
+        path_count = len(self._similar_paths)
+        if path_count == 0:
+            return 0, 0
+
+        # source, sink
+        adjacency = [0, 0]
+        for path in self._similar_paths:
+            adjacency[0] += 1 if path.source.adjacent(path.source) else 0
+            adjacency[1] += 1 if path.sink.adjacent(path.sink) else 0
+
+        return adjacency[0]/path_count, adjacency[1]/path_count
 
 class TenguPath(object):
 
@@ -138,14 +253,37 @@ class TenguPath(object):
         self._source = source
         self._sink = sink
         self._count = 1
+        self._past_count = 0
+        self._current_flow = None
+
+    @property
+    def source(self):
+        return self._source
+    
+    @property
+    def sink(self):
+        return self._sink
 
     @property
     def count(self):
         return self._count
-    
+
+    @property
+    def past_count(self):
+        return self._past_count
+
+    @property
+    def current_flow(self):
+        return self._current_flow
 
     def increment_count(self):
         self._count += 1
+
+    def set_flow(self, flow):
+        if self._current_flow != flow:
+            self._current_flow = flow
+        self._past_count += self._count
+        self._count = 0
 
 class DirectionBasedFlow(object):
 
@@ -316,7 +454,16 @@ class TenguFlowNode(object):
         return self._position
 
     def adjacent(self, another_flow):
-        return abs(self._y_blk - another_flow._y_blk) <= 1 and abs(self._x_blk - another_flow._x_blk) <= 1
+        """ returns True if another flow node is within a mean size of w and h
+        """
+        mean = self.means
+        mean_w = means[12] / 2
+        mean_h = means[13] / 2
+
+        x_diff = abs(self._position[0] - another_flow._position[0])
+        y_diff = abs(self._position[1] - another_flow._position[1])
+
+        return (x_diff < mean_w) and (y_diff < mean_h)
 
     def distance(self, another_flow):
         return max(abs(self._y_blk - another_flow._y_blk), abs(self._x_blk - another_flow._x_blk))
