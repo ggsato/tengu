@@ -18,17 +18,17 @@ class TenguScene(object):
     A named TenguFlow is a set of TengFlows sharing the same name.
     """
 
-    def __init__(self, flow_blocks, direction_based_flows=[], ss_df=None):
+    def __init__(self, flow_blocks, direction_based_flows=[]):
         super(TenguScene, self).__init__()
         self.logger= logging.getLogger(__name__)
         self._flow_blocks = flow_blocks
         self._flow_blocks_size = None
         self._blk_node_map = None
         self._direction_based_flows = direction_based_flows
-        # data frame
-        self._ss_df = SourceSinkDataFrame() if ss_df is None else ss_df
         # transient
         self._updated_flow_nodes = []
+        # {sink: {source: path}}
+        self._path_map = {}
 
     def initialize(self, frame_shape):
         self._flow_blocks_size = (int(frame_shape[0]/self._flow_blocks[0]), int(frame_shape[1]/self._flow_blocks[1]))
@@ -61,8 +61,6 @@ class TenguScene(object):
             js_direction_based_flows.append(direction_based_flow.serialize())
         js['direction_based_flows'] = js_direction_based_flows
 
-        js['ss_df'] = self._ss_df.serialize()
-
         return js
 
     @staticmethod
@@ -76,8 +74,7 @@ class TenguScene(object):
                 direction_based_flow = DirectionBasedFlow.deserialize(direction_based_flow_js)
                 direction_based_flows.append(direction_based_flow)
         flow_blocks = (js['flow_blocks_rows'], js['flow_blocks_cols'])
-        ss_df = SourceSinkDataFrame.deserialize(js['ss_df'])
-        tengu_scene = TenguScene(flow_blocks, direction_based_flows=direction_based_flows, ss_df=ss_df)
+        tengu_scene = TenguScene(flow_blocks, direction_based_flows=direction_based_flows)
         return tengu_scene
 
     @property
@@ -111,18 +108,44 @@ class TenguScene(object):
     def updated_flow_nodes(self):
         return self._updated_flow_nodes
 
-    def mark_sink(self, tracklet, source, sink):
+    def record_path(self, source, sink):
+        """ records a path, and triggers a clustering at intervals
+        """
+        if not self._path_map.has_key(sink):
+            self._path_map[sink] = {}
 
-        src_pos = source.blk_position
-        sink_pos = sink.blk_position
+        sink_map = self._path_map[sink]
+        if not sink_map.has_key(source):
+            sink_map[source] = TenguPath(source, sink)
+        else:
+            sink_map[source].increment_count()
 
-        ss_dict = {}
-        ss_dict['x_blk_src'] = {tracklet.obj_id: src_pos[0]}
-        ss_dict['y_blk_src'] = {tracklet.obj_id: src_pos[1]}
-        ss_dict['x_blk_sink'] = {tracklet.obj_id: sink_pos[0]}
-        ss_dict['y_blk_sink'] = {tracklet.obj_id: sink_pos[1]}
-        ss_dict['frame_ix'] = {tracklet.obj_id: TenguTracker._global_updates}
-        self._ss_df.append(ss_dict)
+class TenguFlow(object):
+
+    """ TenguFlow is a cluster of TenguPaths
+    """
+
+    def __init__(self):
+        super(TenguFlow, self).__init__()
+
+class TenguPath(object):
+
+    """ TenguPath represents a pair of TenguFlowNodes(source and sink)
+    """
+
+    def __init__(self, source, sink):
+        super(TenguPath, self).__init__()
+        self._source = source
+        self._sink = sink
+        self._count = 1
+
+    @property
+    def count(self):
+        return self._count
+    
+
+    def increment_count(self):
+        self._count += 1
 
 class DirectionBasedFlow(object):
 
@@ -163,8 +186,6 @@ class DirectionBasedFlow(object):
         else:
             angle_movements = []
         return DirectionBasedFlow(js_group, True if js_high_priority == 1 else False, direction_range, angle_movements)
-
-    #### properties to resemble a TenguFlow
 
     @property
     def group(self):
@@ -208,37 +229,6 @@ class DirectionBasedFlow(object):
 
     def add_tracklet(self, tracklet):
         self._tracklets.append(tracklet)
-
-class SourceSinkDataFrame(object):
-
-    def __init__(self, df=None):
-        self._df = df
-
-    def append(self, ss_dict):
-        """ append an array of predicated values
-        """
-        new_df = DataFrame.from_dict(ss_dict)
-        if self._df is None:
-            self._df = new_df
-        else:
-            self._df = self._df.append(new_df)
-
-    @property
-    def mean_series(self):
-
-        if self._df is None:
-            return None
-
-        return self._df.mean()
-
-    def serialize(self):
-        if self._df is None:
-            return None
-        return self._df.to_json(orient='records')
-
-    @staticmethod
-    def deserialize(js):
-        return SourceSinkDataFrame(df=pd.read_json(js, orient='records'))
 
 class StatsDataFrame(object):
     """ A wraper object of stats DataFrame
@@ -568,7 +558,7 @@ class TenguFlowAnalyzer(object):
 
             sink = removed_tracklet.path[-1]
             source = removed_tracklet.path[0]
-            self._scene.mark_sink(removed_tracklet, source, sink)
+            self._scene.record_path(source, sink)
 
             # check direction baesd flow
             self.check_direction_based_flow(removed_tracklet)
