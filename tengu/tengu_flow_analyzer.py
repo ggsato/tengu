@@ -18,13 +18,12 @@ class TenguScene(object):
     A named TenguFlow is a set of TengFlows sharing the same name.
     """
 
-    def __init__(self, flow_blocks, direction_based_flows=[], clustering_threshold=100, flow_similarity_threshold=0.6, min_path_count_for_flow=10):
+    def __init__(self, flow_blocks, clustering_threshold=100, flow_similarity_threshold=0.6, min_path_count_for_flow=10):
         super(TenguScene, self).__init__()
         self.logger= logging.getLogger(__name__)
         self._flow_blocks = flow_blocks
         self._flow_blocks_size = None
         self._blk_node_map = None
-        self._direction_based_flows = direction_based_flows
         # transient
         self._updated_flow_nodes = []
         # {sink: {source: path}}
@@ -61,25 +60,14 @@ class TenguScene(object):
                 flow_node = self._blk_node_map[y_blk][x_blk]
                 js_blk_node_map[y_blk][x_blk] = flow_node.serialize(simple=False)
         js['blk_node_map'] = js_blk_node_map
-        js_direction_based_flows = []
-        for direction_based_flow in self._direction_based_flows:
-            js_direction_based_flows.append(direction_based_flow.serialize())
-        js['direction_based_flows'] = js_direction_based_flows
 
         return js
 
     @staticmethod
     def deserialize(js):
         logging.debug('deserializing {}'.format(js))
-        # direction based flows
-        direction_based_flows = []
-        if js.has_key('direction_based_flows'):
-            direction_based_flows_js = js['direction_based_flows']
-            for direction_based_flow_js in direction_based_flows_js:
-                direction_based_flow = DirectionBasedFlow.deserialize(direction_based_flow_js)
-                direction_based_flows.append(direction_based_flow)
         flow_blocks = (js['flow_blocks_rows'], js['flow_blocks_cols'])
-        tengu_scene = TenguScene(flow_blocks, direction_based_flows=direction_based_flows)
+        tengu_scene = TenguScene(flow_blocks)
         return tengu_scene
 
     @property
@@ -92,10 +80,6 @@ class TenguScene(object):
 
     def get_flow_node(self, x_blk, y_blk):
         return self._blk_node_map[y_blk][x_blk]
-
-    @property
-    def direction_based_flows(self):
-        return self._direction_based_flows
 
     def update_flow_node(self, flow_node, tracklet):
         """ update through scene to keep updated ones at this time step
@@ -207,6 +191,7 @@ class TenguScene(object):
         similarity = (sink_similarity + source_similarity) / 2
 
         return similarity
+    
 
 class TenguFlow(object):
 
@@ -707,47 +692,7 @@ class TenguFlowAnalyzer(object):
             source = removed_tracklet.path[0]
             self._scene.record_path(source, sink)
 
-            # check direction baesd flow
-            self.check_direction_based_flow(removed_tracklet)
-
         self.logger.debug('finished removed {} tracklet in {} s'.format(len(removed_tracklets), time.time() - start))
-
-    def check_direction_based_flow(self, tracklet):
-        """ check direction based flow if available
-
-        A direction based flow is only characterized by a specific range of directions.
-        If its priority is high, it wins over an already assigned path based flow,
-        otherwise, it is evaluated only when no path based flow is assigned.
-        """
-        start = time.time()
-        direction_based_flows = self._scene.direction_based_flows
-        for direction_based_flow in direction_based_flows:
-
-            # check d based flow
-            if direction_based_flow.direction_from is not None:
-                if direction_based_flow.direction_from < tracklet.direction and tracklet.direction <= direction_based_flow.direction_to:
-                    pass
-                else:
-                    continue
-
-            # check angle movements if required
-            angle_movements_ok = False
-            if direction_based_flow.angle_movements_from is not None:
-                if tracklet.angle_movement == Tracklet.angle_movement_not_available:
-                    pass
-                elif direction_based_flow.angle_movements_from < tracklet.angle_movement and tracklet.angle_movement <= direction_based_flow.angle_movements_to:
-                    angle_movements_ok = True
-            else:
-                angle_movements_ok = True
-            if not angle_movements_ok:
-                continue
-
-            direction_based_flow.add_tracklet(tracklet)
-            tracklet.mark_removed()
-            self.logger.debug('found a matching direction based flow {} for {}'.format(direction_based_flow, tracklet))
-            break
-
-        self.logger.debug('checked direction based flow in {} s'.format(time.time() - start))
 
     def save_tracklet(self, tracklet):
         

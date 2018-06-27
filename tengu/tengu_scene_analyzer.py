@@ -20,17 +20,8 @@ class TenguSceneAnalyzer(object):
         CLASS 0     | CLASS N     | ... | CLASS N 
         cA0-1 cA0-2 | cAN-1 cAN-2 | ... | cZN-1 cZN-2
         """
-        # {'group': [vehicles]}
+        # {'group': [vehicle_dicts]}
         counted_tracklets = {}
-        # check direction based flows if available
-        if len(scene.direction_based_flows) > 0:
-            for direction_based_flow in scene.direction_based_flows:
-                for tracklet in direction_based_flow.tracklets:
-                    self.count_tracklet(tracklet, direction_based_flow.group)
-                    direction_based_flow.remove_tracklet(tracklet)
-                    if not counted_tracklets.has_key(direction_based_flow.group):
-                        counted_tracklets[direction_based_flow.group] = []
-                    counted_tracklets[direction_based_flow.group].append(tracklet.to_dict())
 
         return counted_tracklets
 
