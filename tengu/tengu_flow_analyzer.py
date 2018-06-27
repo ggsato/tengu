@@ -109,7 +109,9 @@ class TenguScene(object):
         else:
             sink_map[source].increment_count()
 
+    def check_and_cluster_paths(self):
         # check total counts, and cluster if required
+        updated = False
         total_counts = 0
         ordered_paths = []
         for sink in self._path_map:
@@ -124,6 +126,9 @@ class TenguScene(object):
         if total_counts > self._clustering_threshold:
             ordered_paths = sorted(ordered_paths, key=attrgetter('count'), reverse=True)
             self.cluster_paths(ordered_paths)
+            updated = True
+
+        return updated
 
     def cluster_paths(self, ordered_paths):
         """ cluster paths into flows
@@ -191,6 +196,10 @@ class TenguScene(object):
         similarity = (sink_similarity + source_similarity) / 2
 
         return similarity
+
+    @property
+    def flows(self):
+        return self._flows
     
 
 class TenguFlow(object):
@@ -227,6 +236,14 @@ class TenguFlow(object):
             adjacency[1] += 1 if path.sink.adjacent(path.sink) else 0
 
         return adjacency[0]/path_count, adjacency[1]/path_count
+
+    def serialize(self):
+        js = {}
+        paths = []
+        for path in self._similar_paths:
+            paths.append(path.serialize())
+        js['paths'] = paths
+        return js
 
 class TenguPath(object):
 
@@ -270,88 +287,14 @@ class TenguPath(object):
         self._past_count += self._count
         self._count = 0
 
-class DirectionBasedFlow(object):
-
-    def __init__(self, group, high_priority=False, direction_range=[], angle_movements=[]):
-        super(DirectionBasedFlow, self).__init__()
-        self._group = group
-        self._high_priority = high_priority
-        # (from, to)
-        self._direction_range = direction_range
-        # (from, to)
-        self._angle_movements = angle_movements
-        self._tracklets = []
-
-    def __repr__(self):
-        return 'group={}, high_priority={}, direction_range={}, angle_movements={}'.format(self._group, self._high_priority, self._direction_range, self._angle_movements)
-
     def serialize(self):
         js = {}
-        js['direction_from'] = self.direction_from
-        js['direction_to'] = self.direction_to
-        js['angle_movements_from'] = self.angle_movements_from
-        js['angle_movements_to'] = self.angle_movements_to
-        js['high_priority'] = 1 if self._high_priority else 0
-        js['group'] = self._group
+        src_blk_pos = self._source.blk_position
+        js['source'] = {'x_blk': src_blk_pos[0], 'y_blk': src_blk_pos[1]}
+        sink_blk_pos = self._sink.blk_position
+        js['sink'] = {'x_blk': sink_blk_pos[0], 'y_blk': sink_blk_pos[1]}
+        js['past_count'] = self._past_count
         return js
-
-    @staticmethod
-    def deserialize(js):
-        logging.debug('deserializing {}'.format(js))
-        js_group = js['group']
-        js_high_priority = js['high_priority']
-        if js.has_key('direction_from') and js.has_key('direction_to'):
-            direction_range = [js['direction_from'], js['direction_to']]
-        else:
-            direction_range = []
-        if js.has_key('angle_movements_from') and js.has_key('angle_movements_to'):
-            angle_movements = [js['angle_movements_from'], js['angle_movements_to']]
-        else:
-            angle_movements = []
-        return DirectionBasedFlow(js_group, True if js_high_priority == 1 else False, direction_range, angle_movements)
-
-    @property
-    def group(self):
-        return self._group
-
-    def remove_tracklet(self, tracklet):
-        del self._tracklets[self._tracklets.index(tracklet)]
-
-    # own properties
-    @property
-    def high_priority(self):
-        return self._high_priority
-
-    @property
-    def direction_from(self):
-        if len(self._direction_range) == 0:
-            return None
-        return self._direction_range[0]
-
-    @property
-    def direction_to(self):
-        if len(self._direction_range) == 0:
-            return None
-        return self._direction_range[1]
-
-    @property
-    def angle_movements_from(self):
-        if len(self._angle_movements) == 0:
-            return None
-        return self._angle_movements[0]
-
-    @property
-    def angle_movements_to(self):
-        if len(self._angle_movements) == 0:
-            return None
-        return self._angle_movements[1]
-
-    @property
-    def tracklets(self):
-        return self._tracklets
-
-    def add_tracklet(self, tracklet):
-        self._tracklets.append(tracklet)
 
 class StatsDataFrame(object):
     """ A wraper object of stats DataFrame
@@ -582,11 +525,16 @@ class TenguFlowAnalyzer(object):
         # removed tracklets
         removed_tracklets = self._last_tracklets - current_tracklets
         self.logger.debug('removing {} tracklets out of {}'.format(len(removed_tracklets), len(current_tracklets)))
-        self.finish_removed_tracklets(removed_tracklets)
+        recorded = self.finish_removed_tracklets(removed_tracklets)
+        flows_updated = False
+        if recorded > 0:
+            flows_updated = self._scene.check_and_cluster_paths()
 
         self._last_tracklets = current_tracklets
 
         self.logger.debug('update flow graph took {} s'.format(time.time() - start))
+
+        return flows_updated
 
     def flow_node_at(self, x, y):
         y_blk = self.get_y_blk(y)
@@ -660,6 +608,7 @@ class TenguFlowAnalyzer(object):
 
         start = time.time()
         
+        recorded = 0
         for removed_tracklet in removed_tracklets:
             self.logger.debug('checking removed tracklet {} in {} s'.format(removed_tracklet.obj_id, time.time() - start))
 
@@ -691,8 +640,11 @@ class TenguFlowAnalyzer(object):
             sink = removed_tracklet.path[-1]
             source = removed_tracklet.path[0]
             self._scene.record_path(source, sink)
+            recorded += 1
 
         self.logger.debug('finished removed {} tracklet in {} s'.format(len(removed_tracklets), time.time() - start))
+
+        return recorded
 
     def save_tracklet(self, tracklet):
         

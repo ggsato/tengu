@@ -41,6 +41,7 @@ class Tengu(object):
 
     EVENT_TRACKLETS = 'event_tracklets'
     EVENT_FLOW_NODES = 'event_flow_nodes'
+    EVENT_FLOWS = 'event_flows'
     EVENT_COUNTED_TRACKLETS = 'event_counted_tracklets'
     EVENT_SCENE_SAVE = 'event_scene_save'
 
@@ -182,8 +183,11 @@ class Tengu(object):
                     event_dict[Tengu.EVENT_DETECTION_CLASSES] = output_dict['c']
                     event_dict[Tengu.EVENT_TRACKLETS] = output_dict['t']
                     event_dict[Tengu.EVENT_FRAME_NO] = output_dict['n']
-                    event_dict[Tengu.EVENT_FLOW_NODES] = output_dict['f']
                     event_dict[Tengu.EVENT_COUNTED_TRACKLETS] = output_dict['ct']
+
+                    scene = output_dict['s']
+                    event_dict[Tengu.EVENT_FLOW_NODES] = scene['flow_nodes']
+                    event_dict[Tengu.EVENT_FLOWS] = scene['flows']
 
 
                 # put in the queue

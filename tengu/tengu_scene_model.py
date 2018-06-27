@@ -130,7 +130,7 @@ class TenguSceneModel(Process):
                         continue
 
                     # update the model
-                    detections, class_names, tracklets = self.update_model(sensor_output)
+                    detections, class_names, tracklets, flows_updated = self.update_model(sensor_output)
 
                     if detections is None and self._finished.value != 0:
                         # shutdown in progress
@@ -146,10 +146,15 @@ class TenguSceneModel(Process):
                     tracklet_dicts = []
                     for tracklet in tracklets:
                         tracklet_dicts.append(tracklet.to_dict())
-                    flow_nodes_dicts = []
+                    flow_nodes_list = []
                     for flow_node in self._flow_analyzer.scene.updated_flow_nodes:
-                        flow_nodes_dicts.append(flow_node.serialize())
-                    output_dict = {'d': detections, 'c': class_names, 't': tracklet_dicts, 'n': self._t, 'f': flow_nodes_dicts, 'ct': counted_tracklets}
+                        flow_nodes_list.append(flow_node.serialize())
+                    flows_list = []
+                    if flows_updated:
+                        for flow in self._flow_analyzer.scene.flows:
+                            flows_list.append(flow.serialize())
+                    scene_dict = {'flow_nodes': flow_nodes_list, 'flows': flows_list}
+                    output_dict = {'d': detections, 'c': class_names, 't': tracklet_dicts, 'n': self._t, 's': scene_dict, 'ct': counted_tracklets}
                     while not done and elapsed < self._output_queue_timeout_in_secs and self._finished.value == 0:
                         try:
                             self.logger.debug('putting output dict {} to an output queue'.format(output_dict))
@@ -229,11 +234,11 @@ class TenguSceneModel(Process):
         tracklets = self._tracker.resolve_tracklets(detections, class_names)
 
         # update flow graph
-        self._flow_analyzer.update_flow_graph(tracklets)
+        flows_updated = self._flow_analyzer.update_flow_graph(tracklets)
 
         self.logger.info('model was updated at time {} in {} s'.format(self._t, time.time() - start))
 
-        return detections, class_names, tracklets
+        return detections, class_names, tracklets, flows_updated
 
     def finish(self):
         if self._finished.value == -1:
