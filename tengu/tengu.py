@@ -212,7 +212,7 @@ class Tengu(object):
                     break
 
                 self._current_model_frame.value = event_dict[Tengu.EVENT_FRAME_NO]
-                self.logger.info('analyzed frame no {} in {} s'.format(self._current_model_frame.value, (time.time() - frame_analysis_start)))
+                self.logger.debug('analyzed frame no {} in {} s'.format(self._current_model_frame.value, (time.time() - frame_analysis_start)))
 
                 # update time of tmp cleaner
                 while self._tmp_image_cleaner.current_frame < self._camera_reader.current_frame:
@@ -435,7 +435,7 @@ class CameraReader(Process):
                         elapsed = time.time() - start
                     self.logger.debug('took {} to put a frame image path in a scene queue'.format(elapsed))
 
-                self.logger.info('put frame img and its path at time {} in {} s'.format(self._current_frame.value, time.time() - frame_start))
+                self.logger.debug('put frame img and its path at time {} in {} s'.format(self._current_frame.value, time.time() - frame_start))
 
                 # increment
                 self._current_frame.value += 1
@@ -475,7 +475,7 @@ class CameraReader(Process):
         else:
             cropped = resized
 
-        self.logger.info('preprocessing done with {}, {} in {} s'.format(roi, scale, time.time() - start))
+        self.logger.debug('preprocessing done with {}, {} in {} s'.format(roi, scale, time.time() - start))
         
         return cropped
 

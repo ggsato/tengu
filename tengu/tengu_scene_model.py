@@ -30,7 +30,7 @@ class TenguSceneModel(Process):
         self.logger= logging.getLogger(__name__)
 
         # sensor
-        self._detector = DetectNetDetector(8890, interval=Value('i', 1))
+        self._detector = DetectNetDetector(8890, interval=Value('i', 1), max_detection_size=192)
         self._frame_sensor = TenguObjectDetectionSensor(detector=self._detector)
 
         # flow analyzer
@@ -116,7 +116,7 @@ class TenguSceneModel(Process):
                     self._flow_analyzer.save(save_path)
                     self.logger.info('saved the scene to {}'.format(save_path))
                 if frame_img_path is not None:
-                    self.logger.info('got a frame img path from an input queue')
+                    self.logger.debug('got a frame img path from an input queue')
                     frame_sensor_item = TenguSensorItem(self._t, frame_img_path)
                     # feed first
                     try:
@@ -167,7 +167,7 @@ class TenguSceneModel(Process):
 
                     model_updated = True
 
-                    self.logger.info('model update at time {} took {} s with {} detections'.format(self._t, (time.time() - model_update_start), len(detections)))
+                    self.logger.debug('model update at time {} took {} s with {} detections'.format(self._t, (time.time() - model_update_start), len(detections)))
 
                 if not model_updated:
                     self.logger.debug('no frame img is avaialble in an input queue, queue size = {}, finished? {}'.format(self._intput_queue.qsize(), self._finished.value > 0))
@@ -236,7 +236,7 @@ class TenguSceneModel(Process):
         # update flow graph
         flows_updated = self._flow_analyzer.update_flow_graph(tracklets)
 
-        self.logger.info('model was updated at time {} in {} s'.format(self._t, time.time() - start))
+        self.logger.debug('model was updated at time {} in {} s'.format(self._t, time.time() - start))
 
         return detections, class_names, tracklets, flows_updated
 

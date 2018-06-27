@@ -13,14 +13,9 @@ from tengu_tracker import TenguTracker, Tracklet
 
 class TenguScene(object):
 
-    """
-    TenguScene is a set of named TenguFlows.
-    A named TenguFlow is a set of TengFlows sharing the same name.
-    """
-
-    def __init__(self, flow_blocks, clustering_threshold=100, flow_similarity_threshold=0.6, min_path_count_for_flow=10):
+    def __init__(self, flow_blocks, clustering_threshold=10, flow_similarity_threshold=0.6, min_path_count_for_flow=3):
         super(TenguScene, self).__init__()
-        self.logger= logging.getLogger(__name__)
+        self.logger = logging.getLogger(__name__)
         self._flow_blocks = flow_blocks
         self._flow_blocks_size = None
         self._blk_node_map = None
@@ -65,7 +60,7 @@ class TenguScene(object):
 
     @staticmethod
     def deserialize(js):
-        logging.debug('deserializing {}'.format(js))
+        self.logger.debug('deserializing {}'.format(js))
         flow_blocks = (js['flow_blocks_rows'], js['flow_blocks_cols'])
         tengu_scene = TenguScene(flow_blocks)
         return tengu_scene
@@ -105,19 +100,25 @@ class TenguScene(object):
 
         sink_map = self._path_map[sink]
         if not sink_map.has_key(source):
+            self.logger.info('created a new TenguPath from {} to {}'.format(source.blk_position, sink.blk_position))
             sink_map[source] = TenguPath(source, sink)
         else:
+            self.logger.info('incrementing count from {} to {}'.format(source.blk_position, sink.blk_position))
             sink_map[source].increment_count()
+            self.logger.info('the current count = {}'.format(sink_map[source].count))
 
     def check_and_cluster_paths(self):
         # check total counts, and cluster if required
+        self.logger.info('checking and clustering paths...')
         updated = False
         total_counts = 0
         ordered_paths = []
+        total_paths = 0
         for sink in self._path_map:
             sink_map = self._path_map[sink]
             for source in sink_map:
                 path = sink_map[source]
+                total_paths += 1
                 if path.count < self._min_path_count_for_flow:
                     # ignore this time, not reset count, so will be checked once its count is more than enough
                     continue
@@ -127,16 +128,20 @@ class TenguScene(object):
             ordered_paths = sorted(ordered_paths, key=attrgetter('count'), reverse=True)
             self.cluster_paths(ordered_paths)
             updated = True
+            self.logger.info('paths are clustered into {} flows'.format(len(self._flows)))
+        else:
+            self.logger.info('total count is {}, path count is {}, skipping clustering...'.format(total_counts, total_paths))
 
         return updated
 
     def cluster_paths(self, ordered_paths):
         """ cluster paths into flows
         """
+
         if len(self._flows) == 0:
             # initialize
             first_flow = TenguFlow()
-            first_flow.add(ordered_paths[0])
+            first_flow.add_path(ordered_paths[0])
             self._flows.append(first_flow)
             del ordered_paths[0]
 
@@ -160,7 +165,7 @@ class TenguScene(object):
                 most_similar_flow = flow
                 best_similarity = similarity
 
-        return flow
+        return most_similar_flow
 
     def similarity(self, flow, path):
         """ a key algorithm to calculate a similarity between a flow and a path
@@ -193,7 +198,7 @@ class TenguScene(object):
         source_similarity = source_adj
 
         # equally important
-        similarity = (sink_similarity + source_similarity) / 2
+        similarity = (sink_similarity + source_similarity) / 2.
 
         return similarity
 
@@ -209,6 +214,7 @@ class TenguFlow(object):
 
     def __init__(self):
         super(TenguFlow, self).__init__()
+        self.logger = logging.getLogger(__name__)
         # this is a collection of paths, sorted by descending order
         self._similar_paths = []
 
@@ -222,18 +228,20 @@ class TenguFlow(object):
         if len(self._similar_paths) > 2:
             self._similar_paths = sorted(self._similar_paths, key=attrgetter('past_count'), reverse=True)
 
-    def path_adjacency(self, path):
+    def path_adjacency(self, another_path):
         """ calculate an average adjacency for a given path 
         """
         path_count = len(self._similar_paths)
         if path_count == 0:
-            return 0, 0
+            return 0., 0.
 
         # source, sink
-        adjacency = [0, 0]
+        adjacency = [0., 0.]
         for path in self._similar_paths:
-            adjacency[0] += 1 if path.source.adjacent(path.source) else 0
-            adjacency[1] += 1 if path.sink.adjacent(path.sink) else 0
+            adjacency[0] += 1. if path.source.adjacent(another_path.source) else 0
+            adjacency[1] += 1. if path.sink.adjacent(another_path.sink) else 0
+
+        self.logger.info('path adjacency = {}, path_count = {}'.format(adjacency, path_count))
 
         return adjacency[0]/path_count, adjacency[1]/path_count
 
@@ -346,7 +354,7 @@ class TenguFlowNode(object):
     """ A FlowNode keeps statistical information about its own region
     """
 
-    def __init__(self, y_blk, x_blk, position, stats=None):
+    def __init__(self, y_blk, x_blk, position, stats=None, adj_ratio=1.0):
         super(TenguFlowNode, self).__init__()
         self._y_blk = y_blk
         self._x_blk = x_blk
@@ -354,6 +362,7 @@ class TenguFlowNode(object):
         self._position = position
         # stats
         self._stats = StatsDataFrame()
+        self._adj_ratio = adj_ratio
 
     def __repr__(self):
         return 'FlowNode@[{},{}], {}\n{}'.format(self._y_blk, self._x_blk, self._position, self._stats)
@@ -381,15 +390,15 @@ class TenguFlowNode(object):
     def position(self):
         return self._position
 
-    def adjacent(self, another_flow):
+    def adjacent(self, another_flow_node):
         """ returns True if another flow node is within a mean size of w and h
         """
-        mean = self.means
-        mean_w = means[12] / 2
-        mean_h = means[13] / 2
+        means = self.means
+        mean_w = self._adj_ratio * means[12]
+        mean_h = self._adj_ratio * means[13]
 
-        x_diff = abs(self._position[0] - another_flow._position[0])
-        y_diff = abs(self._position[1] - another_flow._position[1])
+        x_diff = abs(self._position[0] - another_flow_node._position[0])
+        y_diff = abs(self._position[1] - another_flow_node._position[1])
 
         return (x_diff < mean_w) and (y_diff < mean_h)
 
@@ -448,7 +457,7 @@ class TenguFlowAnalyzer(object):
 
     """
     """
-    def __init__(self, scene_file=None, flow_blocks=(20, 30), **kwargs):
+    def __init__(self, scene_file=None, flow_blocks=(20, 30), save_untrackled_details=False, **kwargs):
         super(TenguFlowAnalyzer, self).__init__()
         self.logger= logging.getLogger(__name__)
         self._initialized = False
@@ -459,6 +468,7 @@ class TenguFlowAnalyzer(object):
         self._frame_shape = None
         # save folder
         self._output_folder = 'output'
+        self._save_untracked_details = save_untrackled_details
 
     @property
     def initialized(self):
@@ -614,8 +624,9 @@ class TenguFlowAnalyzer(object):
 
             check_start = time.time()
             
-            # save this tracklet details
-            self.save_tracklet(removed_tracklet)
+            if self._save_untracked_details:
+                # save this tracklet details
+                self.save_tracklet(removed_tracklet)
 
             if removed_tracklet.speed < 0:
                 self.logger.debug('{} has too short path, speed is not available, not counted, check done in {} s'.format(removed_tracklet, time.time() - check_start))
@@ -636,6 +647,10 @@ class TenguFlowAnalyzer(object):
             #if self._tracker.ignore_tracklet(removed_tracklet):
             #    self.logger.debug('{} is removed, but not for counting, within ignored directions, check done in {} s'.format(removed_tracklet, time.time() - check_start))
             #    continue
+
+            if not self._save_untracked_details:
+                # save this tracklet details
+                self.save_tracklet(removed_tracklet)
 
             sink = removed_tracklet.path[-1]
             source = removed_tracklet.path[0]
