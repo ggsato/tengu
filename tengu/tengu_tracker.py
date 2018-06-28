@@ -27,8 +27,8 @@ class Tracklet(TenguObject):
     # angle movement when not enough records exist
     angle_movement_not_available = 9.9
 
-    def __init__(self, x0, **kwargs):
-        super(Tracklet, self).__init__(x0, **kwargs)
+    def __init__(self, x0, object_size, **kwargs):
+        super(Tracklet, self).__init__(x0, object_size, **kwargs)
         self.logger = logging.getLogger(__name__)
         Tracklet._class_obj_id += 1
         # incremental unique object id
@@ -75,7 +75,6 @@ class Tracklet(TenguObject):
         tracklet_dict['variance_speed'] = self.variance_speed
         tracklet_dict['variance_accel'] = self.variance_accel
         tracklet_dict['error'] = self.error
-        tracklet_dict['r_std'] = self.R_std
 
         return tracklet_dict
 
@@ -249,9 +248,12 @@ class Tracklet(TenguObject):
         return self._path
 
     def add_flow_node_to_path(self, flow_node):
+        """ entering into a new flow node area
+        """
         start = time.time()
         self._path.append(flow_node)
         self._milestones.append([self.center, self.rect ,TenguTracker._global_updates, self.error])
+        self.update_object_size(self.rect[2:])
         self.logger.debug('added flow node to path of {} in {} s'.format(self.obj_id, time.time() - start))
 
     @property
@@ -416,7 +418,8 @@ class TenguTracker(object):
         return copy.copy(self._tracklets)
 
     def resolve_tracklets(self, detections, class_names):
-        """ update existing tracklets with new detections
+        """ resolve new detections by updating existing tracklets or creating new ones
+
         This is the main task of Tracker, which consists of the following jobs:
         1. tracklet initialization and any other preparations required to complete this task
         2. calculate cost matrix of existing tracklets and new detections
@@ -426,6 +429,7 @@ class TenguTracker(object):
         Also, Tracklet does the following book keeping jobs of tracklets
         5. update existing tracklets that had no assignment
         6. find obsolete tracklets among existing tracklets, and clean them up if any
+
         """
         TenguTracker._global_updates += 1
 
@@ -478,12 +482,14 @@ class TenguTracker(object):
 
     def calculate_cost_matrix(self, detections):
         """ Calculates cost matrix
+
         Given the number of tracked objects, m, and the number of detections, n,
         cost matrix consists of mxn matrix C.
         Cmn: a cost at (m, n), 0<=Cmn<=Infinity
         
         Then, such a cost matrix is optimized to produce a combination of minimum cost assignments.
         For more information, see Hungarian algorithm(Wikipedia), scipy.optimize.linear_sum_assignment
+
         """
         cost_matrix = TenguTracker.create_empty_cost_matrix(len(self._tracklets), len(detections))
         for t, tracklet in enumerate(self._tracklets):
@@ -583,7 +589,7 @@ class TenguTracker(object):
             x0 = [center[0], 0., 0., center[1], 0., 0.]
         else:
             x0 = [center[0], means[1], means[2], center[1], means[4], means[5]]
-        to = Tracklet(x0)
+        to = Tracklet(x0, detection[2:])
         to.update_with_assignment(Assignment(detection), class_name)
         return to
 
@@ -664,21 +670,3 @@ class TenguTracker(object):
         #    return diff > 0
 
         return diff > self._obsoletion
-
-    def ignore_tracklet(self, tracklet):
-        """ this is called from Flow Analyzer to check if this tracklet should be considered
-        """
-        start = time.time()
-        ignore_tracklet = False
-        if self._ignore_direction_ranges is not None:
-            if tracklet.direction is None:
-                self.logger.debug('{} has no direction yet, will be ignored'.format(tracklet))
-                ignore_tracklet = True
-            else:
-                for ignore_direction_range in self._ignore_direction_ranges:
-                    if tracklet.direction >= ignore_direction_range[0] and tracklet.direction < ignore_direction_range[1]:
-                        self.logger.debug('{} is moving towards the direction between ignored ranges'.format(tracklet))
-                        ignore_tracklet = True
-                        break
-        self.logger.debug('checked if ignore tracklet in {} s'.format(time.time() - start))
-        return ignore_tracklet

@@ -28,9 +28,8 @@ class VehicleFilter(KalmanFilter):
     ])
     
     
-    def __init__(self, x0, max_detection_size, detection_error_ratio, decay=0.1, coefficient=0.1):
+    def __init__(self, x0, vehicle_size, detection_error_ratio, decay=0.1, coefficient=0.1):
         super(VehicleFilter, self).__init__(dim_x=VehicleFilter.DIM_X, dim_z=VehicleFilter.DIM_Z)
-        self._max_detection_size = max_detection_size
         self._detection_error_ratio = detection_error_ratio
         
         self.P = np.array([
@@ -42,7 +41,7 @@ class VehicleFilter(KalmanFilter):
             [0, 0, 0, 0, 0, decay**4]
         ])
     
-        self.Q = np.array([
+        self.Q_BASE = np.array([
             [0, 0, 0, 0, 0, 0],
             [0, 0, 0, 0, 0, 0],
             [0, 0, decay**4, 0, 0, 0],
@@ -51,27 +50,38 @@ class VehicleFilter(KalmanFilter):
             [0, 0, 0, 0, 0, decay**4]
         ])
     
-        self.R = np.array([
+        self.R_BASE = np.array([
             [coefficient**2, 0],
             [0, coefficient**2]
         ])
-        
-        # key statistical properties
-        self._std_dev = (self._max_detection_size * self._detection_error_ratio) / 3
-        self._variance = self._std_dev **2
-        
-        # matrices
-        self.P *= self._variance
-        self.Q *= self._variance
-        self.R *= self._variance
+
         self.F = VehicleFilter.F_BASE * 1
         self.H = VehicleFilter.H_BASE * 1
 
+        self.update_vehicle_size(vehicle_size)
+
         # initialize
         self.x = np.array([x0]).T
+        self.P[:3, :] *= self._variances[0]
+        self.P[3:, :] *= self._variances[1]
         
-    def scale(self, x, y, w, h):
-        return [x * self._max_detection_size / w, y * self._max_detection_size / h]
+    def update_vehicle_size(self, new_vehicle_size):
+        """ update properties dependent on std_dev, variance, Q, and R
+        """
+        self._vehicle_size = np.array([new_vehicle_size[0], new_vehicle_size[1]])
+
+        # key statistical properties
+        self._std_devs = self._vehicle_size * self._detection_error_ratio / 3
+        self._variances = self._std_devs **2
+
+        self.Q = self.Q_BASE * 1
+        self.R = self.R_BASE * 1
+        # for x
+        self.Q[:3, :] *= self._variances[0]
+        self.R[:1, :] *= self._variances[0]
+        # for y
+        self.Q[3:, :] *= self._variances[1]
+        self.R[1:, :] *= self._variances[1]
 
 class TenguObject(object):
     """ TenguObject is a base class of any travelling object classes in Tengu framework.
@@ -82,9 +92,9 @@ class TenguObject(object):
 
     _very_small_value = 0.000001
 
-    def __init__(self, x0, max_detection_size=192, detection_error_ratio=0.1, decay=0.1, coefficient=0.5):
+    def __init__(self, x0, object_size, detection_error_ratio=0.5, decay=0.1, coefficient=0.5):
         super(TenguObject, self).__init__()
-        self._filter = VehicleFilter(x0, max_detection_size, detection_error_ratio, decay=decay, coefficient=coefficient)
+        self._filter = VehicleFilter(x0, object_size, detection_error_ratio, decay=decay, coefficient=coefficient)
         self._zs = []
         self._xs = []
         self._covs = []
@@ -261,9 +271,8 @@ class TenguObject(object):
 
         return [self._covs[-1][2][2], self._covs[-1][5][5]]
 
-    @property
-    def R_std(self):
-        return math.sqrt(self._filter.R[0][0])
+    def update_object_size(self, new_detection_size):
+        self._filter.update_vehicle_size(new_detection_size)
 
     def history(self):
 

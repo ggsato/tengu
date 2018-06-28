@@ -13,7 +13,7 @@ from tengu_tracker import TenguTracker, Tracklet
 
 class TenguScene(object):
 
-    def __init__(self, flow_blocks, clustering_threshold=10, flow_similarity_threshold=0.6, min_path_count_for_flow=3):
+    def __init__(self, flow_blocks, clustering_threshold=5, flow_similarity_threshold=0.6, min_path_count_for_flow=3):
         super(TenguScene, self).__init__()
         self.logger = logging.getLogger(__name__)
         self._flow_blocks = flow_blocks
@@ -394,6 +394,8 @@ class TenguFlowNode(object):
         """ returns True if another flow node is within a mean size of w and h
         """
         means = self.means
+        if means is None:
+            return False
         mean_w = self._adj_ratio * means[12]
         mean_h = self._adj_ratio * means[13]
 
@@ -602,10 +604,6 @@ class TenguFlowAnalyzer(object):
                 self.logger.debug('{} stays on the same flow node, check done in {} s'.format(existing_tracklet.obj_id, time.time() - start_check))
                 continue
 
-            #if self._tracker.ignore_tracklet(existing_tracklet):
-            #    self.logger.debug('ignoring update of {}, check done in {} s'.format(existing_tracklet.obj_id, time.time() - start_check))
-            #    continue
-
             # save a node in this tracklet
             existing_tracklet.add_flow_node_to_path(flow_node)
 
@@ -643,10 +641,6 @@ class TenguFlowAnalyzer(object):
             if removed_tracklet.observed_travel_distance < max(*self._scene.flow_blocks_size)*2:
                 self.logger.debug('{} has moved, but the travel distance is {} smaller than a block size {}, so being skipped, check done in {} s'.format(removed_tracklet, removed_tracklet.observed_travel_distance, max(*self._scene.flow_blocks_size)*2, time.time() - check_start))
                 continue
-
-            #if self._tracker.ignore_tracklet(removed_tracklet):
-            #    self.logger.debug('{} is removed, but not for counting, within ignored directions, check done in {} s'.format(removed_tracklet, time.time() - check_start))
-            #    continue
 
             if not self._save_untracked_details:
                 # save this tracklet details
