@@ -52,6 +52,8 @@ class Tracklet(TenguObject):
         self._left = False
         # for classification
         self._class_map = {}
+        # a representative image
+        self._image = None
 
     def __repr__(self):
         return 'id:{}, obj_id:{}, confidence:{}, speed:{}, left:{}, class:{}'.format(id(self), self._obj_id, self._confidence, self.speed, self._left, self.class_name)

@@ -13,24 +13,25 @@ from tengu_tracker import TenguTracker, Tracklet
 
 class TenguScene(object):
 
-    def __init__(self, flow_blocks, clustering_threshold=5, flow_similarity_threshold=0.6, min_path_count_for_flow=3):
+    def __init__(self, flow_blocks, clustering_threshold=10, flow_similarity_threshold=0.5):
         super(TenguScene, self).__init__()
         self.logger = logging.getLogger(__name__)
         self._flow_blocks = flow_blocks
         self._flow_blocks_size = None
         self._blk_node_map = None
+        self._frame_shape = None
         # transient
         self._updated_flow_nodes = []
-        # {sink: {source: path}}
-        self._path_map = {}
-        # current flows
-        self._flows = []
+        # recorded(not clustered) trackelts, {tracklet: tracklet_image}
+        self._tracklets = {}
         self._clustering_threshold = clustering_threshold
         self._flow_similarity_threshold = flow_similarity_threshold
-        self._min_path_count_for_flow = min_path_count_for_flow
+        # current flows
+        self._flows = []
 
     def initialize(self, frame_shape):
-        self._flow_blocks_size = (int(frame_shape[0]/self._flow_blocks[0]), int(frame_shape[1]/self._flow_blocks[1]))
+        self._frame_shape = frame_shape
+        self._flow_blocks_size = (int(self._frame_shape[0]/self._flow_blocks[0]), int(self._frame_shape[1]/self._flow_blocks[1]))
 
         self._blk_node_map = {}
         for y_blk in xrange(self._flow_blocks[0]):
@@ -92,115 +93,77 @@ class TenguScene(object):
     def updated_flow_nodes(self):
         return self._updated_flow_nodes
 
-    def record_path(self, source, sink):
-        """ records a path, and triggers a clustering at intervals
+    def record_tracklet(self, tracklet):
+        """ records a tracklet, and triggers a clustering at intervals
         """
-        if not self._path_map.has_key(sink):
-            self._path_map[sink] = {}
+        self.build_tracklet_image(tracklet)
 
-        sink_map = self._path_map[sink]
-        if not sink_map.has_key(source):
-            self.logger.info('created a new TenguPath from {} to {}'.format(source.blk_position, sink.blk_position))
-            sink_map[source] = TenguPath(source, sink)
-        else:
-            self.logger.info('incrementing count from {} to {}'.format(source.blk_position, sink.blk_position))
-            sink_map[source].increment_count()
-            self.logger.info('the current count = {}'.format(sink_map[source].count))
-
-    def check_and_cluster_paths(self):
-        # check total counts, and cluster if required
-        self.logger.info('checking and clustering paths...')
-        updated = False
-        total_counts = 0
-        ordered_paths = []
-        total_paths = 0
-        for sink in self._path_map:
-            sink_map = self._path_map[sink]
-            for source in sink_map:
-                path = sink_map[source]
-                total_paths += 1
-                if path.count < self._min_path_count_for_flow:
-                    # ignore this time, not reset count, so will be checked once its count is more than enough
-                    continue
-                total_counts += path.count
-                ordered_paths.append(path)
-        if total_counts > self._clustering_threshold:
-            ordered_paths = sorted(ordered_paths, key=attrgetter('count'), reverse=True)
-            self.cluster_paths(ordered_paths)
-            updated = True
-            self.logger.info('paths are clustered into {} flows'.format(len(self._flows)))
-        else:
-            self.logger.info('total count is {}, path count is {}, skipping clustering...'.format(total_counts, total_paths))
-
-        return updated
-
-    def cluster_paths(self, ordered_paths):
+    def cluster_tracklets(self):
         """ cluster paths into flows
         """
+        updated = False
 
-        if len(self._flows) == 0:
-            # initialize
-            first_flow = TenguFlow()
-            first_flow.add_path(ordered_paths[0])
-            self._flows.append(first_flow)
-            del ordered_paths[0]
+        if len(self._tracklets) < self._clustering_threshold:
+            return updated
 
-        for path in ordered_paths:
-            flow = self.find_similar_flow(path)
+        tracklets_by_flow = {}
+        for tracklet in self._tracklets:
+            tracklet_image = self._tracklets[tracklet]
+            flow = self.find_similar_flow(tracklet, tracklet_image)
             if flow is None:
                 # create a new flow
                 flow = TenguFlow()
+                flow.add_tracklet_and_images([[tracklet, tracklet_image]])
                 self._flows.append(flow)
-            flow.add_path(path)
+            if not tracklets_by_flow.has_key(flow):
+                tracklets_by_flow[flow] = []
+            tracklets_by_flow[flow].append([tracklet, tracklet_image])
 
-    def find_similar_flow(self, path):
+        # update flows
+        for flow in self._flows:
+            flow.add_tracklet_and_images(tracklets_by_flow[flow])
+
+        # reset
+        self._tracklets = {}
+
+        updated = True
+
+        return updated
+
+    def find_similar_flow(self, tracklet, tracklet_image):
         """ find the most similar flow
         """
         most_similar_flow = None
         best_similarity = self._flow_similarity_threshold
         for flow in self._flows:
             # calculate similarity
-            similarity = self.similarity(flow, path)
+            similarity = flow.similarity(tracklet, tracklet_image)
             if similarity > best_similarity:
                 most_similar_flow = flow
                 best_similarity = similarity
 
         return most_similar_flow
 
-    def similarity(self, flow, path):
-        """ a key algorithm to calculate a similarity between a flow and a path
+    def build_tracklet_image(self, tracklet):
+        tracklet_image = np.zeros((self._frame_shape[0], self._frame_shape[1], 1), dtype=np.uint8)
+        # draw rectangles on its path
+        for i, flow_node in enumerate(tracklet.path):
+            means = flow_node.means
+            if means is None:
+                rect = tracklet.milestones[i][1]
+                w = int(rect[2])
+                h = int(rect[3])
+            else:
+                w = int(means[12])
+                h = int(means[13])
+            node_position = flow_node.position
+            x = max(0, int(node_position[0] + self._flow_blocks_size[0]/2 - w/2))
+            y = max(0, int(node_position[1] + self._flow_blocks_size[1]/2 - h/2))
+            print('x, y, w, h = {}, {}, {}, {}'.format(x, y, w, h))
+            tracklet_image[y:min(y+h, self._frame_shape[0]), x:min(x+w, self._frame_shape[1])] = TenguFlow.VALUE_TRACKLET
 
-        The main idea of path for a human is assumed here that:
-        1. where did it go?        (sink)
-        2. where did it come from? (source)
-
-        So, details on a way from source or to sink is not important.
-        This is especially true for a turning car.
-
-        A sink is more important than a source, but which is still required.
-        For example, a sink of a turning car and a car going straight of its diagonal road could be the same. 
-        Or if objects are moving far away, they are converging to a single sink.
-
-        Also note that a trajectory is usually not complete due to many reasons. 
-        """
-        similarity = 0
-
-        sink_similarity = 0
-        source_similarity = 0
-
-        # path adjacency
-        source_adj, sink_adj = flow.path_adjacency(path)
-
-        # sink similarity
-        sink_similarity = sink_adj        
-
-        # source similarity
-        source_similarity = source_adj
-
-        # equally important
-        similarity = (sink_similarity + source_similarity) / 2.
-
-        return similarity
+        self._tracklets[tracklet] = tracklet_image
+        print('build tracklet image of {}'.format(tracklet))
 
     @property
     def flows(self):
@@ -209,99 +172,129 @@ class TenguScene(object):
 
 class TenguFlow(object):
 
-    """ TenguFlow is a cluster of TenguPaths
+    """ TenguFlow is a representative trajectory of similar trajectories
+
+    A TenguFlow is initialized with N TenguObjects observed in a certain period of time, 
+    and each of which contains the whole history of Kalman Filter state variables, and others.
+
+    So, the key is how to cluster them, how to measure similarities between them.
+    There are some popular algorithms for this purpose.
+    
+    For example, Hausdorff Distance measures the maximum Euclidian distance among those between each of them.
+    If, a trajectory is always complete, this could be used, but is not in reality.
+    Most of trajectories are imcomplete, represent only some parts.
+    But, two such different parts have to be measured more similar than one in the next lane.
+
+    Here, Intersection Over Union is calculated with an image between one of a flow and another.
+    Such an image of a flow or a trajectory consists of a series of object detection areas with some fixed values.
+    Say, if it is 127, union area is summed up to 254, non-overlapped areas stay 127, and 0 otherwise.
+
+    Union Area              = np.sum(image == 254)
+    Non Overlapped Area     = np.sum(image == 127)
+    Intersection Over Union = Union Area / (Union Area + Non Overlapped Area)
+
+    And this has to be doen in both ways because one is only a part of another,
+    in which case IoU gets smaller, but fine here.
+
+    
+    The next question is how to represent a flow that consists of multiple trajectories.
+    
+    At first thought, by averaging Tracklet's paths, build a temporal scene only regarding to those tracklets.
+    Then, find the longest paths between each of source and sink, and make it a representative path.
+    The above IoU calculation is also based on this representative path.
+    
+    But this sounds complicated, and time consuming.
+
+    So, an easy implementation is to calculate an average of source nodes, and one of sink nodes.
+
     """
 
-    def __init__(self):
+    VALUE_FLOW = 63
+    VALUE_TRACKLET = 192
+
+    def __init__(self, max_tracklets=10):
         super(TenguFlow, self).__init__()
         self.logger = logging.getLogger(__name__)
-        # this is a collection of paths, sorted by descending order
-        self._similar_paths = []
 
-    @property
-    def similar_paths(self):
-        return self._similar_paths
+        # [x_blk, y_blk]
+        self._avg_source = None
+        self._avg_sink = None
 
-    def add_path(self, path):
-        path.set_flow(self)
-        self._similar_paths.append(path)
-        if len(self._similar_paths) > 2:
-            self._similar_paths = sorted(self._similar_paths, key=attrgetter('past_count'), reverse=True)
+        self._tracklet_and_images = []
+        self._max_tracklets = max_tracklets
 
-    def path_adjacency(self, another_path):
-        """ calculate an average adjacency for a given path 
-        """
-        path_count = len(self._similar_paths)
-        if path_count == 0:
-            return 0., 0.
+        self._flow_image = None
+        self._flow_image_binary = None
 
-        # source, sink
-        adjacency = [0., 0.]
-        for path in self._similar_paths:
-            adjacency[0] += 1. if path.source.adjacent(another_path.source) else 0
-            adjacency[1] += 1. if path.sink.adjacent(another_path.sink) else 0
+    def similarity(self, tracklet, tracklet_image):
+        
+        added = self._flow_image_binary + tracklet_image
+        union_count = float(np.sum(added == (TenguFlow.VALUE_FLOW + TenguFlow.VALUE_TRACKLET)))
+        non_overlapped_flow = np.sum(added == TenguFlow.VALUE_FLOW)
+        non_overlapped_tracklet = np.sum(added == TenguFlow.VALUE_TRACKLET)
 
-        self.logger.info('path adjacency = {}, path_count = {}'.format(adjacency, path_count))
+        if union_count == 0 and non_overlapped_flow == 0:
+            print('zero output, added = {}'.format(added))
 
-        return adjacency[0]/path_count, adjacency[1]/path_count
+        iou_over_flow = union_count / (union_count + non_overlapped_flow)
+        iou_over_tracklet = union_count / (union_count + non_overlapped_tracklet)
 
-    def serialize(self):
-        js = {}
-        paths = []
-        for path in self._similar_paths:
-            paths.append(path.serialize())
-        js['paths'] = paths
-        return js
+        return max(iou_over_flow, iou_over_tracklet)
 
-class TenguPath(object):
+    def add_tracklet_and_images(self, tracklet_and_images):
+        
+        for tracklet_and_image in tracklet_and_images:
+            self._tracklet_and_images.append(tracklet_and_image)
 
-    """ TenguPath represents a pair of TenguFlowNodes(source and sink)
-    """
+        while len(self._tracklet_and_images) > self._tracklet_and_images:
+            del self._tracklet_and_images[0]
 
-    def __init__(self, source, sink):
-        super(TenguPath, self).__init__()
-        self._source = source
-        self._sink = sink
-        self._count = 1
-        self._past_count = 0
-        self._current_flow = None
+        added = None
+        added_source = None
+        added_sink = None
+        for tracklet_and_image in self._tracklet_and_images:
 
-    @property
-    def source(self):
-        return self._source
-    
-    @property
-    def sink(self):
-        return self._sink
+            tracklet = tracklet_and_image[0]
+            tracklet_image = tracklet_and_image[1]
+            source = tracklet.path[0]
+            sink = tracklet.path[-1]
 
-    @property
-    def count(self):
-        return self._count
+            if added is None:
+                # copy the one of tracklet
+                added = np.copy(tracklet_image).astype(np.uint16)
+                added_source = [source.blk_position[0], source.blk_position[1]]
+                added_sink = [sink.blk_position[0], sink.blk_position[1]]
+                # binary
+                self._flow_image_binary = np.zeros_like(tracklet_image)
 
-    @property
-    def past_count(self):
-        return self._past_count
+            else:
 
-    @property
-    def current_flow(self):
-        return self._current_flow
+                added += tracklet_image
+                added_source[0] += source.blk_position[0]
+                added_source[1] += source.blk_position[1]
+                added_sink[0] += sink.blk_position[0]
+                added_sink[1] += sink.blk_position[1] 
 
-    def increment_count(self):
-        self._count += 1
+        # averaged
+        total = len(self._tracklet_and_images)
+        self._flow_image = added / total
+        self._avg_source = {'x_blk': int(added_source[0] / total), 'y_blk': int(added_source[1] / total)}
+        self._avg_sink = {'x_blk': int(added_sink[0] / total), 'y_blk': int(added_sink[1] / total)}
+        # binary for the next IoU
+        self.make_binary()
 
-    def set_flow(self, flow):
-        if self._current_flow != flow:
-            self._current_flow = flow
-        self._past_count += self._count
-        self._count = 0
+    def make_binary(self):
+        # thresholding
+        # 127 if more than min_threshold, 0 otherwise
+        self._flow_image_binary[self._flow_image >= TenguFlow.VALUE_FLOW] = TenguFlow.VALUE_FLOW
+        self._flow_image_binary[self._flow_image < TenguFlow.VALUE_FLOW] = 0
 
     def serialize(self):
         js = {}
-        src_blk_pos = self._source.blk_position
-        js['source'] = {'x_blk': src_blk_pos[0], 'y_blk': src_blk_pos[1]}
-        sink_blk_pos = self._sink.blk_position
-        js['sink'] = {'x_blk': sink_blk_pos[0], 'y_blk': sink_blk_pos[1]}
-        js['past_count'] = self._past_count
+        
+        js['source'] = self._avg_source
+        js['sink'] = self._avg_sink
+
         return js
 
 class StatsDataFrame(object):
@@ -513,6 +506,8 @@ class TenguFlowAnalyzer(object):
 
         start = time.time()
 
+        updated = False
+
         # mark if left
         self.mark_tracklets_left(tracklets)
 
@@ -522,7 +517,7 @@ class TenguFlowAnalyzer(object):
         if len(self._last_tracklets) == 0:
             self.add_new_tracklets(current_tracklets)
             self._last_tracklets = current_tracklets
-            return
+            return updated
 
         # new tracklets
         new_tracklets = current_tracklets - self._last_tracklets
@@ -537,16 +532,13 @@ class TenguFlowAnalyzer(object):
         # removed tracklets
         removed_tracklets = self._last_tracklets - current_tracklets
         self.logger.debug('removing {} tracklets out of {}'.format(len(removed_tracklets), len(current_tracklets)))
-        recorded = self.finish_removed_tracklets(removed_tracklets)
-        flows_updated = False
-        if recorded > 0:
-            flows_updated = self._scene.check_and_cluster_paths()
+        updated = self.finish_removed_tracklets(removed_tracklets)
 
         self._last_tracklets = current_tracklets
 
         self.logger.debug('update flow graph took {} s'.format(time.time() - start))
 
-        return flows_updated
+        return updated
 
     def flow_node_at(self, x, y):
         y_blk = self.get_y_blk(y)
@@ -615,8 +607,7 @@ class TenguFlowAnalyzer(object):
     def finish_removed_tracklets(self, removed_tracklets):
 
         start = time.time()
-        
-        recorded = 0
+
         for removed_tracklet in removed_tracklets:
             self.logger.debug('checking removed tracklet {} in {} s'.format(removed_tracklet.obj_id, time.time() - start))
 
@@ -646,14 +637,13 @@ class TenguFlowAnalyzer(object):
                 # save this tracklet details
                 self.save_tracklet(removed_tracklet)
 
-            sink = removed_tracklet.path[-1]
-            source = removed_tracklet.path[0]
-            self._scene.record_path(source, sink)
-            recorded += 1
+            self._scene.record_tracklet(removed_tracklet)
+
+        updated = self._scene.cluster_tracklets()
 
         self.logger.debug('finished removed {} tracklet in {} s'.format(len(removed_tracklets), time.time() - start))
 
-        return recorded
+        return updated
 
     def save_tracklet(self, tracklet):
         
