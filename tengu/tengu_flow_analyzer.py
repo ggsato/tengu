@@ -13,7 +13,7 @@ from tengu_tracker import TenguTracker, Tracklet
 
 class TenguScene(object):
 
-    def __init__(self, flow_blocks, clustering_threshold=10, flow_similarity_threshold=0.5):
+    def __init__(self, flow_blocks, clustering_threshold=10, flow_similarity_threshold=0.4):
         super(TenguScene, self).__init__()
         self.logger = logging.getLogger(__name__)
         self._flow_blocks = flow_blocks
@@ -120,10 +120,16 @@ class TenguScene(object):
             tracklets_by_flow[flow].append([tracklet, tracklet_image])
 
         # update flows
+        valid_flows = []
         for flow in self._flows:
-            flow.add_tracklet_and_images(tracklets_by_flow[flow])
+            if not tracklets_by_flow.has_key(flow):
+                tracklets_by_flow[flow] = []
+            valid = flow.add_tracklet_and_images(tracklets_by_flow[flow])
+            if valid:
+                valid_flows.append(flow)
 
         # reset
+        self._flows = valid_flows
         self._tracklets = {}
 
         updated = True
@@ -242,52 +248,68 @@ class TenguFlow(object):
         return max(iou_over_flow, iou_over_tracklet)
 
     def add_tracklet_and_images(self, tracklet_and_images):
+
+        if len(tracklet_and_images) > 0:
         
-        for tracklet_and_image in tracklet_and_images:
-            self._tracklet_and_images.append(tracklet_and_image)
+            for tracklet_and_image in tracklet_and_images:
+                self._tracklet_and_images.append(tracklet_and_image)
 
-        while len(self._tracklet_and_images) > self._tracklet_and_images:
-            del self._tracklet_and_images[0]
+            while len(self._tracklet_and_images) > self._tracklet_and_images:
+                del self._tracklet_and_images[0]
 
-        added = None
-        added_source = None
-        added_sink = None
-        for tracklet_and_image in self._tracklet_and_images:
+            added = None
+            added_source = None
+            added_sink = None
+            for tracklet_and_image in self._tracklet_and_images:
 
-            tracklet = tracklet_and_image[0]
-            tracklet_image = tracklet_and_image[1]
-            source = tracklet.path[0]
-            sink = tracklet.path[-1]
+                tracklet = tracklet_and_image[0]
+                tracklet_image = tracklet_and_image[1]
+                source = tracklet.path[0]
+                sink = tracklet.path[-1]
 
-            if added is None:
-                # copy the one of tracklet
-                added = np.copy(tracklet_image).astype(np.uint16)
-                added_source = [source.blk_position[0], source.blk_position[1]]
-                added_sink = [sink.blk_position[0], sink.blk_position[1]]
-                # binary
-                self._flow_image_binary = np.zeros_like(tracklet_image)
+                if added is None:
+                    # copy the one of tracklet
+                    added = np.copy(tracklet_image).astype(np.uint16)
+                    added_source = [source.blk_position[0], source.blk_position[1]]
+                    added_sink = [sink.blk_position[0], sink.blk_position[1]]
+                    # binary
+                    self._flow_image_binary = np.zeros_like(tracklet_image)
 
-            else:
+                else:
 
-                added += tracklet_image
-                added_source[0] += source.blk_position[0]
-                added_source[1] += source.blk_position[1]
-                added_sink[0] += sink.blk_position[0]
-                added_sink[1] += sink.blk_position[1] 
+                    added += tracklet_image
+                    added_source[0] += source.blk_position[0]
+                    added_source[1] += source.blk_position[1]
+                    added_sink[0] += sink.blk_position[0]
+                    added_sink[1] += sink.blk_position[1] 
 
-        # averaged
-        total = len(self._tracklet_and_images)
-        self._flow_image = added / total
-        self._avg_source = {'x_blk': int(added_source[0] / total), 'y_blk': int(added_source[1] / total)}
-        self._avg_sink = {'x_blk': int(added_sink[0] / total), 'y_blk': int(added_sink[1] / total)}
+            # averaged
+            total = len(self._tracklet_and_images)
+
+            self._flow_image = added / total
+            self._avg_source = {'x_blk': int(added_source[0] / total), 'y_blk': int(added_source[1] / total)}
+            self._avg_sink = {'x_blk': int(added_sink[0] / total), 'y_blk': int(added_sink[1] / total)}
+
+        else:
+
+            # decrease
+            self._flow_image /= 2
+
         # binary for the next IoU
-        self.make_binary()
+        return self.make_binary()
 
     def make_binary(self):
+        valid = True
         # thresholding
         # 127 if more than min_threshold, 0 otherwise
         self._flow_image_binary[self._flow_image >= TenguFlow.VALUE_FLOW] = TenguFlow.VALUE_FLOW
         self._flow_image_binary[self._flow_image < TenguFlow.VALUE_FLOW] = 0
+
+        if np.sum(self._flow_image_binary == TenguFlow.VALUE_FLOW) == 0:
+            # this means this flow is not effective anymore
+            valid = False
+
+        return valid
 
     def serialize(self):
         js = {}
