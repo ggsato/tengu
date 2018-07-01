@@ -17,7 +17,7 @@ If the currently tracked object's rectangle overlaps over a threshold is conside
 class Tracklet(TenguObject):
 
     _class_obj_id = -1
-    _min_confidence = 0.2
+    _min_confidence = 0.01
     _estimation_decay = 0.9
     _recent_updates_length = 2
 
@@ -175,15 +175,14 @@ class Tracklet(TenguObject):
         self._last_updated_at = TenguTracker._global_updates
 
     def update_with_assignment(self, assignment, class_name):
-        if len(self._assignments) > 0:
-            self.logger.debug('{}@{}: updating with {} from {} at {}'.format(id(self), self.obj_id, assignment, self._assignments[-1], self._last_updated_at))
+        self.logger.info('{}@{}: updating with {} at {}'.format(id(self), self.obj_id, assignment, self._last_updated_at))
 
         if len(self._assignments) > 0 and self.similarity(assignment) < Tracklet._min_confidence:
             # do not accept this
             pass
         elif not self.accept_measurement(Tracklet.center_from_rect((assignment.detection))):
             # not acceptable
-            self.logger.debug('{} is not an acceptable measurement to update {}'.format(assignment.detection, self))
+            self.logger.info('{} is not an acceptable measurement to update {}'.format(assignment.detection, self))
         elif self.has_left:
             # no more update
             self.update_without_assignment()
@@ -207,7 +206,7 @@ class Tracklet(TenguObject):
         no update was available
         """
 
-        self.logger.debug('updating without {}@{}'.format(id(self), self.obj_id))
+        self.logger.info('updating without {}@{}'.format(id(self), self.obj_id))
 
         self.recent_updates_by('2')
         self.update_location(None)
@@ -402,14 +401,13 @@ class TenguTracker(object):
     # 0.01 = 4.6 => 1% overlap
     _confident_min_cost = 4.6
 
-    def __init__(self, tengu_flow_analyzer, min_length, obsoletion=100, ignore_direction_ranges=None, **kwargs):
+    def __init__(self, tengu_flow_analyzer, min_length, obsoletion=100, initialize_tracklet_with_stats=False, **kwargs):
         super(TenguTracker, self).__init__(**kwargs)
         self.logger = logging.getLogger(__name__)
         self._tracklets = []
 
         self._obsoletion = obsoletion
-        # (start, end], -pi <= ignored_range < pi
-        self._ignore_direction_ranges = ignore_direction_ranges
+        self._initialize_tracklet_with_stats = initialize_tracklet_with_stats
 
         # this is used only when asking for stats to initialize a new tracklet
         self._tengu_flow_analyzer = tengu_flow_analyzer
@@ -437,6 +435,7 @@ class TenguTracker(object):
 
         if len(self._tracklets) == 0:
             self.initialize_tracklets(detections, class_names)
+            self.logger.info('initialized {} tracklets at {}'.format(len(self.tracklets), TenguTracker._global_updates))
             return self.tracklets
 
         start = time.time()
@@ -468,7 +467,7 @@ class TenguTracker(object):
         self.logger.debug('obsolete_trackings took {} s'.format(lap5 - (lap4 if len(detections) > 0 else start)))
 
         end = time.time()
-        self.logger.debug('resolved, and now {} tracked objects at {}, executed in {} s'.format(len(self._tracklets), TenguTracker._global_updates, end-start))
+        self.logger.info('{} detections resolved, and now {} tracked objects at {}, executed in {} s'.format(len(detections), len(self._tracklets), TenguTracker._global_updates, end-start))
 
         return self.tracklets
 
@@ -495,13 +494,14 @@ class TenguTracker(object):
         """
         cost_matrix = TenguTracker.create_empty_cost_matrix(len(self._tracklets), len(detections))
         for t, tracklet in enumerate(self._tracklets):
+            self.logger.info('calculating cost matrix for {}'.format(tracklet.obj_id))
             if tracklet.has_left:
-                self.logger.debug('tracklet id {} has left, no cost calculation'.format(tracklet.obj_id))
+                self.logger.info('tracklet id {} has left, no cost calculation'.format(tracklet.obj_id))
                 continue
             for d, detection in enumerate(detections):
                 cost = self.calculate_cost_by_overlap_ratio(tracklet.rect, detection)
                 cost_matrix[t][d] = cost
-                self.logger.debug('cost at [{}][{}] = {}'.format(tracklet.obj_id, detection, cost))
+                self.logger.info('cost at [{}][{}] = {}'.format(tracklet.obj_id, detection, cost))
         return TenguCostMatrix(detections, cost_matrix)
 
     @staticmethod
@@ -558,7 +558,7 @@ class TenguTracker(object):
                 self.logger.debug('{} is not updated due to too high cost {}'.format(tracklet.obj_id, cost))
                 continue
             assigned.append(new_assignment)
-            self.logger.debug('updating tracked object id {} of rect {} with {} at {}'.format(tracklet.obj_id, tracklet.rect, new_assignment, TenguTracker._global_updates))
+            self.logger.info('updating tracked object id {} of rect {} with {} at {}'.format(tracklet.obj_id, tracklet.rect, new_assignment, TenguTracker._global_updates))
             self.assign_new_to_tracklet(new_assignment, class_names[tengu_cost_matrix.assignments.index(new_assignment)], tracklet)
 
         # create new ones
@@ -576,7 +576,7 @@ class TenguTracker(object):
                     self.logger.debug('skipping creating a new, but disturbing tracklet {}'.format(to))
                     continue
                 self._tracklets.append(to)
-                self.logger.debug('created tracked object {} of id={} at {}'.format(to, to.obj_id, TenguTracker._global_updates))
+                self.logger.info('created tracked object {} of id={} at {}'.format(to, to.obj_id, TenguTracker._global_updates))
 
     def new_tracklet(self, detection, class_name):
         """ create a new tracklet with a new detection
@@ -585,13 +585,14 @@ class TenguTracker(object):
         and hidden variables, speed and acceleration, from statistics at a flow node if avaialble.
         """
         center = Tracklet.center_from_rect(detection)
-        flow_node = self._tengu_flow_analyzer.flow_node_at(*center)
-        means = flow_node.means
-        if means is None:
-            x0 = [center[0], 0., 0., center[1], 0., 0.]
-        else:
-            x0 = [center[0], means[1], means[2], center[1], means[4], means[5]]
+        x0 = [center[0], 0., 0., center[1], 0., 0.]
+        if self._initialize_tracklet_with_stats:
+            flow_node = self._tengu_flow_analyzer.flow_node_at(*center)
+            means = flow_node.means
+            if means is not None:
+                x0 = [center[0], means[1], means[2], center[1], means[4], means[5]]
         to = Tracklet(x0, detection[2:])
+        # this does not update its location
         to.update_with_assignment(Assignment(detection), class_name)
         return to
 
@@ -623,7 +624,7 @@ class TenguTracker(object):
                 self.logger.debug('{} is not obsolete yet, diff = {}'.format(tracklet, TenguTracker._global_updates - tracklet.last_updated_at))
                 new_tracklet.append(tracklet)
             else:
-                self.logger.debug('{} became obsolete'.format(tracklet))
+                self.logger.info('{} became obsolete'.format(tracklet))
         removed = len(self._tracklets) - len(new_tracklet)
         self._tracklets = new_tracklet
         self.logger.debug('removed {} tracked objects due to obsoletion'.format(removed))
@@ -652,6 +653,7 @@ class TenguTracker(object):
         self.logger.debug('removing duplicates {}'.format(duplicated))
         for duplicate in duplicated:
             if duplicate in self._tracklets:
+                self.logger.info('removing {} as duplicates'.format(duplicate.obj_id))
                 del self._tracklets[self._tracklets.index(duplicate)]
 
         # obsolete if not is_confirmed
@@ -660,7 +662,7 @@ class TenguTracker(object):
             if tracklet.is_confirmed:
                 new_tracklet.append(tracklet)
             else:
-                self.logger.debug('{} is marked as obsolete, not confirmed anymore'.format(tracklet))
+                self.logger.info('{} does not have enough confidence {}, so is marked as obsolete, not confirmed anymore'.format(tracklet.obj_id, tracklet.confidence))
         removed = len(self._tracklets) - len(new_tracklet)
         self._tracklets = new_tracklet
         self.logger.debug('removed {} tracked objects due to obsoletion'.format(removed))

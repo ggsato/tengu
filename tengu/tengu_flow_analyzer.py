@@ -475,7 +475,7 @@ class TenguFlowAnalyzer(object):
 
     """
     """
-    def __init__(self, scene_file=None, flow_blocks=(20, 30), save_untrackled_details=True, **kwargs):
+    def __init__(self, scene_file=None, flow_blocks=(20, 30), save_untrackled_details=None, **kwargs):
         super(TenguFlowAnalyzer, self).__init__()
         self.logger= logging.getLogger(__name__)
         self._initialized = False
@@ -486,6 +486,9 @@ class TenguFlowAnalyzer(object):
         self._frame_shape = None
         # save folder
         self._output_folder = 'output'
+        # True to save all the tracklets including untracked ones
+        # False to save only the tracklets successfully tracked
+        # None to save nothing
         self._save_untracked_details = save_untrackled_details
 
     @property
@@ -636,7 +639,7 @@ class TenguFlowAnalyzer(object):
 
             check_start = time.time()
             
-            if self._save_untracked_details:
+            if self._save_untracked_details is not None and self._save_untracked_details:
                 # save this tracklet details
                 self.save_tracklet(removed_tracklet)
 
@@ -656,7 +659,7 @@ class TenguFlowAnalyzer(object):
                 self.logger.debug('{} has moved, but the travel distance is {} smaller than a block size {}, so being skipped, check done in {} s'.format(removed_tracklet, removed_tracklet.observed_travel_distance, max(*self._scene.flow_blocks_size)*2, time.time() - check_start))
                 continue
 
-            if not self._save_untracked_details:
+            if self._save_untracked_details is not None and not self._save_untracked_details:
                 # save this tracklet details
                 self.save_tracklet(removed_tracklet)
 
