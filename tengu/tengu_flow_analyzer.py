@@ -218,7 +218,7 @@ class TenguFlow(object):
     VALUE_FLOW = 63
     VALUE_TRACKLET = 192
 
-    def __init__(self, max_tracklets=10):
+    def __init__(self, max_tracklets=10, flow_decay=0.9):
         super(TenguFlow, self).__init__()
         self.logger = logging.getLogger(__name__)
 
@@ -228,6 +228,7 @@ class TenguFlow(object):
 
         self._tracklet_and_images = []
         self._max_tracklets = max_tracklets
+        self._flow_decay = flow_decay
 
         self._flow_image = None
         self._flow_image_binary = None
@@ -269,11 +270,11 @@ class TenguFlow(object):
 
                 if added is None:
                     # copy the one of tracklet
-                    added = np.copy(tracklet_image).astype(np.uint16)
+                    added = np.copy(tracklet_image).astype(np.float64)
                     added_source = [source.blk_position[0], source.blk_position[1]]
                     added_sink = [sink.blk_position[0], sink.blk_position[1]]
                     # binary
-                    self._flow_image_binary = np.zeros_like(tracklet_image)
+                    self._flow_image_binary = np.zeros_like(tracklet_image, dtype=np.uint16)
 
                 else:
 
@@ -293,7 +294,7 @@ class TenguFlow(object):
         else:
 
             # decrease
-            self._flow_image /= 2
+            self._flow_image *= self._flow_decay
 
         # binary for the next IoU
         return self.make_binary()
@@ -474,7 +475,7 @@ class TenguFlowAnalyzer(object):
 
     """
     """
-    def __init__(self, scene_file=None, flow_blocks=(20, 30), save_untrackled_details=False, **kwargs):
+    def __init__(self, scene_file=None, flow_blocks=(20, 30), save_untrackled_details=True, **kwargs):
         super(TenguFlowAnalyzer, self).__init__()
         self.logger= logging.getLogger(__name__)
         self._initialized = False
