@@ -5,6 +5,7 @@ import math
 import numpy as np
 import StringIO
 from filterpy.kalman import KalmanFilter
+from scipy.stats import norm
 
 class VehicleFilter(KalmanFilter):
     """ KalmanFilter designed for tracking vehicles by detections as observations
@@ -83,6 +84,15 @@ class VehicleFilter(KalmanFilter):
         self.Q[3:, :] *= self._variances[1]
         self.R[1:, :] *= self._variances[1]
 
+    @property
+    def vehicle_size(self):
+        return self._vehicle_size
+
+    @property
+    def detection_error_ratio(self):
+        return self._detection_error_ratio
+    
+
 class TenguObject(object):
     """ TenguObject is a base class of any travelling object classes in Tengu framework.
 
@@ -92,9 +102,11 @@ class TenguObject(object):
 
     _very_small_value = 0.000001
 
-    def __init__(self, x0, object_size, detection_error_ratio=0.5, decay=0.1, coefficient=0.5):
+    def __init__(self, x0, object_size, detection_error_ratio=0.5, decay=0.1, coefficient=0.5, maximum_heading_diff_allowed_in_pi=0.333):
         super(TenguObject, self).__init__()
         self._filter = VehicleFilter(x0, object_size, detection_error_ratio, decay=decay, coefficient=coefficient)
+        self._maximum_heading_diff_allowed = math.pi * maximum_heading_diff_allowed_in_pi
+        # histories
         self._zs = []
         self._xs = []
         self._covs = []
@@ -138,10 +150,10 @@ class TenguObject(object):
 
         return a float value (-pi, pi)  
         """
-        if len(self._xs) < 2:
+        if self.observed_travel_distance < max(*self._filter.vehicle_size):
             return None
 
-        return math.atan2(self._xs[-1][3] - self._xs[0][3], self._xs[-1][0] - self._xs[0][0])
+        return TenguObject.radian_from_points(self._xs[0], self._xs[-1])
 
     @property
     def heading(self):
@@ -155,7 +167,11 @@ class TenguObject(object):
         if len(self._xs) < 2:
             return None
 
-        return math.atan2(self._xs[-1][3] - self._xs[-2][3], self._xs[-1][0] - self._xs[-2][0])
+        return TenguObject.radian_from_points(self._xs[-2], self._xs[-1])
+
+    @staticmethod
+    def radian_from_points(from_point, to_point):
+        return math.atan2(to_point[1] - from_point[1], to_point[0] - from_point[0])
 
     @property
     def speed(self):
@@ -186,6 +202,7 @@ class TenguObject(object):
         if len(self._zs) == 0:
             return -1
 
+        # z contains None when no observed value is passed
         start, end = None, None
         for i in range(len(self._zs)):
             if start is None:
@@ -198,8 +215,11 @@ class TenguObject(object):
         if start is None or end is None:
             return -1
 
-        travel_distance = math.sqrt((end[0] - start[0])**2 + (end[1] - start[1])**2)
-        return travel_distance
+        return TenguObject.distance_from_points(start, end)
+
+    @staticmethod
+    def distance_from_points(from_point, to_point):
+        return math.sqrt((to_point[0] - from_point[0])**2 + (to_point[1] - from_point[1])**2)
 
     def update_location(self, z):
         """ update the current location by a predicted location and the given z(observed_location)
@@ -229,23 +249,30 @@ class TenguObject(object):
         residual_x = abs(z[0] - next_x[0])
         residual_y = abs(z[1] - next_x[3])
 
-        # calculate 99% range
-        most_likely_x = math.sqrt(self._filter.P[0][0])*3
-        most_likely_y = math.sqrt(self._filter.P[3][3])*3
+        std_dev_x = math.sqrt(self._filter.P[0][0])
+        std_dev_y = math.sqrt(self._filter.P[3][3])
+
+        # check the change in the heading(this is often not reliable, so use with the distance following)
+        current_direction = self.direction
+        from_point = [self._filter.x[0], self._filter.x[3]]
+        if current_direction is None:
+            diff_heading = -1.0
+        else:
+            next_heading = TenguObject.radian_from_points(from_point, z)
+            diff_heading = abs(next_heading - current_direction)
+            if diff_heading > math.pi:
+                diff_heading -= math.pi
+
+        # check distance
+        distance = TenguObject.distance_from_points(from_point, z)
 
         # accept if both residuals are within 99% range(3 * std_devs)
-        accept = (residual_x < most_likely_x) and (residual_y < most_likely_y)
+        accept = (residual_x < std_dev_x*3) and (residual_y < std_dev_y*3) and not (diff_heading > self._maximum_heading_diff_allowed and distance > max(*self._filter.vehicle_size) * self._filter.detection_error_ratio)
 
-        self._z_candidates.append([z, next_x, (residual_x, residual_y), (most_likely_x, most_likely_y), accept])
+        self._z_candidates.append([z, next_x.T, [residual_x, residual_y], [std_dev_x, std_dev_y], accept, diff_heading, distance, max(*self._filter.vehicle_size)])
+        print('z_candidate: {}'.format(self._z_candidates[-1]))
 
         return accept
-
-    def similarity(self, another):
-        """ calculate a similarity between self and another instance of TenguObject 
-
-        a similarity
-        """
-        pass
 
     @property
     def variance(self):

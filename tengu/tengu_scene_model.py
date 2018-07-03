@@ -30,7 +30,7 @@ class TenguSceneModel(Process):
         self.logger= logging.getLogger(__name__)
 
         # sensor
-        self._detector = DetectNetDetector(8890, interval=Value('i', 2), max_detection_size=128)
+        self._detector = DetectNetDetector(8890, interval=Value('i', 5), max_detection_size=128)
         self._frame_sensor = TenguObjectDetectionSensor(detector=self._detector)
 
         # flow analyzer

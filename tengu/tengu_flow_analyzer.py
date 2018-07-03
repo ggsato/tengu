@@ -475,7 +475,7 @@ class TenguFlowAnalyzer(object):
 
     """
     """
-    def __init__(self, scene_file=None, flow_blocks=(20, 30), save_untrackled_details=None, **kwargs):
+    def __init__(self, scene_file=None, flow_blocks=(20, 30), save_untrackled_details=False, **kwargs):
         super(TenguFlowAnalyzer, self).__init__()
         self.logger= logging.getLogger(__name__)
         self._initialized = False
