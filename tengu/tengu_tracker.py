@@ -7,14 +7,14 @@ import numpy as np
 import logging, copy
 from scipy.optimize import linear_sum_assignment
 
-from tengu_object import TenguObject
+from trajectorypy import MassiveObject
 
 """The default implementation of TenguTracker
 The default implementation of TenguTracker is based on o¥overlaps.
 If the currently tracked object's rectangle overlaps over a threshold is considered identical.
 """
 
-class Tracklet(TenguObject):
+class Tracklet(MassiveObject):
 
     _class_obj_id = -1
     _min_confidence = 0.01

@@ -8,7 +8,7 @@ Installation
 
 $ pip install -e .   
 
-$ pip install filterpy
+$ pip install trajectorypy
 
 # if opencv is not available   
 
