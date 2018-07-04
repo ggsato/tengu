@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 import logging, math, json, sys, traceback, copy, time, os
+from io import open
 import cv2
 import numpy as np
 from operator import attrgetter
@@ -674,7 +675,7 @@ class TenguFlowAnalyzer(object):
     def save_tracklet(self, tracklet):
         
         file = os.path.join(self._output_folder, '{}.txt'.format(tracklet.obj_id))
-        with open(file, 'w') as f:
+        with open(file, 'w', encoding='utf-8') as f:
             f.write(tracklet.history())
 
     def save(self, file):
@@ -686,7 +687,7 @@ class TenguFlowAnalyzer(object):
         js = self.serialize()
         js['scene'] = scene_js
         # write
-        f = open(file, 'w')
+        f = open(file, 'w', encoding='utf-8')
         try:
             js_string = json.dumps(js, sort_keys=True, indent=4, separators=(',', ': '))
             f.write(js_string)
@@ -711,9 +712,9 @@ class TenguFlowAnalyzer(object):
         """
         load flow_map from folder
         """
-        f = open(self._scene_file, 'r')
+        f = open(self._scene_file, 'r', encoding='utf-8')
         try:
-            buf = StringIO.StringIO()
+            buf = StringIO()
             for line in f:
                 buf.write(line)
             js_string = buf.getvalue()

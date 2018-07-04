@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 
 import time, os, json, time
+from io import open
 import cv2
 import requests
 import random

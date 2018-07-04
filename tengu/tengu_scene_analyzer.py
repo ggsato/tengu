@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 import logging, json
+from io import open
 from io import StringIO 
 from pandas import DataFrame
 import pandas as pd
@@ -76,17 +77,17 @@ class TenguSceneAnalyzer(object):
                     self.logger.info('{}, {}, {}'.format(group, class_name, grouped_count[group, class_name]))
                     if header is None:
                         # this is the first time
-                        header = StringIO.StringIO()
-                        row = StringIO.StringIO()
+                        header = StringIO()
+                        row = StringIO()
                     else:
-                        header.write(',')
-                        row.write(',')
+                        header.write(u',')
+                        row.write(u',')
 
-                    header.write('{}-{}'.format(group, class_name))
-                    row.write(grouped_count[group, class_name])
+                    header.write(u'{}-{}'.format(group, class_name))
+                    row.write(u'{}'.format(grouped_count[group, class_name]))
                 # add group level average speed
-                header.write(',{}-Speed'.format(group))
-                row.write(',{}'.format('{:03.2f}'.format(grouped_speed[group])))
+                header.write(u',{}-Speed'.format(group))
+                row.write(u',{}'.format('{:03.2f}'.format(grouped_speed[group])))
 
             if header is not None:
 
@@ -95,9 +96,9 @@ class TenguSceneAnalyzer(object):
                 row_value = row.getvalue()
                 row.close()
 
-                f = open(self._output_file, 'w')
-                f.write('{}\n'.format(header_value))
-                f.write('{}\n'.format(row_value))
+                f = open(self._output_file, 'w', encoding='utf-8')
+                f.write(u'{}\n'.format(header_value))
+                f.write(u'{}\n'.format(row_value))
                 f.close()
 
         self.reset_counter()

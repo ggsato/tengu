@@ -303,16 +303,16 @@ class TenguObject(object):
 
     def history(self):
 
-        buf = StringIO.StringIO()
+        buf = StringIO()
         for x, z, z_candidates, cov, x_prior, y, K in zip(self._xs, self._zs, self._zs_candidates, self._covs, self._xps, self._ys, self._Ks):
-            buf.write('x_prior: \n{}\n'.format(x_prior))
-            buf.write('z: \n{}\n'.format(z))
-            buf.write('z_candidates: \n{}\n'.format(z_candidates))
-            buf.write('y: \n{}\n'.format(y))
-            buf.write('K: \n{}\n'.format(K))
-            buf.write('x: \n{}\n'.format(x))
-            buf.write('cov: \n{}\n'.format(cov))
-            buf.write('=====================================\n')
+            buf.write(u'x_prior: \n{}\n'.format(x_prior))
+            buf.write(u'z: \n{}\n'.format(z))
+            buf.write(u'z_candidates: \n{}\n'.format(z_candidates))
+            buf.write(u'y: \n{}\n'.format(y))
+            buf.write(u'K: \n{}\n'.format(K))
+            buf.write(u'x: \n{}\n'.format(x))
+            buf.write(u'cov: \n{}\n'.format(cov))
+            buf.write(u'=====================================\n')
 
 
         history = buf.getvalue()
