@@ -3,7 +3,7 @@
 
 import math
 import numpy as np
-import StringIO
+from io import StringIO
 from filterpy.kalman import KalmanFilter
 from scipy.stats import norm
 

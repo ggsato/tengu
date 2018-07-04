@@ -5,7 +5,7 @@ import cv2
 import numpy as np
 from operator import attrgetter
 from sets import Set
-import StringIO
+from io import StringIO 
 from pandas import DataFrame
 import pandas as pd
 

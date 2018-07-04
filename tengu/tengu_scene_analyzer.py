@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 import logging, json
-import StringIO
+from io import StringIO 
 from pandas import DataFrame
 import pandas as pd
 
