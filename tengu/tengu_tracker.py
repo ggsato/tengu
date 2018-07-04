@@ -401,7 +401,7 @@ class TenguTracker(object):
     # 0.01 = 4.6 => 1% overlap
     _confident_min_cost = 4.6
 
-    def __init__(self, tengu_flow_analyzer, min_length, obsoletion=100, initialize_tracklet_with_stats=True, **kwargs):
+    def __init__(self, tengu_flow_analyzer, min_length, obsoletion=100, initialize_tracklet_with_stats=False, **kwargs):
         super(TenguTracker, self).__init__(**kwargs)
         self.logger = logging.getLogger(__name__)
         self._tracklets = []
