@@ -13,6 +13,12 @@ class TenguSceneAnalyzer(object):
         self._output_file = output_file
         self._ignore_default = ignore_default
         self._df = None
+        self._fps = 25
+
+    def set_fps(self, fps):
+        if fps is not None:
+            self._fps = fps
+            self.logger.info('fps was set as {}'.format(self._fps))
 
     def analyze_scene(self, cropped, scene):
         """ turn removed tracklets into counts

@@ -97,6 +97,9 @@ class Tengu(object):
                 self.logger.info('set a user defined camera setting {} of {}'.format(Tengu.PREFERRED_CAMERA_SETTINGS[key], key))
                 cam.set(key, Tengu.PREFERRED_CAMERA_SETTINGS[key])
 
+        fps = int(math.ceil(cam.get(cv2.CAP_PROP_FPS)))
+        tengu_scene_analyzer.set_fps(fps)
+
         while not self._stopped:
             ret, frame = cam.read()
             #self.logger.info('frame shape = {}'.format(frame.shape))
